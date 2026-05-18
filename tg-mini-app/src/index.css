@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Сбрасываем дефолтные отступы и фиксим скролл внутри Telegram */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  min-height: 100dvh; /* динамическая высота viewport — важно для Telegram */
+  background: #FFFFFF;
+  /* Запрещаем pull-to-refresh, чтобы случайный свайп не перезагружал миниапп */
+  overscroll-behavior-y: none;
+}
+
+/* Подхватываем тему Telegram, если хост её прокинул через CSS-переменные */
+body {
+  color: var(--tg-theme-text-color, #1A1814);
+  background-color: var(--tg-theme-bg-color, #FFFFFF);
+}
