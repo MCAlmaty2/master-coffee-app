@@ -1927,6 +1927,56 @@ function App() {
     }
   };
 
+  /* ═══════════ Уведомления ═══════════ */
+
+  const markNotificationRead = async (notificationId) => {
+    setDb(d => ({
+      ...d,
+      notifications: d.notifications.map(n => n.id === notificationId ? { ...n, read: true } : n),
+    }));
+    try {
+      await supabase.from('notifications').update({ read: true }).eq('id', notificationId);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[notifications] markRead failed:', e);
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    const myUnreadIds = db.notifications
+      .filter(n => n.recipient_id === currentUser.id && !n.read)
+      .map(n => n.id);
+    if (myUnreadIds.length === 0) return;
+    setDb(d => ({
+      ...d,
+      notifications: d.notifications.map(n => n.recipient_id === currentUser.id ? { ...n, read: true } : n),
+    }));
+    try {
+      await supabase.from('notifications').update({ read: true }).in('id', myUnreadIds);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[notifications] markAllRead failed:', e);
+    }
+  };
+
+  const clearReadNotifications = async () => {
+    if (!confirm('Удалить все прочитанные уведомления?')) return;
+    const myReadIds = db.notifications
+      .filter(n => n.recipient_id === currentUser.id && n.read)
+      .map(n => n.id);
+    if (myReadIds.length === 0) return;
+    setDb(d => ({
+      ...d,
+      notifications: d.notifications.filter(n => !(n.recipient_id === currentUser.id && n.read)),
+    }));
+    try {
+      await supabase.from('notifications').delete().in('id', myReadIds);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[notifications] clearRead failed:', e);
+    }
+  };
+
   const resetDB = () => {
     if (!confirm('Сбросить ВСЕ данные? Останется только admin@mastercoffee.kz / admin123')) return;
     const fresh = seedDB();
@@ -2012,6 +2062,7 @@ function App() {
     createGrindRequest, takeGrindRequest, markGrindReady, completeGrindRequest, closeGrindPickup, cancelGrindRequest,
     createCustomRole, updateRolePermissions, updateRoleMeta, deleteCustomRole,
     createProduct, updateProduct, toggleProductActive, deleteProduct,
+    markNotificationRead, markAllNotificationsRead, clearReadNotifications,
     updateTelegramSettings,
     resetDB,
     sendFeedback, reportError,
@@ -2416,18 +2467,21 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     const items = [];
     // Заявки — для менеджеров и склада
     if (role === 'admin' || role === 'b2b') {
-      items.push({ id: 'home', label: 'Заявки', icon: Inbox });
+      items.push({ id: 'home', label: 'Главная', icon: Eye });
+      items.push({ id: 'orders_list', label: 'Заявки', icon: Inbox });
       items.push({ id: 'create_order', label: 'Создать заявку', icon: Plus });
       items.push({ id: 'create_quick', label: 'Быстрая B2B', icon: Sparkles });
       items.push({ id: 'archive', label: 'Архив', icon: Inbox });
       items.push({ id: 'export', label: 'Экспорт', icon: Download });
     }
     if (role === 'sales') {
-      items.push({ id: 'home', label: 'Мои заявки', icon: Inbox });
+      items.push({ id: 'home', label: 'Главная', icon: Eye });
+      items.push({ id: 'orders_list', label: 'Мои заявки', icon: Inbox });
       items.push({ id: 'create_order', label: 'Создать заявку', icon: Plus });
     }
     if (role === 'warehouse') {
-      items.push({ id: 'home', label: 'Самовывоз', icon: Package });
+      items.push({ id: 'home', label: 'Главная', icon: Eye });
+      items.push({ id: 'orders_list', label: 'Заявки', icon: Inbox });
     }
     // Задачи
     if (FIELD_ROLES.includes(role)) {
@@ -2534,7 +2588,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
           </div>
         </div>
 
-        {currentUser.role === 'admin' && <ActAsSwitcher ctx={ctx} />}
+        
 
         <nav className="px-3 flex-1 overflow-y-auto">
           {navItems.map(item => (
@@ -2550,24 +2604,36 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
         </nav>
 
         <div className="p-3 border-t" style={{ borderColor: '#F1F5F9' }}>
-          <UserChip user={currentUser} onLogout={logout} db={db} />
+          <UserChip user={currentUser} onLogout={logout} db={db} onClick={() => navigate({ name: 'home' })} />
         </div>
       </aside>
 
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 border-b" style={{ background: 'white', borderColor: '#E5E7EB' }}>
         <div className="flex items-center gap-2 min-w-0">
+          <button onClick={() => setMobileMenuOpen(true)} className="p-1 -ml-1 flex-shrink-0"><Menu size={22} /></button>
           <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}>
             <TurtleLogo size={22} color="#297b8a" />
           </div>
-          <div className="display-font text-lg truncate" style={{ color: '#1A1814' }}>Заявки</div>
-          {currentUser.role === 'admin' && actAs && (
-            <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5 text-white whitespace-nowrap" style={{ background: roleOf(db, actAs).color }}>
-              как {roleOf(db, actAs).short}
-            </span>
-          )}
+          <div className="display-font text-lg truncate" style={{ color: '#1A1814' }}>Master Coffee</div>
         </div>
-        <button onClick={() => setMobileMenuOpen(true)} className="p-2 -mr-2 flex-shrink-0"><Menu size={22} /></button>
+        {/* Аватарка пользователя справа — клик ведёт на главную */}
+        <button
+          onClick={() => navigate({ name: 'home' })}
+          className="flex items-center gap-2 p-1 rounded-lg hover:bg-gray-50"
+          title={`${currentUser.first_name} ${currentUser.last_name}`}
+        >
+          <div className="text-right hidden sm:block">
+            <div className="text-xs font-semibold truncate max-w-[120px]" style={{ color: '#1A1814' }}>{currentUser.first_name}</div>
+            <div className="text-[10px]" style={{ color: '#64748B' }}>{roleOf(db, currentUser.role).short}</div>
+          </div>
+          <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: roleOf(db, currentUser.role).color }}>
+            {currentUser.photo_url
+              ? <img src={currentUser.photo_url} alt="" className="w-full h-full object-cover" />
+              : currentUser.first_name[0]
+            }
+          </div>
+        </button>
       </div>
 
       {/* Mobile Menu Overlay */}
@@ -2583,7 +2649,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
               </div>
               <button onClick={() => setMobileMenuOpen(false)}><X size={20} /></button>
             </div>
-            {currentUser.role === 'admin' && <ActAsSwitcher ctx={ctx} />}
+            
             <nav className="px-3 flex-1">
               {navItems.map(item => (
                 <SidebarItem
@@ -2597,7 +2663,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
               ))}
             </nav>
             <div className="p-3 border-t flex-shrink-0" style={{ borderColor: '#F1F5F9' }}>
-              <UserChip user={currentUser} onLogout={logout} db={db} />
+              <UserChip user={currentUser} onLogout={logout} db={db} onClick={() => navigate({ name: 'home' })} />
             </div>
           </aside>
         </div>
@@ -2679,17 +2745,26 @@ function SidebarItem({ icon: Icon, label, active, badge, onClick }) {
   );
 }
 
-function UserChip({ user, onLogout, db }) {
+function UserChip({ user, onLogout, db, onClick }) {
   const r = roleOf(db, user.role);
   return (
     <div className="flex items-center gap-2.5 p-2 rounded-lg" style={{ background: '#F5F7F8' }}>
-      <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: r.color }}>
-        {user.first_name[0]}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold truncate" style={{ color: '#1A1814' }}>{user.first_name} {user.last_name}</div>
-        <div className="text-[11px] truncate" style={{ color: '#64748B' }}>{r.label}</div>
-      </div>
+      <button
+        onClick={onClick}
+        className="flex items-center gap-2.5 flex-1 min-w-0 text-left p-0 hover:opacity-80"
+        title="Открыть главную"
+      >
+        <div className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: r.color }}>
+          {user.photo_url
+            ? <img src={user.photo_url} alt="" className="w-full h-full object-cover" />
+            : user.first_name[0]
+          }
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold truncate" style={{ color: '#1A1814' }}>{user.first_name} {user.last_name}</div>
+          <div className="text-[11px] truncate" style={{ color: '#64748B' }}>{r.label}</div>
+        </div>
+      </button>
       <button onClick={onLogout} className="p-2 rounded hover:bg-white" title="Выйти"><LogOut size={15} style={{ color: '#64748B' }} /></button>
     </div>
   );
@@ -2800,6 +2875,7 @@ function Screen({ ctx }) {
       return <DashboardHome ctx={ctx} title="Главная" />;
     case 'create_order': return <CreateOrderScreen ctx={ctx} />;
     case 'create_quick': return <CreateQuickScreen ctx={ctx} />;
+    case 'orders_list': return <OrdersListScreen ctx={ctx} />;
     case 'order_detail': return <OrderDetailScreen ctx={ctx} orderId={route.orderId} />;
     case 'archive': return <ArchiveScreen ctx={ctx} />;
     case 'export': return <ExportScreen ctx={ctx} />;
@@ -3066,6 +3142,9 @@ function DashboardHome({ ctx, title }) {
 
   return (
     <div>
+      {/* Карточка профиля пользователя — приветствие сверху */}
+      <UserHeroCard user={currentUser} db={db} />
+
       <PageHeader
         title={title || 'Главная'}
         subtitle={stats.isAdmin ? 'Полный обзор системы. Кликни любую плитку, чтобы перейти в раздел.' : 'Все ваши разделы в одном месте'}
@@ -3134,6 +3213,46 @@ function DashboardHome({ ctx, title }) {
           <OrdersList orders={db.orders.filter(o => o.status !== 'archived' && o.status !== 'cancelled').slice(0, 5)} ctx={ctx} />
         </>
       )}
+    </div>
+  );
+}
+
+function UserHeroCard({ user, db }) {
+  if (!user) return null;
+  const r = roleOf(db, user.role);
+  // Приветствие в зависимости от времени
+  const hour = new Date().getHours();
+  const greeting = hour < 6 ? 'Доброй ночи' : hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер';
+
+  return (
+    <div className="rounded-2xl p-5 mb-5 flex items-center gap-4"
+         style={{ background: 'linear-gradient(135deg, #297b8a 0%, #1f6573 100%)' }}>
+      <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center text-white font-bold text-xl"
+           style={{ background: 'rgba(255,255,255,0.15)' }}>
+        {user.photo_url
+          ? <img src={user.photo_url} alt="" className="w-full h-full object-cover" />
+          : (user.first_name?.[0] || '?').toUpperCase()
+        }
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-xs uppercase tracking-wider mb-1" style={{ color: 'rgba(255,255,255,0.7)', letterSpacing: '0.1em' }}>
+          {greeting}
+        </div>
+        <div className="font-bold text-lg truncate" style={{ color: 'white' }}>
+          {user.first_name} {user.last_name}
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-xs font-semibold rounded-full px-2 py-0.5"
+                style={{ background: 'rgba(255,255,255,0.2)', color: 'white' }}>
+            {r.label}
+          </span>
+          {user.tg_username && (
+            <span className="text-xs flex items-center gap-1" style={{ color: 'rgba(255,255,255,0.7)' }}>
+              <Send size={10} /> @{user.tg_username}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -3341,6 +3460,152 @@ function ActionPill({ label, onClick, icon: Icon, accent }) {
     <button onClick={onClick} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-white" style={{ border: '1px solid #E5E7EB', color: accent || '#1A1814' }}>
       <Icon size={14} /> {label}
     </button>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   ЭКРАН ЗАЯВОК — мини-дашборд + список с фильтрами
+   ═════════════════════════════════════════════════════════════════════════ */
+
+function OrdersListScreen({ ctx }) {
+  const { db, currentUser, navigate } = ctx;
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+
+  // Какие заявки видит этот пользователь?
+  const canSeeAll = currentUser.role === 'admin'
+    || hasPermission(db, currentUser, 'orders_view_all');
+
+  const myOrders = canSeeAll ? db.orders : db.orders.filter(o => o.created_by === currentUser.id);
+
+  // Подсчёт по статусам
+  const counts = useMemo(() => {
+    const c = { all: 0, active: 0, archived: 0, cancelled: 0 };
+    Object.keys(STATUS).forEach(s => { c[s] = 0; });
+    for (const o of myOrders) {
+      c.all++;
+      c[o.status] = (c[o.status] || 0) + 1;
+      if (o.status === 'archived') c.archived++;
+      else if (o.status === 'cancelled') c.cancelled++;
+      else c.active++;
+    }
+    return c;
+  }, [myOrders]);
+
+  // Сумма активных
+  const activeSum = useMemo(() => {
+    return myOrders
+      .filter(o => o.status !== 'archived' && o.status !== 'cancelled')
+      .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+  }, [myOrders]);
+
+  // Фильтрация
+  const filtered = useMemo(() => {
+    let list = myOrders;
+    if (filter === 'active') list = list.filter(o => o.status !== 'archived' && o.status !== 'cancelled');
+    else if (filter !== 'all') list = list.filter(o => o.status === filter);
+
+    if (search) {
+      list = list.filter(o => {
+        const name = o.client_type === 'individual' ? o.full_name : o.company_name;
+        const haystack = [
+          o.order_number, name, o.phone, o.address, o.realization_doc_no || '',
+          ...(o.items || []).map(i => i.name)
+        ].join(' ');
+        return matchesSearch(haystack, search);
+      });
+    }
+    return [...list].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }, [myOrders, filter, search]);
+
+  // Плитки по основным статусам
+  const tiles = [
+    { id: 'active',    label: 'Активные',  count: counts.active,    color: '#3390EC' },
+    { id: 'new',       label: 'Новые',     count: counts.new,       color: STATUS.new.color },
+    { id: 'in_work',   label: 'В работе',  count: counts.in_work,   color: STATUS.in_work.color },
+    { id: 'invoiced',  label: 'Счёт',      count: counts.invoiced,  color: STATUS.invoiced.color },
+    { id: 'paid',      label: 'Оплачено',  count: counts.paid,      color: STATUS.paid.color },
+    { id: 'shipped',   label: 'Отгружено', count: counts.shipped,   color: STATUS.shipped.color },
+    { id: 'archived',  label: 'Архив',     count: counts.archived,  color: STATUS.archived.color },
+    { id: 'cancelled', label: 'Отменены',  count: counts.cancelled, color: STATUS.cancelled.color },
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title="Заявки"
+        subtitle={`${counts.all} всего · ${counts.active} активных · ${fmtNum(activeSum)} ₸ в работе`}
+        action={
+          hasPermission(db, currentUser, 'orders_create') && (
+            <div className="flex gap-2">
+              <button onClick={() => navigate({ name: 'create_quick' })}
+                className="px-3 py-2 rounded-lg font-semibold text-sm flex items-center gap-1.5"
+                style={{ background: '#F5F7F8', color: '#1A1814' }}>
+                <Sparkles size={14} /> Быстрая
+              </button>
+              <button onClick={() => navigate({ name: 'create_order' })}
+                className="px-3 py-2 rounded-lg font-semibold text-white text-sm flex items-center gap-1.5"
+                style={{ background: '#297b8a' }}>
+                <Plus size={14} /> Создать
+              </button>
+            </div>
+          )
+        }
+      />
+
+      {/* Плитки-счётчики по статусам */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+        {tiles.map(t => {
+          const active = filter === t.id || (filter === 'all' && t.id === 'active');
+          return (
+            <button key={t.id}
+              onClick={() => setFilter(t.id)}
+              className="rounded-lg p-3 text-left transition"
+              style={{
+                background: active ? `${t.color}15` : 'white',
+                border: active ? `1.5px solid ${t.color}` : '1px solid #E5E7EB',
+              }}>
+              <div className="text-2xl font-bold" style={{ color: t.color }}>{t.count}</div>
+              <div className="text-xs" style={{ color: '#64748B' }}>{t.label}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Поиск + быстрый фильтр "Все" */}
+      <div className="bg-white rounded-xl p-3 mb-4" style={{ border: '1px solid #E5E7EB' }}>
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#A8A8AE' }} />
+            <input
+              className="w-full pl-9 pr-3 py-2 rounded-lg outline-none"
+              style={{ border: '1px solid #E5E7EB' }}
+              placeholder="Номер заявки, клиент, телефон, товар…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          {filter !== 'all' && (
+            <button onClick={() => setFilter('all')}
+              className="text-xs px-3 py-2 rounded-lg whitespace-nowrap"
+              style={{ background: '#F5F7F8', color: '#64748B' }}>
+              Сбросить фильтр
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Список заявок */}
+      <OrdersList
+        orders={filtered}
+        ctx={ctx}
+        emptyText={
+          counts.all === 0
+            ? 'У вас пока нет заявок. Создайте первую через "Создать" или "Быстрая".'
+            : 'Под этот фильтр ничего не найдено'
+        }
+      />
+    </div>
   );
 }
 
@@ -7928,7 +8193,7 @@ function AdminTelegramScreen({ ctx }) {
         <div className="flex items-start gap-2">
           <AlertCircle size={18} style={{ color: '#92400E', marginTop: 2, flexShrink: 0 }} />
           <div className="text-sm" style={{ color: '#92400E' }}>
-            <strong>Важно:</strong> сейчас сайт работает без бэкенда, поэтому реально слать сообщения в Telegram он пока не может. Все настройки сохранятся, и в журнале ниже видно, какие сообщения <em>были бы</em> отправлены. Когда подключим Supabase + бот-сервер — этот же раздел заработает реально без переделок.
+            <strong>На этом этапе</strong> отправка работает в режиме «журнала»: все настройки сохраняются в базе и видны в журнале ниже. Реальная отправка сообщений в Telegram появится после подключения Edge-функции (на следующем этапе работы).
           </div>
         </div>
       </div>
@@ -8916,27 +9181,101 @@ function ProductEditModal({ product, existingCats, onSave, onClose }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function NotificationsScreen({ ctx }) {
-  const { db, currentUser } = ctx;
-  const my = db.notifications.filter(n => n.recipient_id === currentUser.id);
+  const { db, currentUser, navigate, markNotificationRead, markAllNotificationsRead, clearReadNotifications } = ctx;
+  const [showRead, setShowRead] = useState(false);
+
+  const all = db.notifications.filter(n => n.recipient_id === currentUser.id)
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
+  const unread = all.filter(n => !n.read);
+  const read = all.filter(n => n.read);
+  const shown = showRead ? all : unread;
+
+  const handleClick = (n) => {
+    if (!n.read) markNotificationRead(n.id);
+    if (n.link_kind && n.link_id) {
+      switch (n.link_kind) {
+        case 'order':    return navigate({ name: 'order_detail',    orderId:    n.link_id });
+        case 'task':     return navigate({ name: 'task_detail',     taskId:     n.link_id });
+        case 'grind':    return navigate({ name: 'grind_detail',    grindId:    n.link_id });
+        case 'writeoff': return navigate({ name: 'writeoff_detail', writeOffId: n.link_id });
+        case 'contract': return navigate({ name: 'contract_detail', contractId: n.link_id });
+        case 'access':   return navigate({ name: 'admin_requests' });
+        default: return;
+      }
+    }
+  };
+
   return (
     <div>
-      <PageHeader title="Уведомления" subtitle={`${my.length} событий`} />
+      <PageHeader
+        title="Уведомления"
+        subtitle={unread.length > 0 ? `${unread.length} непрочитанных` : 'Всё прочитано'}
+        action={
+          <div className="flex gap-2 items-center">
+            {unread.length > 0 && (
+              <button onClick={markAllNotificationsRead} className="text-xs px-3 py-2 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+                Прочитать все
+              </button>
+            )}
+            {read.length > 0 && (
+              <button onClick={clearReadNotifications} className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }} title="Удалить прочитанные">
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+        }
+      />
+
+      <div className="flex gap-1.5 mb-4">
+        <button onClick={() => setShowRead(false)} className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
+          style={{ background: !showRead ? '#1A1814' : '#F5F7F8', color: !showRead ? 'white' : '#64748B' }}>
+          Новые ({unread.length})
+        </button>
+        <button onClick={() => setShowRead(true)} className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
+          style={{ background: showRead ? '#1A1814' : '#F5F7F8', color: showRead ? 'white' : '#64748B' }}>
+          Все ({all.length})
+        </button>
+      </div>
+
       <div className="space-y-2">
-        {my.length === 0 ? (
-          <Empty icon={Bell} title="Уведомлений пока нет" subtitle="При смене статуса заявки или новом запросе доступа уведомление появится здесь" />
+        {shown.length === 0 ? (
+          <Empty
+            icon={Bell}
+            title={showRead ? 'Уведомлений пока нет' : 'Нет новых уведомлений'}
+            subtitle="При смене статуса заявки или новой задаче уведомление появится здесь"
+          />
         ) : (
-          my.map(n => (
-            <div key={n.id} className="bg-white rounded-xl p-4 flex items-start gap-3" style={{ border: '1px solid #E5E7EB' }}>
-              <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#F5F7F8', color: '#3390EC' }}>
-                <Bell size={15} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm" style={{ color: '#1A1814' }}>{n.title}</div>
-                <div className="text-sm" style={{ color: '#64748B' }}>{n.body}</div>
-                <div className="text-xs mt-1" style={{ color: '#A8A8AE' }}>{fmtDateTime(n.at)}</div>
-              </div>
-            </div>
-          ))
+          shown.map(n => {
+            const hasLink = !!(n.link_kind && n.link_id);
+            const isUnread = !n.read;
+            return (
+              <button
+                key={n.id}
+                onClick={() => handleClick(n)}
+                className="w-full text-left rounded-xl p-4 flex items-start gap-3 transition-colors hover:opacity-90"
+                style={{
+                  border: '1px solid #E5E7EB',
+                  background: isUnread ? '#F0F9FF' : 'white',
+                  opacity: isUnread ? 1 : 0.7,
+                }}
+              >
+                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: isUnread ? '#3390EC' : '#F5F7F8', color: isUnread ? 'white' : '#64748B' }}>
+                  <Bell size={15} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm flex items-center gap-2" style={{ color: '#1A1814' }}>
+                    <span>{n.title}</span>
+                    {isUnread && <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#3390EC' }} />}
+                  </div>
+                  <div className="text-sm" style={{ color: '#64748B' }}>{n.body}</div>
+                  <div className="text-xs mt-1 flex items-center justify-between" style={{ color: '#A8A8AE' }}>
+                    <span>{fmtDateTime(n.at)}</span>
+                    {hasLink && <span style={{ color: '#3390EC' }}>Открыть →</span>}
+                  </div>
+                </div>
+              </button>
+            );
+          })
         )}
       </div>
     </div>
