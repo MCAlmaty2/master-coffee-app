@@ -778,6 +778,9 @@ function App() {
           upsertRow(stateKey, row).catch(e => {
             // eslint-disable-next-line no-console
             console.error(`[sync] ${stateKey} upsert ${id}:`, e);
+            // Показываем пользователю что не сохранилось — это критично!
+            const msg = e?.message || JSON.stringify(e);
+            showToast(`⚠️ ${stateKey}: не сохранено — ${msg.slice(0, 120)}`);
           });
         }
       }
@@ -787,6 +790,8 @@ function App() {
           deleteRow(stateKey, id).catch(e => {
             // eslint-disable-next-line no-console
             console.error(`[sync] ${stateKey} delete ${id}:`, e);
+            const msg = e?.message || JSON.stringify(e);
+            showToast(`⚠️ ${stateKey}: не удалось удалить — ${msg.slice(0, 120)}`);
           });
         }
       }
