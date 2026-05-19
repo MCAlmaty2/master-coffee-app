@@ -638,6 +638,8 @@ function App() {
   const [route, setRoute] = useState({ name: 'home' });
   const [routeStack, setRouteStack] = useState([]);
   const [toast, setToast] = useState(null);
+  // Активные ошибки — отображаются плашкой и не исчезают сами
+  const [errors, setErrors] = useState([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Состояние подключения к Supabase: loading / ready / error
@@ -778,9 +780,12 @@ function App() {
           upsertRow(stateKey, row).catch(e => {
             // eslint-disable-next-line no-console
             console.error(`[sync] ${stateKey} upsert ${id}:`, e);
-            // Показываем пользователю что не сохранилось — это критично!
-            const msg = e?.message || JSON.stringify(e);
-            showToast(`⚠️ ${stateKey}: не сохранено — ${msg.slice(0, 120)}`);
+            reportError({
+              kind: 'sync',
+              source: stateKey,
+              message: `Не удалось сохранить запись в "${stateKey}": ${e?.message || e}`,
+              details: { operation: 'upsert', rowId: id, error: String(e?.message || e), row: row },
+            });
           });
         }
       }
@@ -790,8 +795,12 @@ function App() {
           deleteRow(stateKey, id).catch(e => {
             // eslint-disable-next-line no-console
             console.error(`[sync] ${stateKey} delete ${id}:`, e);
-            const msg = e?.message || JSON.stringify(e);
-            showToast(`⚠️ ${stateKey}: не удалось удалить — ${msg.slice(0, 120)}`);
+            reportError({
+              kind: 'sync',
+              source: stateKey,
+              message: `Не удалось удалить запись из "${stateKey}": ${e?.message || e}`,
+              details: { operation: 'delete', rowId: id, error: String(e?.message || e) },
+            });
           });
         }
       }
@@ -819,6 +828,66 @@ function App() {
     const id = uid();
     setToast({ msg, id });
     setTimeout(() => setToast(t => (t && t.id === id ? null : t)), 2400);
+  };
+
+  /**
+   * Сохранить ошибку: показать плашку И отправить в БД для админа.
+   * @param {object} opts — {kind, source, message, details, route}
+   */
+  const reportError = (opts) => {
+    const id = uid();
+    const entry = {
+      id,
+      kind:    opts.kind    || 'unknown',
+      source:  opts.source  || null,
+      message: opts.message || String(opts),
+      details: opts.details || null,
+      route:   opts.route   || route?.name || null,
+      at:      new Date().toISOString(),
+    };
+    // 1. Сразу показываем в UI (плашка снизу)
+    setErrors(prev => {
+      // не дублируем одинаковые ошибки подряд
+      if (prev.length > 0 && prev[prev.length - 1].message === entry.message) return prev;
+      return [...prev, entry];
+    });
+    // 2. Параллельно отправляем в Supabase, чтобы админ видел
+    try {
+      supabase.from('error_reports').insert({
+        id: entry.id,
+        reporter_id:   currentUser?.id || null,
+        reporter_name: currentUser ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim() : 'Не залогинен',
+        kind:          entry.kind,
+        source:        entry.source,
+        message:       entry.message,
+        details:       entry.details,
+        route_name:    entry.route,
+        at:            entry.at,
+      }).then(({ error }) => {
+        if (error) console.error('[reportError] не удалось записать в БД:', error);
+      });
+    } catch (e) {
+      console.error('[reportError] сбой:', e);
+    }
+  };
+
+  const dismissError = (id) => setErrors(prev => prev.filter(e => e.id !== id));
+  const dismissAllErrors = () => setErrors([]);
+  const markErrorResolved = async (errorId) => {
+    try {
+      await supabase.from('error_reports')
+        .update({ resolved: true, resolved_at: new Date().toISOString(), resolved_by: currentUser?.id })
+        .eq('id', errorId);
+    } catch (e) {
+      console.error('[reportError] не удалось пометить решённой:', e);
+    }
+  };
+  const deleteErrorReport = async (errorId) => {
+    try {
+      await supabase.from('error_reports').delete().eq('id', errorId);
+    } catch (e) {
+      console.error('[reportError] не удалось удалить:', e);
+    }
   };
 
   /* ═══════════ Авторизация — ТОЛЬКО через Telegram ═══════════ */
@@ -2020,39 +2089,7 @@ function App() {
     }
   };
 
-  const reportError = async (errorData) => {
-    if (!currentUser) return { error: 'Не авторизован' };
-    try {
-      const report = {
-        id: uid(),
-        reporter_id: currentUser.id,
-        route: errorData.route || '',
-        error_message: errorData.message || '',
-        error_stack: errorData.stack || '',
-        app_version: '4.0',
-        user_agent: navigator.userAgent,
-        at: new Date().toISOString(),
-        read: false,
-      };
-      setDb(d => ({ ...d, errorReports: [...(d.errorReports || []), report] }));
-      // Админу уведомление
-      const adminUser = db.users.find(u => u.role === 'admin');
-      if (adminUser) {
-        const notif = {
-          id: uid(),
-          recipient_id: adminUser.id,
-          title: '⚠️ Отчёт об ошибке',
-          body: `${currentUser.first_name} сообщил об ошибке в ${errorData.route || 'неизвестном месте'}`,
-          at: new Date().toISOString(),
-          read: false,
-        };
-        setDb(d => ({ ...d, notifications: [...(d.notifications || []), notif] }));
-      }
-      return { ok: true };
-    } catch (e) {
-      return { error: e.message };
-    }
-  };
+
 
   const ctx = {
     db, currentUser, effectiveRole, actAs, setActAs,
@@ -2172,8 +2209,83 @@ function App() {
       <div className="site-font min-h-screen w-full" style={{ background: '#FFFFFF', color: '#1A1814' }}>
         {renderBody()}
         {toast && <Toast toast={toast} />}
+        {errors.length > 0 && (
+          <ErrorsPanel
+            errors={errors}
+            onDismiss={dismissError}
+            onDismissAll={dismissAllErrors}
+            isAdmin={currentUser?.role === 'admin'}
+            navigate={navigate}
+          />
+        )}
       </div>
     </>
+  );
+}
+
+function ErrorsPanel({ errors, onDismiss, onDismissAll, isAdmin, navigate }) {
+  const [expanded, setExpanded] = useState(true);
+  const latest = errors[errors.length - 1];
+  return (
+    <div
+      className="fixed bottom-3 right-3 z-50 rounded-xl overflow-hidden flex flex-col"
+      style={{
+        background: '#FEF2F2',
+        border: '1px solid #FCA5A5',
+        boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+        width: 360,
+        maxWidth: 'calc(100vw - 24px)',
+        maxHeight: '60vh',
+      }}
+    >
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="flex items-center gap-2 px-3 py-2 w-full text-left"
+        style={{ background: '#EF4444', color: 'white' }}
+      >
+        <AlertCircle size={16} />
+        <span className="font-semibold text-sm flex-1">
+          Ошибок: {errors.length} {!expanded && `· "${latest.message.slice(0, 30)}…"`}
+        </span>
+        <ChevronDown size={16} style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+      </button>
+      {expanded && (
+        <>
+          <div className="overflow-y-auto flex-1" style={{ maxHeight: '40vh' }}>
+            {errors.slice().reverse().map(e => (
+              <div key={e.id} className="px-3 py-2 border-b" style={{ borderColor: '#FCA5A5' }}>
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold" style={{ color: '#991B1B' }}>
+                      {e.kind === 'sync' && e.source && <span className="font-mono">[{e.source}]</span>}{' '}
+                      {new Date(e.at).toLocaleTimeString('ru-RU')}
+                    </div>
+                    <div className="text-sm mt-0.5 break-words" style={{ color: '#7F1D1D' }}>{e.message}</div>
+                  </div>
+                  <button onClick={() => onDismiss(e.id)} className="p-1 flex-shrink-0" style={{ color: '#991B1B' }} title="Закрыть">
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 px-3 py-2" style={{ background: '#FEE2E2', borderTop: '1px solid #FCA5A5' }}>
+            <button onClick={onDismissAll} className="text-xs font-semibold px-3 py-1 rounded" style={{ background: 'white', color: '#7F1D1D' }}>
+              Закрыть все
+            </button>
+            {isAdmin && (
+              <button
+                onClick={() => navigate({ name: 'admin_errors' })}
+                className="text-xs font-semibold px-3 py-1 rounded ml-auto"
+                style={{ background: '#7F1D1D', color: 'white' }}
+              >
+                Все отчёты →
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -2808,7 +2920,7 @@ class ScreenErrorBoundary extends React.Component {
       const stack = err?.stack ? String(err.stack).slice(0, 800) : '';
       const handleReportError = async () => {
         if (this.props.onReportError) {
-          await this.props.onReportError({ message: msg, route: this.props.currentRoute, stack });
+          this.props.onReportError({ kind: 'crash', message: msg, route: this.props.currentRoute, details: { stack } });
           this.props.showToast?.('Отчёт об ошибке отправлен администратору');
         }
       };
@@ -2885,6 +2997,7 @@ function Screen({ ctx }) {
     case 'archive': return <ArchiveScreen ctx={ctx} />;
     case 'export': return <ExportScreen ctx={ctx} />;
     case 'admin_users': return <AdminUsersScreen ctx={ctx} />;
+    case 'admin_errors': return <AdminErrorReportsScreen ctx={ctx} />;
     case 'admin_roles': return <AdminRolesScreen ctx={ctx} />;
     case 'admin_requests': return <AdminRequestsScreen ctx={ctx} />;
     case 'admin_transfer': return <AdminTransferScreen ctx={ctx} />;
@@ -2907,7 +3020,6 @@ function Screen({ ctx }) {
     case 'grind_detail': return <GrindDetailScreen ctx={ctx} grindId={route.grindId} />;
     case 'feedback': return <FeedbackScreen ctx={ctx} />;
     case 'admin_feedback': return <AdminFeedbackScreen ctx={ctx} />;
-    case 'admin_errors': return <AdminErrorsScreen ctx={ctx} />;
     default: return <div className="p-6">Не найдено</div>;
   }
 }
@@ -9399,63 +9511,6 @@ function AdminFeedbackScreen({ ctx }) {
 }
 
 /* ═════════════════════════════════════════════════════════════════════════
-   АДМИН ПАНЕЛЬ — ОТЧЁТЫ ОБ ОШИБКАХ
-   ═════════════════════════════════════════════════════════════════════════ */
-
-function AdminErrorsScreen({ ctx }) {
-  const { db, goBack } = ctx;
-  const errors = db.errorReports || [];
-
-  return (
-    <div>
-      <PageHeader title="Отчёты об ошибках" subtitle={`${errors.length} ошибок`} onBack={goBack} />
-      {errors.length === 0 ? (
-        <Empty icon={AlertTriangle} title="Ошибок не поступало" subtitle="Если сотрудники столкнутся с проблемами, отчёты появятся здесь" />
-      ) : (
-        <div className="space-y-2">
-          {errors.map(err => {
-            const author = db.users.find(u => u.id === err.reporter_id);
-            return (
-              <details key={err.id} className="bg-white rounded-xl" style={{ border: '1px solid #FCA5A5' }}>
-                <summary className="cursor-pointer p-4 flex items-start gap-3 font-semibold hover:bg-gray-50">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#FEE2E2' }}>
-                    <AlertTriangle size={15} style={{ color: '#EB5757' }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm" style={{ color: '#991B1B' }}>
-                      {err.error_message?.slice(0, 60)}...
-                    </div>
-                    <div className="text-xs mt-0.5" style={{ color: '#7F1D1D' }}>
-                      {author ? `${author.first_name} ${author.last_name}` : 'Неизвестный'} · {err.route || 'неизвестная'} · {fmtDateTime(err.at)}
-                    </div>
-                  </div>
-                </summary>
-                <div className="px-4 pb-4 text-sm" style={{ color: '#1A1814' }}>
-                  <div className="mb-2">
-                    <strong>Сообщение об ошибке:</strong>
-                    <div className="mt-1 p-2 rounded text-xs mono-font" style={{ background: '#FEF2F2' }}>
-                      {err.error_message}
-                    </div>
-                  </div>
-                  {err.error_stack && (
-                    <div>
-                      <strong>Stack trace:</strong>
-                      <div className="mt-1 p-2 rounded text-xs mono-font overflow-x-auto" style={{ background: '#FEF2F2' }}>
-                        {err.error_stack}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </details>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ═════════════════════════════════════════════════════════════════════════
    ВСПОМОГАТЕЛЬНЫЕ
    ═════════════════════════════════════════════════════════════════════════ */
 
@@ -9570,6 +9625,171 @@ function GlobalStyles() {
         transition: transform 0.05s linear;
       }
     `}</style>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   ЭКРАН ОТЧЁТОВ ОБ ОШИБКАХ — для админа
+   ═════════════════════════════════════════════════════════════════════════ */
+
+function AdminErrorReportsScreen({ ctx }) {
+  const { showToast } = ctx;
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('unresolved'); // 'unresolved' | 'resolved' | 'all'
+  const [expandedId, setExpandedId] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('error_reports')
+        .select('*')
+        .order('at', { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      setReports(data || []);
+    } catch (e) {
+      showToast('Не удалось загрузить отчёты: ' + e.message);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
+    // Подписка на новые отчёты в реальном времени
+    const ch = supabase
+      .channel('rt-error-reports')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'error_reports' }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filtered = reports.filter(r => {
+    if (filter === 'unresolved') return !r.resolved;
+    if (filter === 'resolved')   return r.resolved;
+    return true;
+  });
+
+  const counts = {
+    unresolved: reports.filter(r => !r.resolved).length,
+    resolved:   reports.filter(r =>  r.resolved).length,
+    all:        reports.length,
+  };
+
+  const markResolved = async (id) => {
+    try {
+      await supabase.from('error_reports').update({ resolved: true, resolved_at: new Date().toISOString() }).eq('id', id);
+      load();
+      showToast('Отмечено как решённое');
+    } catch (e) { showToast('Ошибка: ' + e.message); }
+  };
+
+  const deleteOne = async (id) => {
+    if (!confirm('Удалить этот отчёт?')) return;
+    try {
+      await supabase.from('error_reports').delete().eq('id', id);
+      load();
+    } catch (e) { showToast('Ошибка: ' + e.message); }
+  };
+
+  const clearResolved = async () => {
+    if (!confirm('Удалить все решённые отчёты?')) return;
+    try {
+      await supabase.from('error_reports').delete().eq('resolved', true);
+      load();
+      showToast('Удалено');
+    } catch (e) { showToast('Ошибка: ' + e.message); }
+  };
+
+  return (
+    <div>
+      <PageHeader
+        title="Отчёты об ошибках"
+        subtitle={`${counts.unresolved} новых · ${counts.resolved} решённых`}
+        action={
+          counts.resolved > 0 && (
+            <button onClick={clearResolved} className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+              <Trash2 size={12} className="inline mr-1" /> Очистить решённые
+            </button>
+          )
+        }
+      />
+
+      <div className="flex gap-1.5 mb-4">
+        <button onClick={() => setFilter('unresolved')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
+          style={{ background: filter === 'unresolved' ? '#1A1814' : '#F5F7F8', color: filter === 'unresolved' ? 'white' : '#64748B' }}>
+          Новые ({counts.unresolved})
+        </button>
+        <button onClick={() => setFilter('resolved')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
+          style={{ background: filter === 'resolved' ? '#1A1814' : '#F5F7F8', color: filter === 'resolved' ? 'white' : '#64748B' }}>
+          Решённые ({counts.resolved})
+        </button>
+        <button onClick={() => setFilter('all')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
+          style={{ background: filter === 'all' ? '#1A1814' : '#F5F7F8', color: filter === 'all' ? 'white' : '#64748B' }}>
+          Все ({counts.all})
+        </button>
+      </div>
+
+      {loading ? (
+        <Empty icon={Loader2} title="Загрузка…" subtitle="" />
+      ) : filtered.length === 0 ? (
+        <Empty icon={CheckCircle2} title={filter === 'unresolved' ? 'Новых ошибок нет' : 'Здесь пусто'} subtitle="Когда команда столкнётся с проблемой — отчёт появится здесь" />
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(r => {
+            const expanded = expandedId === r.id;
+            const kindLabel = { sync: '⚙️ Sync', manual: '✋ Ручной', crash: '💥 Крэш' }[r.kind] || r.kind;
+            return (
+              <div key={r.id} className="bg-white rounded-xl p-4" style={{ border: r.resolved ? '1px solid #E5E7EB' : '1px solid #FCA5A5', opacity: r.resolved ? 0.6 : 1 }}>
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: r.resolved ? '#D1FAE5' : '#FEE2E2', color: r.resolved ? '#065F46' : '#991B1B' }}>
+                        {kindLabel}
+                      </span>
+                      {r.source && (
+                        <span className="text-[10px] mono-font px-1.5 py-0.5 rounded" style={{ background: '#F5F7F8', color: '#64748B' }}>
+                          {r.source}
+                        </span>
+                      )}
+                      <span className="text-xs" style={{ color: '#64748B' }}>
+                        {fmtDateTime(r.at)} · {r.reporter_name || '—'}
+                      </span>
+                    </div>
+                    <div className="text-sm font-semibold break-words" style={{ color: '#1A1814' }}>{r.message}</div>
+                    {r.route_name && (
+                      <div className="text-xs mt-1" style={{ color: '#A8A8AE' }}>Экран: <span className="mono-font">{r.route_name}</span></div>
+                    )}
+                    {expanded && r.details && (
+                      <pre className="text-[11px] mono-font mt-2 p-2 rounded overflow-x-auto" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+                        {JSON.stringify(r.details, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    {r.details && (
+                      <button onClick={() => setExpandedId(expanded ? null : r.id)} className="text-xs px-2 py-1 rounded" style={{ background: '#F5F7F8', color: '#64748B' }}>
+                        {expanded ? 'Скрыть' : 'Детали'}
+                      </button>
+                    )}
+                    {!r.resolved && (
+                      <button onClick={() => markResolved(r.id)} className="text-xs px-2 py-1 rounded font-semibold" style={{ background: '#10B981', color: 'white' }}>
+                        Решено
+                      </button>
+                    )}
+                    <button onClick={() => deleteOne(r.id)} className="text-xs px-2 py-1 rounded" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
