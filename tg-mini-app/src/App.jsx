@@ -835,7 +835,8 @@ function App() {
             notifications: [
               ...admins.map(a => ({
                 id: uid(), recipient_id: a.id,
-                title: 'Новый запрос на доступ',
+                link_kind: 'access', link_id: '',
+              title: 'Новый запрос на доступ',
                 body: `${user.first_name} ${user.last_name || ''} (Telegram @${tgUser.username || tgUser.id}) запросил доступ`,
                 at: new Date().toISOString(), read: false,
               })),
@@ -894,6 +895,7 @@ function App() {
         recipient_id: u.id,
         title: 'Новая заявка',
         body: `${order.order_number}: ${order.client_type === 'individual' ? order.full_name : order.company_name}, ${fmtNum(order.total_amount)} тг`,
+        link_kind: 'order', link_id: order.id,
         at: new Date().toISOString(),
         read: false,
       }));
@@ -1135,6 +1137,7 @@ function App() {
           id: uid(), recipient_id: data.assignee_id,
           title: 'Новая задача',
           body: `${task.task_number}: ${task.client_name} — ${task.problem.slice(0, 60)}${task.problem.length > 60 ? '…' : ''}`,
+          link_kind: 'task', link_id: task.id,
           at: new Date().toISOString(), read: false,
         });
       }
@@ -1195,7 +1198,7 @@ function App() {
         };
       }),
       notifications: [
-        { id: uid(), recipient_id: task.created_by, title: 'Задача выполнена', body: `${task.task_number}: ${task.client_name}`, at: new Date().toISOString(), read: false },
+        { id: uid(), recipient_id: task.created_by, title: 'Задача выполнена', body: `${task.task_number}: ${task.client_name}`, link_kind: 'task', link_id: task.id, at: new Date().toISOString(), read: false },
         ...d.notifications,
       ],
       telegramLog: [makeTgLogEntry(d, 'task_done', `✅ Задача ${task.task_number} выполнена\nКлиент: ${task.client_name}\nИтог: ${summary.trim()}`), ...d.telegramLog],
@@ -1277,6 +1280,7 @@ function App() {
       newNotifs.push({
         id: uid(), recipient_id: wo.created_by,
         title: 'Списание одобрено',
+        link_kind: 'writeoff', link_id: writeOff.id,
         body: `${wo.number}: одобрена ${getUserName(d, currentUser.id)}`,
         at: new Date().toISOString(), read: false,
       });
@@ -1317,6 +1321,7 @@ function App() {
       const newNotifs = [{
         id: uid(), recipient_id: wo.created_by,
         title: 'Списание отклонено',
+        link_kind: 'writeoff', link_id: writeOff.id,
         body: `${wo.number}: причина — ${comment.trim().slice(0, 80)}`,
         at: new Date().toISOString(), read: false,
       }];
@@ -1429,7 +1434,8 @@ function App() {
       const approvers = d.users.filter(u => u.active && ['director', 'senior_manager'].includes(u.role));
       const newNotifs = approvers.map(a => ({
         id: uid(), recipient_id: a.id,
-        title: 'Новая заявка на договор',
+        link_kind: 'contract', link_id: cr.id,
+            title: 'Новая заявка на договор',
         body: `${number}: ${CONTRACT_TYPE[cr.contract_type].short} от ${getUserName(d, currentUser.id)}`,
         at: new Date().toISOString(), read: false,
       }));
@@ -1459,7 +1465,8 @@ function App() {
         log: [...c.log, { event: 'status', from: 'pending', to: 'in_progress', actor: currentUser.id, at: new Date().toISOString() }],
       } : c),
       notifications: [
-        { id: uid(), recipient_id: cr.created_by, title: 'Заявка на договор в работе', body: `${cr.number}: ${getUserName(d, currentUser.id)} принял в работу`, at: new Date().toISOString(), read: false },
+        { id: uid(), recipient_id: cr.created_by, link_kind: 'contract', link_id: cr.id,
+            title: 'Заявка на договор в работе', body: `${cr.number}: ${getUserName(d, currentUser.id)} принял в работу`, at: new Date().toISOString(), read: false },
         ...d.notifications,
       ],
     }));
@@ -1534,7 +1541,8 @@ function App() {
         log: [...c.log, { event: 'status', from: 'in_progress', to: 'signed', actor: currentUser.id, at: new Date().toISOString(), meta: { contract_no: trimmedNo } }],
       } : c),
       notifications: [
-        { id: uid(), recipient_id: cr.created_by, title: 'Договор подписан', body: `${cr.number} → ${trimmedNo}`, at: new Date().toISOString(), read: false },
+        { id: uid(), recipient_id: cr.created_by, link_kind: 'contract', link_id: cr.id,
+            title: 'Договор подписан', body: `${cr.number} → ${trimmedNo}`, at: new Date().toISOString(), read: false },
         ...d.notifications,
       ],
       telegramLog: [makeTgLogEntry(d, 'contract_signed', `✅ Договор подписан\nЗаявка: ${cr.number}\nНомер договора: ${trimmedNo}\nКлиент: ${cr.client_details.split('\n')[0].slice(0, 80)}\nТип: ${CONTRACT_TYPE[cr.contract_type].label}`), ...d.telegramLog],
@@ -1560,7 +1568,8 @@ function App() {
         log: [...c.log, { event: 'status', from: c.status, to: 'rejected', actor: currentUser.id, at: new Date().toISOString(), meta: { comment: comment.trim() } }],
       } : c),
       notifications: [
-        { id: uid(), recipient_id: cr.created_by, title: 'Заявка на договор отклонена', body: `${cr.number}: ${comment.trim().slice(0, 80)}`, at: new Date().toISOString(), read: false },
+        { id: uid(), recipient_id: cr.created_by, link_kind: 'contract', link_id: cr.id,
+            title: 'Заявка на договор отклонена', body: `${cr.number}: ${comment.trim().slice(0, 80)}`, at: new Date().toISOString(), read: false },
         ...d.notifications,
       ],
     }));
@@ -1699,6 +1708,7 @@ function App() {
       const newNotifs = warehouseUsers.map(w => ({
         id: uid(), recipient_id: w.id,
         title: 'Новая заявка на помол',
+        link_kind: 'grind', link_id: grind.id,
         body: `${number}: ${grind.product_name} · ${qty} ${grind.unit} · ${GRIND_TYPES[grind.grind_type]?.label || grind.grind_type}`,
         at: new Date().toISOString(), read: false,
       }));
@@ -1768,6 +1778,7 @@ function App() {
       // Уведомить менеджера-автора
       const newNotifs = [{
         id: uid(), recipient_id: updated.created_by,
+        link_kind: 'grind', link_id: updated.id,
         title: 'Помол готов',
         body: `${updated.number}: ${updated.product_name}` + (updated.pickup_code ? ` · код самовывоза ${updated.pickup_code}` : ''),
         at: new Date().toISOString(), read: false,
@@ -2779,17 +2790,14 @@ function Screen({ ctx }) {
   switch (route.name) {
     case 'home':
       if (effectiveRole === 'admin') return <AdminHome ctx={ctx} />;
-      if (effectiveRole === 'b2b') return <B2BHome ctx={ctx} />;
-      if (effectiveRole === 'sales') return <SalesHome ctx={ctx} />;
-      if (effectiveRole === 'warehouse') return <WarehouseHome ctx={ctx} />;
+      if (effectiveRole === 'b2b') return <DashboardHome ctx={ctx} title="Главная — B2B" />;
+      if (effectiveRole === 'sales') return <DashboardHome ctx={ctx} title="Главная — Продажи" />;
+      if (effectiveRole === 'warehouse') return <DashboardHome ctx={ctx} title="Главная — Склад" />;
       if (effectiveRole === 'barista' || effectiveRole === 'technician') return <FieldHome ctx={ctx} />;
-      if (effectiveRole === 'cashier' || effectiveRole === 'director' || effectiveRole === 'senior_manager') return <WriteOffListScreen ctx={ctx} />;
+      if (effectiveRole === 'director' || effectiveRole === 'senior_manager') return <DashboardHome ctx={ctx} title="Главная — Руководство" />;
+      if (effectiveRole === 'cashier') return <DashboardHome ctx={ctx} title="Главная — Касса" />;
       // Кастомная роль — permission-aware фолбэк
-      if (hasPermission(db, currentUser, 'writeoff_view_all') || hasPermission(db, currentUser, 'writeoff_create')) return <WriteOffListScreen ctx={ctx} />;
-      if (hasPermission(db, currentUser, 'contract_view_all') || hasPermission(db, currentUser, 'contract_create')) return <ContractListScreen ctx={ctx} />;
-      if (hasPermission(db, currentUser, 'tasks_view_own') || hasPermission(db, currentUser, 'tasks_self_assign')) return <FieldHome ctx={ctx} />;
-      if (hasPermission(db, currentUser, 'orders_view_all') || hasPermission(db, currentUser, 'orders_view_own')) return <SalesHome ctx={ctx} />;
-      return <CustomRoleHome ctx={ctx} />;
+      return <DashboardHome ctx={ctx} title="Главная" />;
     case 'create_order': return <CreateOrderScreen ctx={ctx} />;
     case 'create_quick': return <CreateQuickScreen ctx={ctx} />;
     case 'order_detail': return <OrderDetailScreen ctx={ctx} orderId={route.orderId} />;
@@ -2908,48 +2916,224 @@ function CustomRoleHome({ ctx }) {
 }
 
 function AdminHome({ ctx }) {
-  const { db, navigate } = ctx;
-  const activeOrders = db.orders.filter(o => o.status !== 'archived');
-  const archivedOrders = db.orders.filter(o => o.status === 'archived');
-  const pendingRequests = db.users.filter(u => u.role === 'pending').length;
-  const activeUsers = db.users.filter(u => u.active && u.role).length;
-  const activeTasks = db.tasks.filter(t => t.status !== 'done').length;
+  return <DashboardHome ctx={ctx} title="Панель администратора" />;
+}
+
+/**
+ * Универсальный дашборд: показывает все темы с реальными счётчиками.
+ * Используется как главная страница для админа и других ролей.
+ * Показывает только те разделы, к которым у текущей роли есть доступ.
+ */
+function DashboardHome({ ctx, title }) {
+  const { db, currentUser, navigate } = ctx;
+
+  // ─── Счётчики по всем темам ───
+  const stats = useMemo(() => {
+    const userId = currentUser.id;
+    const isAdmin = currentUser.role === 'admin';
+    const canSeeAllTasks = ['admin', 'director', 'senior_manager'].includes(currentUser.role);
+
+    const myOrdersActive = db.orders.filter(o => o.status !== 'archived' && o.status !== 'cancelled');
+    const myArchive      = db.orders.filter(o => o.status === 'archived');
+    const cancelledOrders= db.orders.filter(o => o.status === 'cancelled');
+
+    const myTasks = canSeeAllTasks ? db.tasks : db.tasks.filter(t => t.created_by === userId || t.assignee_id === userId);
+    const activeTasks = myTasks.filter(t => t.status !== 'done');
+    const tasksToday  = myTasks.filter(t => t.visit_date === todayISO() && t.status !== 'done');
+
+    const allGrinds = db.grindRequests || [];
+    const activeGrinds = allGrinds.filter(g => !['completed', 'cancelled'].includes(g.status));
+    const grindsReady = allGrinds.filter(g => g.status === 'ready' || g.status === 'awaiting_pickup');
+
+    const allWriteOffs = db.writeOffs || [];
+    const pendingWriteOffs = allWriteOffs.filter(w => w.status === 'pending');
+
+    const allContracts = db.contractRequests || [];
+    const pendingContracts = allContracts.filter(c => c.status === 'pending');
+    const inProgressContracts = allContracts.filter(c => c.status === 'in_progress');
+
+    const pendingUsers = db.users.filter(u => u.role === 'pending');
+    const unread = db.notifications.filter(n => n.recipient_id === userId && !n.read).length;
+
+    return {
+      isAdmin,
+      orders: {
+        active: myOrdersActive.length,
+        archived: myArchive.length,
+        cancelled: cancelledOrders.length,
+      },
+      tasks: { active: activeTasks.length, today: tasksToday.length, total: myTasks.length },
+      grinds: { active: activeGrinds.length, ready: grindsReady.length },
+      writeOffs: { pending: pendingWriteOffs.length, total: allWriteOffs.length },
+      contracts: { pending: pendingContracts.length, inProgress: inProgressContracts.length, total: allContracts.length },
+      pendingUsers: pendingUsers.length,
+      unreadNotifications: unread,
+      totalProducts: (db.products || []).filter(p => p.active).length,
+    };
+  }, [db, currentUser]);
+
+  const has = (perm) => hasPermission(db, currentUser, perm);
+
+  // Список плиток. Каждая показывается только если у роли есть смысл её видеть.
+  const tiles = [];
+
+  // Заявки на закуп
+  if (has('orders_view_all') || has('orders_view_own') || has('orders_create')) {
+    tiles.push({
+      icon: FileText, label: 'Заявки на закуп',
+      value: stats.orders.active,
+      hint: stats.orders.archived > 0 ? `+${stats.orders.archived} в архиве` : 'активных',
+      color: '#3390EC',
+      go: () => navigate({ name: 'orders_list' }),
+    });
+  }
+  // Задачи (выездные)
+  if (has('tasks_view_own') || has('tasks_self_assign') || has('tasks_calendar_all')) {
+    tiles.push({
+      icon: ClipboardList, label: 'Задачи (выезд)',
+      value: stats.tasks.active,
+      hint: stats.tasks.today > 0 ? `${stats.tasks.today} на сегодня` : 'активных',
+      color: '#F59E0B',
+      go: () => navigate({ name: 'tasks_list' }),
+    });
+  }
+  // Помол кофе
+  if (has('grind_view_all') || has('grind_create') || has('grind_fulfill')) {
+    tiles.push({
+      icon: Coffee, label: 'Помол кофе',
+      value: stats.grinds.active,
+      hint: stats.grinds.ready > 0 ? `${stats.grinds.ready} готово` : 'активных',
+      color: '#8B5CF6',
+      go: () => navigate({ name: 'grinds' }),
+    });
+  }
+  // Списания
+  if (has('writeoff_view_all') || has('writeoff_create') || has('writeoff_approve') || has('writeoff_finalize')) {
+    tiles.push({
+      icon: Banknote, label: 'Списания',
+      value: stats.writeOffs.pending,
+      hint: stats.writeOffs.pending > 0 ? 'ждут одобрения' : `всего: ${stats.writeOffs.total}`,
+      color: '#EB5757',
+      go: () => navigate({ name: 'writeoffs' }),
+    });
+  }
+  // Договоры
+  if (has('contract_view_all') || has('contract_create') || has('contract_take')) {
+    tiles.push({
+      icon: FileText, label: 'Договоры',
+      value: stats.contracts.pending + stats.contracts.inProgress,
+      hint: stats.contracts.pending > 0 ? `${stats.contracts.pending} новых` : `всего: ${stats.contracts.total}`,
+      color: '#0EA5E9',
+      go: () => navigate({ name: 'contracts' }),
+    });
+  }
+  // Только для админа
+  if (stats.isAdmin) {
+    tiles.push({
+      icon: Bell, label: 'Запросы доступа',
+      value: stats.pendingUsers,
+      hint: stats.pendingUsers > 0 ? 'ждут одобрения' : 'нет',
+      color: stats.pendingUsers > 0 ? '#FBBF24' : '#64748B',
+      go: () => navigate({ name: 'admin_requests' }),
+      highlight: stats.pendingUsers > 0,
+    });
+    tiles.push({
+      icon: Users, label: 'Пользователи',
+      value: db.users.filter(u => u.active).length,
+      hint: 'активных',
+      color: '#10B981',
+      go: () => navigate({ name: 'admin_users' }),
+    });
+    tiles.push({
+      icon: Package, label: 'Товары / прайс',
+      value: stats.totalProducts,
+      hint: 'в каталоге',
+      color: '#A78BFA',
+      go: () => navigate({ name: 'admin_products' }),
+    });
+  }
+  // Уведомления — для всех
+  if (stats.unreadNotifications > 0) {
+    tiles.unshift({
+      icon: Bell, label: 'Уведомления',
+      value: stats.unreadNotifications,
+      hint: 'непрочитанных',
+      color: '#EB5757',
+      go: () => navigate({ name: 'notifications' }),
+      highlight: true,
+    });
+  }
 
   return (
     <div>
-      <PageHeader title="Панель администратора" subtitle="Полный доступ ко всему. Используйте «Просмотр как…» в меню, чтобы поработать в роли B2B / Продаж / Склада / Бариста / Техника" />
+      <PageHeader
+        title={title || 'Главная'}
+        subtitle={stats.isAdmin ? 'Полный обзор системы. Кликни любую плитку, чтобы перейти в раздел.' : 'Все ваши разделы в одном месте'}
+      />
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
-        <StatTile label="Активных заявок" value={activeOrders.length} color="#3390EC" onClick={() => navigate({ name: 'home' })} />
-        <StatTile label="В архиве" value={archivedOrders.length} color="#64748B" onClick={() => navigate({ name: 'archive' })} />
-        <StatTile label="Пользователей" value={activeUsers} color="#10B981" onClick={() => navigate({ name: 'admin_users' })} />
-        <StatTile label="Запросов" value={pendingRequests} color={pendingRequests > 0 ? '#297b8a' : '#64748B'} onClick={() => navigate({ name: 'admin_requests' })} />
-        <StatTile label="Задач (выезд)" value={activeTasks} color="#0EA5E9" onClick={() => navigate({ name: 'tasks_list' })} />
-      </div>
-
-      {pendingRequests > 0 && (
+      {/* Срочные уведомления — баннер */}
+      {stats.pendingUsers > 0 && stats.isAdmin && (
         <button onClick={() => navigate({ name: 'admin_requests' })}
-          className="w-full text-left rounded-xl p-4 mb-6 flex items-center gap-3 transition hover:shadow-md"
+          className="w-full text-left rounded-xl p-4 mb-4 flex items-center gap-3 transition hover:shadow-md"
           style={{ border: '1px solid #FBBF24', background: '#FFFBEB' }}>
           <div className="w-10 h-10 rounded-full flex items-center justify-center text-white" style={{ background: '#FBBF24' }}>
             <Bell size={18} />
           </div>
           <div className="flex-1">
-            <div className="font-semibold" style={{ color: '#1A1814' }}>{pendingRequests} {pendingRequests === 1 ? 'запрос' : 'запросов'} на доступ</div>
-            <div className="text-xs" style={{ color: '#64748B' }}>Назначить роль и выдать пароль</div>
+            <div className="font-semibold" style={{ color: '#1A1814' }}>{stats.pendingUsers} {stats.pendingUsers === 1 ? 'запрос' : 'запросов'} на доступ</div>
+            <div className="text-xs" style={{ color: '#64748B' }}>Назначить роль</div>
           </div>
           <ChevronRight size={18} style={{ color: '#A8A8AE' }} />
         </button>
       )}
 
-      <div className="flex flex-wrap gap-2 mb-4">
-        <ActionPill label="Товары / прайс-лист" onClick={() => navigate({ name: 'admin_products' })} icon={Package} />
-        <ActionPill label="Telegram-уведомления" onClick={() => navigate({ name: 'admin_telegram' })} icon={Send} />
-        <ActionPill label="Передать роль Admin" onClick={() => navigate({ name: 'admin_transfer' })} icon={ArrowLeftRight} accent="#EB5757" />
+      {/* Плитки дашборда */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        {tiles.map((t, i) => {
+          const Icon = t.icon;
+          return (
+            <button
+              key={i}
+              onClick={t.go}
+              className="rounded-xl p-4 bg-white text-left transition hover:shadow-md flex flex-col gap-2"
+              style={{
+                border: t.highlight ? `1.5px solid ${t.color}` : '1px solid #E5E7EB',
+                background: t.highlight ? `${t.color}08` : 'white',
+              }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${t.color}15`, color: t.color }}>
+                  <Icon size={18} />
+                </div>
+                <ChevronRight size={16} style={{ color: '#A8A8AE' }} />
+              </div>
+              <div>
+                <div className="text-3xl font-bold leading-none mb-1" style={{ color: t.color }}>{t.value}</div>
+                <div className="text-sm font-semibold" style={{ color: '#1A1814' }}>{t.label}</div>
+                <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>{t.hint}</div>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
-      <h2 className="display-font text-xl mb-3" style={{ color: '#1A1814' }}>Активные заявки</h2>
-      <OrdersList orders={activeOrders} ctx={ctx} />
+      {/* Быстрые действия для админа */}
+      {stats.isAdmin && (
+        <div className="flex flex-wrap gap-2 mb-6">
+          <ActionPill label="Создать заявку"      onClick={() => navigate({ name: 'create_order' })} icon={Plus} />
+          <ActionPill label="Быстрая B2B"         onClick={() => navigate({ name: 'create_quick' })} icon={Sparkles} />
+          <ActionPill label="Поставить задачу"    onClick={() => navigate({ name: 'create_task' })} icon={Plus} />
+          <ActionPill label="Telegram-уведомления" onClick={() => navigate({ name: 'admin_telegram' })} icon={Send} />
+        </div>
+      )}
+
+      {/* Список последних заявок, если есть */}
+      {stats.orders.active > 0 && (has('orders_view_all') || has('orders_view_own')) && (
+        <>
+          <h2 className="display-font text-xl mb-3" style={{ color: '#1A1814' }}>Последние активные заявки</h2>
+          <OrdersList orders={db.orders.filter(o => o.status !== 'archived' && o.status !== 'cancelled').slice(0, 5)} ctx={ctx} />
+        </>
+      )}
     </div>
   );
 }
