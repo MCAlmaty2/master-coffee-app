@@ -112,17 +112,53 @@ function gen4DigitCode(existing = []) {
 function makeTgLogEntry(db, eventKey, message) {
   const tg = db.telegramSettings || {};
   const topicId = tg.topics?.[eventKey] || '';
-  const target = tg.group_chat_id
-    ? `chat ${tg.group_chat_id}${topicId ? ` (тема ${topicId})` : ''}`
+  const chatId = tg.group_chat_id || '';
+  const target = chatId
+    ? `chat ${chatId}${topicId ? ` (тема ${topicId})` : ''}`
     : 'не настроено';
+
+  // Fire-and-forget: реально отправляем сообщение через Edge Function
+  if (chatId) {
+    try {
+      supabase.functions.invoke('send-telegram', {
+        body: {
+          chat_id: chatId,
+          message_thread_id: topicId || undefined,
+          text: message,
+        },
+      }).then(({ data, error }) => {
+        if (error) console.error('[tg] send failed:', error);
+        else if (data?.error) console.error('[tg] send error:', data.error);
+      }).catch(e => console.error('[tg] invoke failed:', e));
+    } catch (e) {
+      console.error('[tg] dispatch failed:', e);
+    }
+  }
+
   return {
     id: uid(),
     at: new Date().toISOString(),
     event: eventKey,
     target,
-    configured: !!tg.bot_token && !!tg.group_chat_id,
+    configured: !!tg.bot_token && !!chatId,
     message,
   };
+}
+
+// Отправить личное сообщение пользователю (требует Telegram chat_id = telegram_id юзера,
+// который писал боту хотя бы раз; Telegram сам сохраняет chat_id = user_id для бота)
+async function sendPrivateTelegram(user, text) {
+  if (!user?.telegram_id) return { error: 'нет telegram_id' };
+  try {
+    const { data, error } = await supabase.functions.invoke('send-telegram', {
+      body: { chat_id: user.telegram_id, text },
+    });
+    if (error) return { error: error.message };
+    if (data?.error) return { error: data.error };
+    return { ok: true };
+  } catch (e) {
+    return { error: String(e.message || e) };
+  }
 }
 
 function getUserName(db, userId) {
@@ -1101,6 +1137,54 @@ function App() {
 
   // Админ подтверждает pending-пользователя и назначает ему роль.
   // Принимает userId (pending-пользователя из таблицы users) + role.
+
+  /* ═══════════ АДМИН: удаление сущностей и массовая очистка ═══════════ */
+
+  // Удалить ОДНУ запись из таблицы (только админ)
+  const adminDeleteRecord = async (kind, id) => {
+    if (currentUser?.role !== 'admin') return { error: 'Только для админа' };
+    const tableMap = {
+      order:    { table: 'orders',             stateKey: 'orders' },
+      task:     { table: 'tasks',              stateKey: 'tasks' },
+      grind:    { table: 'grind_requests',     stateKey: 'grindRequests' },
+      writeoff: { table: 'write_offs',         stateKey: 'writeOffs' },
+      contract: { table: 'contract_requests',  stateKey: 'contractRequests' },
+    };
+    const cfg = tableMap[kind];
+    if (!cfg) return { error: 'Неизвестный тип' };
+    try {
+      const { error } = await supabase.from(cfg.table).delete().eq('id', id);
+      if (error) throw error;
+      setDb(d => ({ ...d, [cfg.stateKey]: d[cfg.stateKey].filter(x => x.id !== id) }));
+      return { ok: true };
+    } catch (e) {
+      reportError({ kind: 'manual', source: cfg.table, message: `Ошибка удаления: ${e.message}` });
+      return { error: e.message };
+    }
+  };
+
+  // Массовая очистка (только админ)
+  const adminWipeTable = async (kind, filterFn = null) => {
+    if (currentUser?.role !== 'admin') return { error: 'Только для админа' };
+    const tableMap = { orders: 'orders', tasks: 'tasks', grinds: 'grind_requests', writeoffs: 'write_offs', contracts: 'contract_requests' };
+    const stateMap = { orders: 'orders', tasks: 'tasks', grinds: 'grindRequests', writeoffs: 'writeOffs', contracts: 'contractRequests' };
+    const table = tableMap[kind];
+    const stateKey = stateMap[kind];
+    if (!table) return { error: 'Неизвестный раздел' };
+    try {
+      const toDelete = filterFn ? (db[stateKey] || []).filter(filterFn) : (db[stateKey] || []);
+      const ids = toDelete.map(x => x.id);
+      if (ids.length === 0) return { ok: true, deleted: 0 };
+      const { error } = await supabase.from(table).delete().in('id', ids);
+      if (error) throw error;
+      setDb(d => ({ ...d, [stateKey]: d[stateKey].filter(x => !ids.includes(x.id)) }));
+      return { ok: true, deleted: ids.length };
+    } catch (e) {
+      reportError({ kind: 'manual', source: table, message: `Ошибка массовой очистки: ${e.message}` });
+      return { error: e.message };
+    }
+  };
+
   const approveAccess = async (userId, role) => {
     try {
       const updated = await approveUser(userId, role, currentUser.id);
@@ -1113,6 +1197,15 @@ function App() {
           ...d.notifications,
         ],
       }));
+      // Отправляем личное уведомление пользователю через бота
+      const roleLabel = roleOf(db, role).label;
+      sendPrivateTelegram(updated, `✅ Ваш доступ к Master Coffee CRM одобрен!\n\nРоль: ${roleLabel}\n\nОткройте бота и запустите Mini App снова.`)
+        .then(r => {
+          if (r.error) {
+            console.warn('[tg] не удалось уведомить лично:', r.error);
+            // Это не блокер: пользователь увидит уведомление в самом приложении
+          }
+        });
       return { ok: true };
     } catch (e) {
       return { error: e.message };
@@ -1354,7 +1447,7 @@ function App() {
       newNotifs.push({
         id: uid(), recipient_id: wo.created_by,
         title: 'Списание одобрено',
-        link_kind: 'writeoff', link_id: writeOff.id,
+        link_kind: 'writeoff', link_id: wo.id,
         body: `${wo.number}: одобрена ${getUserName(d, currentUser.id)}`,
         at: new Date().toISOString(), read: false,
       });
@@ -1395,7 +1488,7 @@ function App() {
       const newNotifs = [{
         id: uid(), recipient_id: wo.created_by,
         title: 'Списание отклонено',
-        link_kind: 'writeoff', link_id: writeOff.id,
+        link_kind: 'writeoff', link_id: wo.id,
         body: `${wo.number}: причина — ${comment.trim().slice(0, 80)}`,
         at: new Date().toISOString(), read: false,
       }];
@@ -1463,7 +1556,7 @@ function App() {
     if (!data.client_details || data.client_details.trim().length < 10) return { error: 'Реквизиты клиента — одним сообщением (минимум 10 символов)' };
     const spec = (data.specification || []).filter(s => s.name && s.name.trim() && Number(s.volume) > 0 && Number(s.price_per_unit) > 0);
     if (spec.length === 0) return { error: 'Добавьте хотя бы одну позицию в спецификацию' };
-    if (!data.identity_doc) return { error: 'Прикрепите УДВ подписанта' };
+    if (!data.authority_doc) return { error: 'Прикрепите основание полномочий' };
     if (!data.authority_doc) return { error: 'Прикрепите основание полномочий (устав / доверенность / приказ)' };
 
     const year = new Date().getFullYear();
@@ -1964,6 +2057,38 @@ function App() {
     }
   };
 
+  // Массовый импорт товаров: принимает массив {name, cat, unit, price}
+  const importProducts = async (rows) => {
+    if (currentUser?.role !== 'admin') return { error: 'Только для админа' };
+    const errors = [];
+    const added = [];
+    const existingIds = new Set((db.products || []).map(p => p.id));
+    let nextN = (db.products || []).length + 1;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const name = (r.name || '').trim();
+      const cat = (r.cat || '').trim();
+      const unit = (r.unit || '').trim();
+      const price = Number(r.price);
+      if (!name) { errors.push(`Строка ${i + 1}: пустое название`); continue; }
+      if (!cat)  { errors.push(`Строка ${i + 1}: пустая категория`); continue; }
+      if (!unit) { errors.push(`Строка ${i + 1}: пустая единица`); continue; }
+      if (!price || price <= 0) { errors.push(`Строка ${i + 1}: цена ≤ 0`); continue; }
+      while (existingIds.has(String(nextN).padStart(3, '0'))) nextN++;
+      const newId = String(nextN).padStart(3, '0');
+      existingIds.add(newId);
+      nextN++;
+      try {
+        const saved = await createProductInDb({ id: newId, cat, name, unit, price, active: true });
+        added.push(saved);
+      } catch (e) {
+        errors.push(`Строка ${i + 1}: ${e.message}`);
+      }
+    }
+    if (added.length > 0) setDb(d => ({ ...d, products: [...(d.products || []), ...added] }));
+    return { ok: true, added: added.length, errors };
+  };
+
   const updateProduct = async (productId, patch) => {
     // оптимистично
     const prev = db.products.find(p => p.id === productId);
@@ -2103,8 +2228,9 @@ function App() {
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createGrindRequest, takeGrindRequest, markGrindReady, completeGrindRequest, closeGrindPickup, cancelGrindRequest,
     createCustomRole, updateRolePermissions, updateRoleMeta, deleteCustomRole,
-    createProduct, updateProduct, toggleProductActive, deleteProduct,
+    createProduct, updateProduct, toggleProductActive, deleteProduct, importProducts,
     markNotificationRead, markAllNotificationsRead, clearReadNotifications,
+    adminDeleteRecord, adminWipeTable,
     updateTelegramSettings,
     resetDB,
     sendFeedback, reportError,
@@ -2581,109 +2707,74 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
   const isManager = MANAGER_ROLES.includes(role);
 
   const navItems = useMemo(() => {
-    const items = [];
-    // Заявки — для менеджеров и склада
-    if (role === 'admin' || role === 'b2b') {
-      items.push({ id: 'home', label: 'Главная', icon: Eye });
-      items.push({ id: 'orders_list', label: 'Заявки', icon: Inbox });
-      items.push({ id: 'create_order', label: 'Создать заявку', icon: Plus });
-      items.push({ id: 'create_quick', label: 'Быстрая B2B', icon: Sparkles });
-      items.push({ id: 'archive', label: 'Архив', icon: Inbox });
-      items.push({ id: 'export', label: 'Экспорт', icon: Download });
+    // Группы пунктов меню. Пункты создания (+) убраны — они теперь внутри разделов как кнопка.
+    const groups = [];
+
+    // ── ГЛАВНОЕ ───────────────────────────
+    const main = [];
+    main.push({ id: 'home', label: 'Главная', icon: Eye });
+    main.push({ id: 'notifications', label: 'Уведомления', icon: Bell });
+    groups.push({ title: 'Главное', items: main });
+
+    // ── ОПЕРАЦИИ ──────────────────────────
+    const ops = [];
+    // Заявки
+    if (role === 'admin' || role === 'b2b' || role === 'sales' || role === 'warehouse'
+        || hasPermission(db, currentUser, 'orders_view_all') || hasPermission(db, currentUser, 'orders_view_own')) {
+      ops.push({ id: 'orders_list', label: 'Заявки', icon: Inbox });
     }
-    if (role === 'sales') {
-      items.push({ id: 'home', label: 'Главная', icon: Eye });
-      items.push({ id: 'orders_list', label: 'Мои заявки', icon: Inbox });
-      items.push({ id: 'create_order', label: 'Создать заявку', icon: Plus });
-    }
-    if (role === 'warehouse') {
-      items.push({ id: 'home', label: 'Главная', icon: Eye });
-      items.push({ id: 'orders_list', label: 'Заявки', icon: Inbox });
-    }
-    // Задачи
-    if (FIELD_ROLES.includes(role)) {
-      items.push({ id: 'home', label: 'Мой календарь', icon: ClipboardList });
-      items.push({ id: 'tasks_list', label: 'Все мои задачи', icon: ClipboardList });
-      items.push({ id: 'field_calendar', label: 'Календарь команды', icon: Eye });
-      items.push({ id: 'create_task', label: 'Новая задача', icon: Plus });
-    }
-    if (isManager) {
-      items.push({ id: 'tasks_list', label: 'Задачи (выезд)', icon: ClipboardList });
-      items.push({ id: 'create_task', label: 'Поставить задачу', icon: Plus });
-      items.push({ id: 'field_calendar', label: 'Календарь выезда', icon: Eye });
-    }
-    // Главная для новых ролей (cashier/director/senior_manager)
-    if (['cashier', 'director', 'senior_manager'].includes(role)) {
-      items.push({ id: 'home', label: 'Заявки на списание', icon: Trash2 });
-    }
-    // Списания — пункт для всех, у кого есть права (включая баристу/техника)
-    if (hasPermission(db, currentUser, 'writeoff_view_all') || hasPermission(db, currentUser, 'writeoff_create')) {
-      // home уже добавлен для cashier/director/senior_manager выше; для остальных — отдельный пункт
-      if (!['cashier', 'director', 'senior_manager'].includes(role)) {
-        items.push({ id: 'writeoffs', label: 'Заявки на списание', icon: Trash2 });
-      }
-      if (hasPermission(db, currentUser, 'writeoff_create')) {
-        items.push({ id: 'create_writeoff', label: 'Подать на списание', icon: Plus });
-      }
-    }
-    // Договоры — для тех, кто может создавать или видеть
-    if (hasPermission(db, currentUser, 'contract_view_all') || hasPermission(db, currentUser, 'contract_create')) {
-      items.push({ id: 'contracts', label: 'Заявки на договор', icon: FileText });
-      if (hasPermission(db, currentUser, 'contract_create')) {
-        items.push({ id: 'create_contract', label: 'Подать на договор', icon: Plus });
-      }
-    }
-    // Помол кофе — для менеджеров (создание), склада (исполнение), директора (просмотр)
+    // Помол
     if (hasPermission(db, currentUser, 'grind_view_all') || hasPermission(db, currentUser, 'grind_create') || hasPermission(db, currentUser, 'grind_fulfill')) {
-      items.push({ id: 'grinds', label: 'Помол кофе', icon: Coffee });
-      if (hasPermission(db, currentUser, 'grind_create')) {
-        items.push({ id: 'create_grind', label: 'Заявка на помол', icon: Plus });
-      }
+      ops.push({ id: 'grinds', label: 'Помол кофе', icon: Coffee });
     }
-    // Кастомные роли (нет в списке системных) — генерируем пункты по правам, чтобы у них хоть что-то было
-    const KNOWN_ROLES = ['admin', 'b2b', 'sales', 'warehouse', 'cashier', 'director', 'senior_manager', 'barista', 'technician'];
-    if (!KNOWN_ROLES.includes(role)) {
-      const hasHomeAlready = items.some(it => it.id === 'home');
-      if (hasPermission(db, currentUser, 'orders_view_all') || hasPermission(db, currentUser, 'orders_view_own')) {
-        if (!hasHomeAlready) items.push({ id: 'home', label: 'Заявки', icon: Inbox });
-      } else if (!hasHomeAlready) {
-        items.push({ id: 'home', label: 'Главная', icon: User });
-      }
-      if (hasPermission(db, currentUser, 'orders_create')) {
-        items.push({ id: 'create_order', label: 'Создать заявку', icon: Plus });
-      }
-      if (hasPermission(db, currentUser, 'orders_create_quick')) {
-        items.push({ id: 'create_quick', label: 'Быстрая B2B', icon: Sparkles });
-      }
-      if (hasPermission(db, currentUser, 'orders_archive_view')) {
-        items.push({ id: 'archive', label: 'Архив', icon: Inbox });
-      }
-      if (hasPermission(db, currentUser, 'orders_export')) {
-        items.push({ id: 'export', label: 'Экспорт', icon: Download });
-      }
-      if (hasPermission(db, currentUser, 'tasks_view_own')) {
-        items.push({ id: 'tasks_list', label: 'Задачи', icon: ClipboardList });
-      }
-      if (hasPermission(db, currentUser, 'tasks_create')) {
-        items.push({ id: 'create_task', label: 'Поставить задачу', icon: Plus });
-      }
-      if (hasPermission(db, currentUser, 'tasks_calendar_all')) {
-        items.push({ id: 'field_calendar', label: 'Календарь команды', icon: Eye });
-      }
+    // Задачи / выезд
+    if (FIELD_ROLES.includes(role) || isManager
+        || hasPermission(db, currentUser, 'tasks_view_own') || hasPermission(db, currentUser, 'tasks_self_assign')) {
+      ops.push({ id: 'tasks_list', label: 'Задачи (выезд)', icon: ClipboardList });
     }
-    // Админ
+    // Календарь команды
+    if (FIELD_ROLES.includes(role) || isManager || hasPermission(db, currentUser, 'tasks_calendar_all')) {
+      ops.push({ id: 'field_calendar', label: 'Календарь команды', icon: Eye });
+    }
+    // Списания
+    if (['cashier', 'director', 'senior_manager'].includes(role)
+        || hasPermission(db, currentUser, 'writeoff_view_all') || hasPermission(db, currentUser, 'writeoff_create')) {
+      ops.push({ id: 'writeoffs', label: 'Списания', icon: Trash2 });
+    }
+    // Договоры
+    if (hasPermission(db, currentUser, 'contract_view_all') || hasPermission(db, currentUser, 'contract_create')) {
+      ops.push({ id: 'contracts', label: 'Договоры', icon: FileText });
+    }
+    // Архив
+    if (role === 'admin' || role === 'b2b' || hasPermission(db, currentUser, 'orders_archive_view')) {
+      ops.push({ id: 'archive', label: 'Архив', icon: Inbox });
+    }
+    // Экспорт
+    if (role === 'admin' || role === 'b2b' || hasPermission(db, currentUser, 'orders_export')) {
+      ops.push({ id: 'export', label: 'Экспорт', icon: Download });
+    }
+    if (ops.length > 0) groups.push({ title: 'Операции', items: ops });
+
+    // ── АДМИН ────────────────────────────
     if (currentUser.role === 'admin') {
-      items.push({ id: 'admin_users', label: 'Пользователи', icon: Users });
-      items.push({ id: 'admin_roles', label: 'Роли и права', icon: KeyRound });
-      items.push({ id: 'admin_products', label: 'Товары / прайс-лист', icon: Package });
-      items.push({ id: 'admin_requests', label: 'Запросы доступа', icon: Bell });
-      items.push({ id: 'admin_telegram', label: 'Telegram-уведомления', icon: Send });
-      items.push({ id: 'admin_feedback', label: 'Сообщения сотрудников', icon: Mail });
-      items.push({ id: 'admin_errors', label: 'Отчёты об ошибках', icon: AlertTriangle });
+      const admin = [];
+      admin.push({ id: 'admin_users',    label: 'Пользователи',       icon: Users });
+      admin.push({ id: 'admin_roles',    label: 'Роли и права',       icon: KeyRound });
+      admin.push({ id: 'admin_products', label: 'Товары / прайс',     icon: Package });
+      admin.push({ id: 'admin_requests', label: 'Запросы доступа',    icon: Bell });
+      admin.push({ id: 'admin_telegram', label: 'Telegram-уведомления', icon: Send });
+      admin.push({ id: 'admin_feedback', label: 'Сообщения сотрудников', icon: Mail });
+      admin.push({ id: 'admin_errors',   label: 'Отчёты об ошибках',  icon: AlertTriangle });
+      admin.push({ id: 'admin_service',  label: 'Сервис · очистка',   icon: Settings });
+      groups.push({ title: 'Администрирование', items: admin });
     }
-    items.push({ id: 'feedback', label: 'Обратная связь', icon: MessageSquare });
-    items.push({ id: 'notifications', label: 'Уведомления', icon: Bell });
-    return items;
+
+    // ── ПРОЧЕЕ ────────────────────────────
+    const misc = [];
+    misc.push({ id: 'feedback', label: 'Обратная связь', icon: MessageSquare });
+    groups.push({ title: 'Прочее', items: misc });
+
+    return groups;
   }, [role, currentUser, isManager, db]);
 
   const myUnreadNotifs = db.notifications.filter(n => n.recipient_id === currentUser.id && !n.read).length;
@@ -2708,15 +2799,22 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
         
 
         <nav className="px-3 flex-1 overflow-y-auto">
-          {navItems.map(item => (
-            <SidebarItem
-              key={item.id}
-              icon={item.icon}
-              label={item.label}
-              active={route.name === item.id}
-              badge={item.id === 'admin_requests' ? pendingRequests : item.id === 'notifications' ? myUnreadNotifs : null}
-              onClick={() => navigate({ name: item.id })}
-            />
+          {navItems.map((group, gIdx) => (
+            <div key={group.title} className={gIdx > 0 ? 'mt-4' : ''}>
+              <div className="text-[10px] uppercase font-bold mb-1 px-2" style={{ color: '#A8A8AE', letterSpacing: '0.1em' }}>
+                {group.title}
+              </div>
+              {group.items.map(item => (
+                <SidebarItem
+                  key={item.id}
+                  icon={item.icon}
+                  label={item.label}
+                  active={route.name === item.id}
+                  badge={item.id === 'admin_requests' ? pendingRequests : item.id === 'notifications' ? myUnreadNotifs : null}
+                  onClick={() => navigate({ name: item.id })}
+                />
+              ))}
+            </div>
           ))}
         </nav>
 
@@ -2767,16 +2865,23 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
               <button onClick={() => setMobileMenuOpen(false)}><X size={20} /></button>
             </div>
             
-            <nav className="px-3 flex-1">
-              {navItems.map(item => (
-                <SidebarItem
-                  key={item.id}
-                  icon={item.icon}
-                  label={item.label}
-                  active={route.name === item.id}
-                  badge={item.id === 'admin_requests' ? pendingRequests : item.id === 'notifications' ? myUnreadNotifs : null}
-                  onClick={() => navigate({ name: item.id })}
-                />
+            <nav className="px-3 flex-1 overflow-y-auto">
+              {navItems.map((group, gIdx) => (
+                <div key={group.title} className={gIdx > 0 ? 'mt-4' : ''}>
+                  <div className="text-[10px] uppercase font-bold mb-1 px-2" style={{ color: '#A8A8AE', letterSpacing: '0.1em' }}>
+                    {group.title}
+                  </div>
+                  {group.items.map(item => (
+                    <SidebarItem
+                      key={item.id}
+                      icon={item.icon}
+                      label={item.label}
+                      active={route.name === item.id}
+                      badge={item.id === 'admin_requests' ? pendingRequests : item.id === 'notifications' ? myUnreadNotifs : null}
+                      onClick={() => navigate({ name: item.id })}
+                    />
+                  ))}
+                </div>
               ))}
             </nav>
             <div className="p-3 border-t flex-shrink-0" style={{ borderColor: '#F1F5F9' }}>
@@ -2998,6 +3103,7 @@ function Screen({ ctx }) {
     case 'export': return <ExportScreen ctx={ctx} />;
     case 'admin_users': return <AdminUsersScreen ctx={ctx} />;
     case 'admin_errors': return <AdminErrorReportsScreen ctx={ctx} />;
+    case 'admin_service': return <AdminServiceScreen ctx={ctx} />;
     case 'admin_roles': return <AdminRolesScreen ctx={ctx} />;
     case 'admin_requests': return <AdminRequestsScreen ctx={ctx} />;
     case 'admin_transfer': return <AdminTransferScreen ctx={ctx} />;
@@ -3803,6 +3909,35 @@ function Empty({ icon: Icon = Inbox, title, subtitle }) {
    ДЕТАЛИ ЗАЯВКИ
    ═════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * Кнопка «удалить навсегда» для админа на детальных экранах сущностей.
+ * Видна только админу. Требует ввода подтверждающего текста.
+ */
+function AdminDeleteButton({ ctx, kind, id, label, onDeleted }) {
+  const { currentUser, adminDeleteRecord, showToast } = ctx;
+  if (currentUser?.role !== 'admin') return null;
+  const handle = async () => {
+    const ok = confirm(`⚠️ Удалить ${label} НАВСЕГДА? Это нельзя отменить.`);
+    if (!ok) return;
+    const r = await adminDeleteRecord(kind, id);
+    if (r.error) {
+      showToast('Ошибка: ' + r.error);
+    } else {
+      showToast(`${label.charAt(0).toUpperCase() + label.slice(1)} удалена`);
+      onDeleted?.();
+    }
+  };
+  return (
+    <button
+      onClick={handle}
+      className="w-full mt-3 py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2"
+      style={{ background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA' }}
+    >
+      <Trash2 size={14} /> Удалить навсегда (только админ)
+    </button>
+  );
+}
+
 function OrderDetailScreen({ ctx, orderId }) {
   const { db, currentUser, effectiveRole, goBack, changeStatus, showToast } = ctx;
   const order = db.orders.find(o => o.id === orderId);
@@ -3994,6 +4129,8 @@ function OrderDetailScreen({ ctx, orderId }) {
           }}
         />
       )}
+
+      <AdminDeleteButton ctx={ctx} kind="order" id={order.id} label="эту заявку" onDeleted={() => ctx.goBack()} />
     </div>
   );
 }
@@ -6260,6 +6397,7 @@ function TaskDetailScreen({ ctx, taskId }) {
           showToast('Задача закрыта');
         }} />
       )}
+      <AdminDeleteButton ctx={ctx} kind="task" id={task.id} label="эту задачу" onDeleted={() => ctx.goBack()} />
     </div>
   );
 }
@@ -7273,6 +7411,7 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
           showToast(`${wo.number} списана в 1С (${docNo})`);
         }} />
       )}
+      <AdminDeleteButton ctx={ctx} kind="writeoff" id={wo.id} label="это списание" onDeleted={() => ctx.goBack()} />
     </div>
   );
 }
@@ -7618,7 +7757,6 @@ function CreateContractScreen({ ctx }) {
       if (!Number(it.price_per_unit) || Number(it.price_per_unit) <= 0) e[`price_${i}`] = 'Больше 0';
     });
     if (!form.client_details || form.client_details.trim().length < 10) e.client_details = 'Реквизиты — минимум 10 символов';
-    if (!form.identity_doc) e.identity_doc = 'Прикрепите УДВ';
     if (!form.authority_doc) e.authority_doc = 'Прикрепите основание полномочий';
     setErrors(e);
     if (Object.keys(e).length > 0) {
@@ -7784,17 +7922,7 @@ function CreateContractScreen({ ctx }) {
             </div>
           </Card>
 
-          <Card title="6. УДВ подписанта">
-            <FileOrUrlInput
-              label=""
-              value={form.identity_doc}
-              onChange={v => update({ identity_doc: v })}
-              hint="Удостоверение личности или паспорт подписанта. Ссылка на Google Drive предпочтительнее."
-            />
-            {errors.identity_doc && !form.identity_doc && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.identity_doc}</div>}
-          </Card>
-
-          <Card title="7. Основание полномочий">
+          <Card title="6. Основание полномочий">
             <FileOrUrlInput
               label=""
               value={form.authority_doc}
@@ -7812,7 +7940,6 @@ function CreateContractScreen({ ctx }) {
             <FieldRow label="Режим" value={TAX_REGIME[form.tax_regime].label} />
             <FieldRow label="Позиций" value={`${form.specification.length}`} />
             {totalSum > 0 && <FieldRow label="Итого" value={`${fmtNum(totalSum)} ₸`} />}
-            <FieldRow label="УДВ" value={form.identity_doc ? '✓ прикреплён' : 'нет'} />
             <FieldRow label="Основание" value={form.authority_doc ? '✓ прикреплён' : 'нет'} />
           </Card>
 
@@ -8073,6 +8200,7 @@ function ContractDetailScreen({ ctx, contractId }) {
           showToast('Заявка отклонена');
         }} />
       )}
+      <AdminDeleteButton ctx={ctx} kind="contract" id={cr.id} label="этот договор" onDeleted={() => ctx.goBack()} />
     </div>
   );
 }
@@ -9002,6 +9130,7 @@ function GrindDetailScreen({ ctx, grindId }) {
           </div>
         </Modal>
       )}
+      <AdminDeleteButton ctx={ctx} kind="grind" id={grind.id} label="эту заявку" onDeleted={() => ctx.goBack()} />
     </div>
   );
 }
@@ -9011,12 +9140,13 @@ function GrindDetailScreen({ ctx, grindId }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function AdminProductsScreen({ ctx }) {
-  const { db, createProduct, updateProduct, toggleProductActive, deleteProduct, showToast, goBack } = ctx;
+  const { db, createProduct, updateProduct, toggleProductActive, deleteProduct, importProducts, showToast, goBack } = ctx;
   const products = db.products || [];
   const [search, setSearch] = useState('');
   const [activeCat, setActiveCat] = useState('Все');
   const [showInactive, setShowInactive] = useState(false);
   const [editModal, setEditModal] = useState(null); // null | 'new' | {product}
+  const [importModal, setImportModal] = useState(false);
 
   const cats = useMemo(
     () => ['Все', ...Array.from(new Set(products.map(p => p.cat))).sort()],
@@ -9071,14 +9201,23 @@ function AdminProductsScreen({ ctx }) {
         subtitle={`${totalActive} активных, ${totalInactive} выключенных`}
         onBack={goBack}
         action={
-          <button
-            onClick={() => setEditModal('new')}
-            className="px-4 py-2 rounded-lg font-semibold text-white flex items-center gap-2 text-sm"
-            style={{ background: '#297b8a' }}
-          >
-            <Plus size={16} />
-            Добавить
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setImportModal(true)}
+              className="px-3 py-2 rounded-lg font-semibold flex items-center gap-1.5 text-sm"
+              style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}
+            >
+              <Download size={14} style={{ transform: 'rotate(180deg)' }} /> Импорт
+            </button>
+            <button
+              onClick={() => setEditModal('new')}
+              className="px-4 py-2 rounded-lg font-semibold text-white flex items-center gap-2 text-sm"
+              style={{ background: '#297b8a' }}
+            >
+              <Plus size={16} />
+              Добавить
+            </button>
+          </div>
         }
       />
 
@@ -9180,7 +9319,133 @@ function AdminProductsScreen({ ctx }) {
           onClose={() => setEditModal(null)}
         />
       )}
+      {importModal && (
+        <ProductImportModal
+          onImport={importProducts}
+          onClose={() => setImportModal(false)}
+          showToast={showToast}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Модал массового импорта товаров.
+ * Принимает текст из textarea (можно вставить из Excel).
+ * Формат: 4 колонки разделённые табом или ; — Название, Категория, Единица, Цена
+ */
+function ProductImportModal({ onImport, onClose, showToast }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Парсер строк
+  const parsed = useMemo(() => {
+    if (!text.trim()) return { rows: [], errors: [] };
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const rows = [];
+    const errors = [];
+    lines.forEach((line, idx) => {
+      // Разделитель — таб (Excel) или ;
+      const parts = line.split(/\t|;/).map(s => s.trim());
+      if (parts.length < 4) {
+        errors.push(`Строка ${idx + 1}: нужно 4 колонки (название, категория, единица, цена)`);
+        return;
+      }
+      const [name, cat, unit, priceStr] = parts;
+      // Цена: убираем пробелы, заменяем запятую на точку
+      const price = Number(priceStr.replace(/\s/g, '').replace(',', '.'));
+      // Пропускаем заголовочную строку если первая
+      if (idx === 0 && (price === 0 || isNaN(price)) && (priceStr.toLowerCase().includes('цена') || name.toLowerCase().includes('название'))) {
+        return;
+      }
+      if (!name) { errors.push(`Строка ${idx + 1}: пустое название`); return; }
+      if (!cat)  { errors.push(`Строка ${idx + 1}: пустая категория`); return; }
+      if (!unit) { errors.push(`Строка ${idx + 1}: пустая единица`); return; }
+      if (!price || price <= 0) { errors.push(`Строка ${idx + 1}: цена "${priceStr}" не число`); return; }
+      rows.push({ name, cat, unit, price });
+    });
+    return { rows, errors };
+  }, [text]);
+
+  const handleImport = async () => {
+    if (parsed.rows.length === 0) {
+      showToast('Нет валидных строк для импорта');
+      return;
+    }
+    if (!confirm(`Импортировать ${parsed.rows.length} ${parsed.rows.length === 1 ? 'товар' : 'товаров'}?`)) return;
+    setBusy(true);
+    const res = await onImport(parsed.rows);
+    setBusy(false);
+    if (res.error) {
+      showToast('Ошибка: ' + res.error);
+      return;
+    }
+    showToast(`Добавлено: ${res.added}${res.errors?.length ? `, с ошибками: ${res.errors.length}` : ''}`);
+    if (res.errors?.length === 0) {
+      onClose();
+    } else {
+      // показать ошибки в alert
+      alert('Ошибки при импорте:\n\n' + res.errors.join('\n'));
+    }
+  };
+
+  return (
+    <Modal onClose={onClose} title="Импорт товаров">
+      <div className="space-y-3">
+        <div className="text-sm" style={{ color: '#64748B' }}>
+          Скопируй прайс-лист из Excel или Google Sheets и вставь сюда. Колонки: <strong>Название</strong> · <strong>Категория</strong> · <strong>Единица</strong> · <strong>Цена</strong>.
+          Разделитель — таб (как при копировании из Excel) или точка с запятой.
+        </div>
+
+        <div className="rounded-lg p-3 text-xs mono-font" style={{ background: '#F5F7F8', color: '#64748B' }}>
+          Crema Classico	Кофе зерно	кг	14990<br/>
+          Espresso Italia	Кофе зерно	кг	13990<br/>
+          Сироп Карамель	Сиропы	шт	1800
+        </div>
+
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder="Вставь сюда строки прайс-листа..."
+          rows={10}
+          className="w-full px-3 py-2 rounded-lg outline-none mono-font text-sm"
+          style={{ border: '1px solid #E5E7EB', resize: 'vertical' }}
+        />
+
+        {text.trim() && (
+          <div className="rounded-lg p-3 text-sm" style={{ background: '#F0F9FF', border: '1px solid #93C5FD' }}>
+            <div className="font-semibold mb-1" style={{ color: '#1E40AF' }}>
+              К импорту: {parsed.rows.length} {parsed.rows.length === 1 ? 'товар' : 'товаров'}
+              {parsed.errors.length > 0 && <span className="ml-2" style={{ color: '#DC2626' }}>· Ошибок: {parsed.errors.length}</span>}
+            </div>
+            {parsed.errors.length > 0 && (
+              <details>
+                <summary className="cursor-pointer text-xs" style={{ color: '#DC2626' }}>Показать ошибки</summary>
+                <div className="text-xs mt-1 space-y-0.5" style={{ color: '#991B1B' }}>
+                  {parsed.errors.slice(0, 10).map((err, i) => <div key={i}>· {err}</div>)}
+                  {parsed.errors.length > 10 && <div>... и ещё {parsed.errors.length - 10}</div>}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+            Отмена
+          </button>
+          <button
+            onClick={handleImport}
+            disabled={busy || parsed.rows.length === 0}
+            className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50"
+            style={{ background: '#297b8a' }}
+          >
+            {busy ? 'Импортируем...' : `Импортировать (${parsed.rows.length})`}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -9789,6 +10054,134 @@ function AdminErrorReportsScreen({ ctx }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   АДМИН: сервисный раздел — массовая очистка тестовых данных
+   ═════════════════════════════════════════════════════════════════════════ */
+
+function AdminServiceScreen({ ctx }) {
+  const { db, adminWipeTable, showToast, goBack } = ctx;
+
+  const counts = {
+    orders: (db.orders || []).length,
+    tasks: (db.tasks || []).length,
+    grinds: (db.grindRequests || []).length,
+    writeoffs: (db.writeOffs || []).length,
+    contracts: (db.contractRequests || []).length,
+  };
+
+  const handleWipe = async (kind, label) => {
+    const phrase = `УДАЛИТЬ ${label.toUpperCase()}`;
+    const input = prompt(
+      `⚠️ Это удалит ВСЕ записи в разделе "${label}" (${counts[kind]} шт.) и их нельзя будет восстановить.\n\nЧтобы подтвердить — введи фразу:\n${phrase}`
+    );
+    if (input !== phrase) {
+      if (input !== null) showToast('Подтверждение не совпало — отменено');
+      return;
+    }
+    const r = await adminWipeTable(kind);
+    if (r.error) {
+      showToast('Ошибка: ' + r.error);
+    } else {
+      showToast(`Удалено: ${r.deleted}`);
+    }
+  };
+
+  const handleWipeTest = async () => {
+    // "Тестовые" = записи, созданные более 0 дней назад, у которых клиент содержит "тест"
+    // Простая логика: всё что содержит слово "тест" в номере, имени, названии
+    const isTest = (record, kind) => {
+      const fields = [];
+      if (kind === 'orders') fields.push(record.full_name, record.company_name, record.comment, record.address);
+      else if (kind === 'tasks') fields.push(record.client_name, record.problem, record.address);
+      else if (kind === 'grinds') fields.push(record.client_name, record.comment, record.address);
+      else if (kind === 'writeoffs') fields.push(record.reason, record.comment);
+      else if (kind === 'contracts') fields.push(record.client_details, record.comment);
+      const text = fields.filter(Boolean).join(' ').toLowerCase();
+      return /тест|test|проверк/.test(text);
+    };
+
+    const allKinds = ['orders', 'tasks', 'grinds', 'writeoffs', 'contracts'];
+    let total = 0;
+    for (const kind of allKinds) {
+      const list = db[{ orders: 'orders', tasks: 'tasks', grinds: 'grindRequests', writeoffs: 'writeOffs', contracts: 'contractRequests' }[kind]] || [];
+      total += list.filter(r => isTest(r, kind)).length;
+    }
+    if (total === 0) {
+      showToast('Тестовых записей не найдено');
+      return;
+    }
+    if (!confirm(`Найдено ${total} записей со словами "тест"/"проверка". Удалить все?`)) return;
+    let deleted = 0;
+    for (const kind of allKinds) {
+      const r = await adminWipeTable(kind, (rec) => isTest(rec, kind));
+      if (r.ok) deleted += r.deleted;
+    }
+    showToast(`Удалено тестовых: ${deleted}`);
+  };
+
+  const tiles = [
+    { kind: 'orders',    label: 'Заявок',    count: counts.orders,    color: '#3390EC' },
+    { kind: 'tasks',     label: 'Задач',     count: counts.tasks,     color: '#F59E0B' },
+    { kind: 'grinds',    label: 'Помолов',   count: counts.grinds,    color: '#8B5CF6' },
+    { kind: 'writeoffs', label: 'Списаний',  count: counts.writeoffs, color: '#EB5757' },
+    { kind: 'contracts', label: 'Договоров', count: counts.contracts, color: '#0EA5E9' },
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title="Сервис · очистка данных"
+        subtitle="Удаление тестовых записей. Используй с осторожностью — отменить нельзя."
+        onBack={goBack}
+      />
+
+      {/* Умная очистка тестовых */}
+      <Card title="Умная очистка тестовых">
+        <div className="text-sm mb-3" style={{ color: '#64748B' }}>
+          Найдёт и удалит все записи во всех разделах, содержащие слова «тест», «test» или «проверка» в названии, имени клиента, описании, причине, адресе или комментарии.
+        </div>
+        <button
+          onClick={handleWipeTest}
+          className="w-full py-2.5 rounded-lg font-semibold"
+          style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FBBF24' }}
+        >
+          🔍 Найти и удалить тестовые записи
+        </button>
+      </Card>
+
+      {/* Массовая очистка по разделам */}
+      <div className="mt-4">
+        <div className="text-xs uppercase font-bold mb-2" style={{ color: '#64748B', letterSpacing: '0.08em' }}>Полная очистка по разделам</div>
+        <div className="space-y-2">
+          {tiles.map(t => (
+            <div key={t.kind} className="bg-white rounded-xl p-4 flex items-center justify-between" style={{ border: '1px solid #E5E7EB' }}>
+              <div className="flex items-center gap-3">
+                <div className="text-2xl font-bold mono-font" style={{ color: t.color }}>{t.count}</div>
+                <div>
+                  <div className="font-semibold" style={{ color: '#1A1814' }}>{t.label}</div>
+                  <div className="text-xs" style={{ color: '#64748B' }}>удалить все записи</div>
+                </div>
+              </div>
+              <button
+                onClick={() => handleWipe(t.kind, t.label)}
+                disabled={t.count === 0}
+                className="px-3 py-1.5 rounded-lg font-semibold text-sm disabled:opacity-30"
+                style={{ background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA' }}
+              >
+                Удалить все
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-xl p-4 text-xs" style={{ background: '#FEF2F2', color: '#7F1D1D', border: '1px solid #FECACA' }}>
+        ⚠️ Каждая операция требует подтверждения вводом фразы. Удалённые записи восстановить нельзя — Supabase удаляет их безвозвратно.
+      </div>
     </div>
   );
 }
