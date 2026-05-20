@@ -7186,10 +7186,29 @@ function WriteOffListScreen({ ctx }) {
   const { db, currentUser, navigate } = ctx;
   const [filter, setFilter] = useState('all');
 
-  // Видимость: автор всегда видит свои; writeoff_view_all — видит все
+  // Видимость списаний: каждая роль видит свою часть workflow + автор всегда видит свои
   const all = db.writeOffs;
   const canSeeAll = hasPermission(db, currentUser, 'writeoff_view_all');
-  const visible = canSeeAll ? all : all.filter(w => w.created_by === currentUser.id);
+  const visible = useMemo(() => {
+    if (canSeeAll) return all;
+    return all.filter(w => {
+      // 1. Автор всегда видит свои списания
+      if (w.created_by === currentUser.id) return true;
+      // 2. Одобряющий (director/senior_manager) видит pending — чтобы одобрить
+      if (hasPermission(db, currentUser, 'writeoff_approve') && w.status === 'pending') return true;
+      // 3. Кассир видит approved — для проведения через 1С
+      if (hasPermission(db, currentUser, 'writeoff_finalize') && w.status === 'approved') return true;
+      // 4. Склад видит invoiced и prepared — для сборки и выдачи
+      if (currentUser.role === 'warehouse' && ['invoiced', 'prepared'].includes(w.status)) return true;
+      // 5. Участники процесса (кто что-то делал) видят навсегда
+      if (w.approved_by === currentUser.id) return true;
+      if (w.invoiced_by === currentUser.id) return true;
+      if (w.prepared_by === currentUser.id) return true;
+      if (w.delivered_by === currentUser.id) return true;
+      if (w.completed_by === currentUser.id) return true;
+      return false;
+    });
+  }, [all, currentUser, db, canSeeAll]);
 
   const filtered = useMemo(() => {
     let list = visible;
@@ -7201,7 +7220,9 @@ function WriteOffListScreen({ ctx }) {
     all: visible.length,
     pending: visible.filter(w => w.status === 'pending').length,
     approved: visible.filter(w => w.status === 'approved').length,
-    completed: visible.filter(w => w.status === 'completed').length,
+    invoiced: visible.filter(w => w.status === 'invoiced').length,
+    prepared: visible.filter(w => w.status === 'prepared').length,
+    delivered: visible.filter(w => w.status === 'delivered' || w.status === 'completed').length,
     rejected: visible.filter(w => w.status === 'rejected').length,
   };
 
@@ -7209,7 +7230,7 @@ function WriteOffListScreen({ ctx }) {
     <div>
       <PageHeader
         title="Заявки на списание"
-        subtitle={canSeeAll ? `Все заявки · на подтверждении: ${counts.pending}, к списанию в 1С: ${counts.approved}` : `Мои заявки · всего: ${counts.all}`}
+        subtitle={canSeeAll ? `Все заявки · на подтв.: ${counts.pending}, к 1С: ${counts.approved}, к сборке: ${counts.invoiced}, к выдаче: ${counts.prepared}` : `${counts.all} заявок которые вас касаются`}
         action={
           hasPermission(db, currentUser, 'writeoff_create') && (
             <button onClick={() => navigate({ name: 'create_writeoff' })} className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold text-white text-sm" style={{ background: '#297b8a' }}>
@@ -7223,8 +7244,10 @@ function WriteOffListScreen({ ctx }) {
         {[
           { id: 'all', label: `Все · ${counts.all}` },
           { id: 'pending', label: `На подтв. · ${counts.pending}` },
-          { id: 'approved', label: `Одобренные · ${counts.approved}` },
-          { id: 'completed', label: `Списано · ${counts.completed}` },
+          { id: 'approved', label: `Одобрено · ${counts.approved}` },
+          { id: 'invoiced', label: `В 1С · ${counts.invoiced}` },
+          { id: 'prepared', label: `К выдаче · ${counts.prepared}` },
+          { id: 'delivered', label: `Выдано · ${counts.delivered}` },
           { id: 'rejected', label: `Отклонены · ${counts.rejected}` },
         ].map(f => (
           <button key={f.id} onClick={() => setFilter(f.id)}
