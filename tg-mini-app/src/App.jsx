@@ -1342,6 +1342,66 @@ function App() {
     return { ok: true };
   };
 
+  /**
+   * Перенести задачу на другую дату/время.
+   * Доступно исполнителю (assignee) и менеджерам.
+   * Можно вызывать когда задача в любом статусе кроме 'done'.
+   */
+  const rescheduleTask = (taskId, newDate, newTime, reason = '') => {
+    const task = db.tasks.find(t => t.id === taskId);
+    if (!task) return { error: 'Задача не найдена' };
+    if (task.status === 'done') return { error: 'Выполненную задачу нельзя перенести' };
+    const isAssignee = task.assignee_id === currentUser.id;
+    const isAdmin = currentUser.role === 'admin';
+    const isMgr = ['b2b', 'sales', 'senior_manager', 'director'].includes(currentUser.role);
+    if (!isAssignee && !isAdmin && !isMgr) {
+      return { error: 'Перенести задачу может только исполнитель или менеджер' };
+    }
+    if (!newDate) return { error: 'Укажите новую дату' };
+
+    setDb(d => ({
+      ...d,
+      tasks: d.tasks.map(t => {
+        if (t.id !== taskId) return t;
+        const oldDate = t.visit_date;
+        const oldTime = t.visit_time;
+        return {
+          ...t,
+          visit_date: newDate,
+          visit_time: newTime || t.visit_time,
+          // если задача была "new" без даты, переход в in_work с новой датой
+          status: t.status === 'new' ? 'in_work' : t.status,
+          log: [...t.log, {
+            event: 'rescheduled',
+            actor: currentUser.id,
+            at: new Date().toISOString(),
+            meta: { from_date: oldDate, from_time: oldTime, to_date: newDate, to_time: newTime, reason: reason.trim() }
+          }],
+        };
+      }),
+      notifications: [
+        // Уведомляем постановщика если переносит исполнитель
+        ...(isAssignee && task.created_by !== currentUser.id ? [{
+          id: uid(), recipient_id: task.created_by,
+          title: 'Задача перенесена',
+          body: `${task.task_number}: ${newDate}${newTime ? ' ' + newTime : ''}${reason ? ` · ${reason.trim()}` : ''}`,
+          link_kind: 'task', link_id: task.id,
+          at: new Date().toISOString(), read: false,
+        }] : []),
+        // Уведомляем исполнителя если переносит менеджер
+        ...(!isAssignee && task.assignee_id !== currentUser.id ? [{
+          id: uid(), recipient_id: task.assignee_id,
+          title: 'Задача перенесена',
+          body: `${task.task_number}: новая дата ${newDate}${newTime ? ' ' + newTime : ''}`,
+          link_kind: 'task', link_id: task.id,
+          at: new Date().toISOString(), read: false,
+        }] : []),
+        ...d.notifications,
+      ],
+    }));
+    return { ok: true };
+  };
+
   const completeTask = (taskId, summary) => {
     const task = db.tasks.find(t => t.id === taskId);
     if (!task) return { error: 'Задача не найдена' };
@@ -2223,7 +2283,7 @@ function App() {
     loginViaTelegram, logout,
     createOrder, changeStatus, closePickupOrder, cancelOrder,
     approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, transferAdmin,
-    createTask, startTask, completeTask,
+    createTask, startTask, completeTask, rescheduleTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createGrindRequest, takeGrindRequest, markGrindReady, completeGrindRequest, closeGrindPickup, cancelGrindRequest,
@@ -6259,7 +6319,7 @@ function CreateTaskScreen({ ctx }) {
 }
 
 function TaskDetailScreen({ ctx, taskId }) {
-  const { db, currentUser, goBack, startTask, completeTask, showToast } = ctx;
+  const { db, currentUser, goBack, startTask, completeTask, rescheduleTask, showToast } = ctx;
   const task = db.tasks.find(t => t.id === taskId);
   if (!task) return <div className="p-6">Задача не найдена</div>;
 
@@ -6295,6 +6355,7 @@ function TaskDetailScreen({ ctx, taskId }) {
 
   const [startModalOpen, setStartModalOpen] = useState(false);
   const [doneModalOpen, setDoneModalOpen] = useState(false);
+  const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
 
   return (
     <div>
@@ -6374,9 +6435,14 @@ function TaskDetailScreen({ ctx, taskId }) {
             </button>
           )}
           {isAssignee && task.status === 'in_work' && (
-            <button onClick={() => setDoneModalOpen(true)} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#22C55E' }}>
-              Подтвердить выполнение
-            </button>
+            <>
+              <button onClick={() => setDoneModalOpen(true)} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#22C55E' }}>
+                Подтвердить выполнение
+              </button>
+              <button onClick={() => setRescheduleModalOpen(true)} className="w-full py-2.5 rounded-lg font-semibold mt-2" style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}>
+                <Calendar size={14} className="inline mr-1.5 -mt-0.5" /> Перенести визит
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -6395,6 +6461,14 @@ function TaskDetailScreen({ ctx, taskId }) {
           if (r.error) return showToast(r.error);
           setDoneModalOpen(false);
           showToast('Задача закрыта');
+        }} />
+      )}
+      {rescheduleModalOpen && (
+        <RescheduleTaskModal task={task} onClose={() => setRescheduleModalOpen(false)} onReschedule={(date, time, reason) => {
+          const r = rescheduleTask(task.id, date, time, reason);
+          if (r.error) return showToast(r.error);
+          setRescheduleModalOpen(false);
+          showToast('Визит перенесён');
         }} />
       )}
       <AdminDeleteButton ctx={ctx} kind="task" id={task.id} label="эту задачу" onDeleted={() => ctx.goBack()} />
@@ -6462,6 +6536,48 @@ function StartTaskModal({ task, onClose, onStart }) {
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
           <button onClick={() => onStart(date, time, duration)} className="flex-1 py-2.5 rounded-lg font-semibold text-white" style={{ background: '#F59E0B' }}>Взять</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function RescheduleTaskModal({ task, onClose, onReschedule }) {
+  const [date, setDate] = useState(task.visit_date || '');
+  const [time, setTime] = useState(task.visit_time || '');
+  const [reason, setReason] = useState('');
+  return (
+    <Modal onClose={onClose} title="Перенести визит">
+      <div className="space-y-3">
+        <div className="text-sm" style={{ color: '#64748B' }}>
+          Текущая дата: <strong>{task.visit_date ? fmtDate(task.visit_date) : '—'}</strong>
+          {task.visit_time && <> · {task.visit_time}</>}
+        </div>
+        <SiteInput label="Новая дата" type="date" value={date} onChange={setDate} />
+        <SiteInput label="Время" type="time" value={time} onChange={setTime} />
+        <div>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Причина переноса (необязательно)</label>
+          <textarea
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder="Например: клиент попросил перенести"
+            rows={2}
+            className="w-full px-3 py-2 rounded-lg outline-none"
+            style={{ border: '1px solid #E5E7EB' }}
+          />
+        </div>
+        <div className="flex gap-2 pt-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+            Отмена
+          </button>
+          <button
+            onClick={() => onReschedule(date, time, reason)}
+            disabled={!date}
+            className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50"
+            style={{ background: '#297b8a' }}
+          >
+            Перенести
+          </button>
         </div>
       </div>
     </Modal>
