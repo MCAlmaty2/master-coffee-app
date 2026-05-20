@@ -404,12 +404,16 @@ const TASK_STATUS_ORDER = ['new', 'in_work', 'done'];
 
 // Стадии заявок на списание
 const WRITEOFF_STATUS = {
-  pending:   { label: 'На подтверждении', short: 'На подтв.',  color: '#F59E0B', bg: '#FEF3C7', icon: CircleDot },
-  approved:  { label: 'Одобрена',         short: 'Одобрена',   color: '#3390EC', bg: '#E7F3FE', icon: CheckCircle2 },
-  completed: { label: 'Списано в 1С',     short: 'Списано',    color: '#22C55E', bg: '#DCFCE7', icon: Check },
-  rejected:  { label: 'Отклонена',        short: 'Отклонена',  color: '#EB5757', bg: '#FEE2E2', icon: XCircle },
+  pending:        { label: 'На подтверждении',     short: 'На подтв.',    color: '#F59E0B', bg: '#FEF3C7', icon: CircleDot },
+  approved:       { label: 'Одобрена · ждёт 1С',   short: 'Одобрена',     color: '#3390EC', bg: '#E7F3FE', icon: CheckCircle2 },
+  invoiced:       { label: 'В 1С · ждёт склад',    short: 'В 1С',         color: '#8B5CF6', bg: '#EDE9FE', icon: FileText },
+  prepared:       { label: 'Готово к выдаче',      short: 'К выдаче',     color: '#6366F1', bg: '#E0E7FF', icon: Package },
+  delivered:      { label: 'Выдано',               short: 'Выдано',       color: '#22C55E', bg: '#DCFCE7', icon: Check },
+  // Совместимость со старыми записями: "completed" = "delivered"
+  completed:      { label: 'Выдано',               short: 'Выдано',       color: '#22C55E', bg: '#DCFCE7', icon: Check },
+  rejected:       { label: 'Отклонена',            short: 'Отклонена',    color: '#EB5757', bg: '#FEE2E2', icon: XCircle },
 };
-const WRITEOFF_STATUS_ORDER = ['pending', 'approved', 'completed'];
+const WRITEOFF_STATUS_ORDER = ['pending', 'approved', 'invoiced', 'prepared', 'delivered'];
 
 // Договоры — типы, условия оплаты, налоговые режимы, статусы
 const CONTRACT_TYPE = {
@@ -1557,11 +1561,15 @@ function App() {
     return { ok: true };
   };
 
+  /**
+   * Кассир провёл документ через 1С. Теперь заявка идёт на склад.
+   * Старое имя сохранено для совместимости — но статус теперь 'invoiced', не 'completed'.
+   */
   const completeWriteOff = (writeOffId, docNo) => {
     if (!hasPermission(db, currentUser, 'writeoff_finalize')) return { error: 'Закрывать списания может только кассир' };
     const wo = db.writeOffs.find(w => w.id === writeOffId);
     if (!wo) return { error: 'Заявка не найдена' };
-    if (wo.status !== 'approved') return { error: 'Списать можно только одобренные заявки' };
+    if (wo.status !== 'approved') return { error: 'Провести через 1С можно только одобренные заявки' };
     const trimmed = (docNo || '').trim();
     if (!isValidDocNo(trimmed)) return { error: 'Номер документа должен быть в формате 00ЦТ-NNNNNN (например 00ЦТ-012573)' };
     setDb(d => {
@@ -1569,17 +1577,99 @@ function App() {
         if (w.id !== writeOffId) return w;
         return {
           ...w,
-          status: 'completed',
+          status: 'invoiced',  // НОВОЕ: было 'completed', теперь идёт на склад
           doc_no: trimmed,
-          completed_by: currentUser.id,
-          completed_at: new Date().toISOString(),
-          log: [...w.log, { event: 'status', from: 'approved', to: 'completed', actor: currentUser.id, at: new Date().toISOString(), meta: { doc_no: trimmed } }],
+          invoiced_by: currentUser.id,
+          invoiced_at: new Date().toISOString(),
+          log: [...w.log, { event: 'status', from: 'approved', to: 'invoiced', actor: currentUser.id, at: new Date().toISOString(), meta: { doc_no: trimmed } }],
+        };
+      });
+      // Уведомления: автору + всем складским
+      const author = d.users.find(u => u.id === wo.created_by);
+      const warehouseUsers = d.users.filter(u => u.active && u.role === 'warehouse');
+      const newNotifs = [
+        { id: uid(), recipient_id: wo.created_by, title: 'Документ списания проведён',
+          body: `${wo.number} → ${trimmed}. Ждите когда склад соберёт.`,
+          link_kind: 'writeoff', link_id: wo.id, at: new Date().toISOString(), read: false },
+        ...warehouseUsers.map(wu => ({
+          id: uid(), recipient_id: wu.id, title: 'Списание · собрать',
+          body: `${wo.number}: ${(d.writeOffs.find(w => w.id === writeOffId)?.items || []).length} поз. для ${author ? author.first_name + ' ' + (author.last_name||'') : '—'}`,
+          link_kind: 'writeoff', link_id: wo.id, at: new Date().toISOString(), read: false,
+        })),
+      ];
+      const tgEntries = [makeTgLogEntry(d, 'writeoff_to_warehouse', `📦 Списание ${wo.number} (${trimmed}) — собрать для ${author ? author.first_name : '—'}`)];
+      return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
+    });
+    return { ok: true };
+  };
+
+  /**
+   * Склад собрал товары — генерирует код выдачи, статус becomes 'prepared'.
+   */
+  const prepareWriteOff = (writeOffId) => {
+    if (currentUser.role !== 'warehouse' && currentUser.role !== 'admin') {
+      return { error: 'Только склад может отметить готовность к выдаче' };
+    }
+    const wo = db.writeOffs.find(w => w.id === writeOffId);
+    if (!wo) return { error: 'Заявка не найдена' };
+    if (wo.status !== 'invoiced') return { error: 'Заявка должна быть в статусе «В 1С»' };
+    const existingCodes = new Set(db.writeOffs.filter(w => w.pickup_code).map(w => w.pickup_code));
+    const code = gen4DigitCode(existingCodes);
+    setDb(d => {
+      const updatedList = d.writeOffs.map(w => {
+        if (w.id !== writeOffId) return w;
+        return {
+          ...w,
+          status: 'prepared',
+          pickup_code: code,
+          prepared_by: currentUser.id,
+          prepared_at: new Date().toISOString(),
+          log: [...w.log, { event: 'status', from: 'invoiced', to: 'prepared', actor: currentUser.id, at: new Date().toISOString(), meta: { pickup_code: code } }],
         };
       });
       const newNotifs = [{
         id: uid(), recipient_id: wo.created_by,
-        title: 'Списание проведено',
-        body: `${wo.number} → ${trimmed}`,
+        title: 'Списание готово к выдаче',
+        body: `${wo.number}: код выдачи ${code}. Подойдите на склад.`,
+        link_kind: 'writeoff', link_id: wo.id,
+        at: new Date().toISOString(), read: false,
+      }];
+      const tgEntries = [makeTgLogEntry(d, 'writeoff_ready', `🟢 Списание ${wo.number} готово — код ${code}`)];
+      return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
+    });
+    return { ok: true, code };
+  };
+
+  /**
+   * Склад выдал товары: проверка кода → статус 'delivered'.
+   */
+  const deliverWriteOff = (writeOffId, code) => {
+    if (currentUser.role !== 'warehouse' && currentUser.role !== 'admin') {
+      return { error: 'Только склад может выдать списание' };
+    }
+    const wo = db.writeOffs.find(w => w.id === writeOffId);
+    if (!wo) return { error: 'Заявка не найдена' };
+    if (wo.status !== 'prepared') return { error: 'Заявка ещё не подготовлена' };
+    if ((code || '').trim() !== wo.pickup_code) return { error: 'Код выдачи не совпадает' };
+    setDb(d => {
+      const updatedList = d.writeOffs.map(w => {
+        if (w.id !== writeOffId) return w;
+        return {
+          ...w,
+          status: 'delivered',
+          delivered_by: currentUser.id,
+          delivered_at: new Date().toISOString(),
+          // оставляем completed_by/at для совместимости со старым кодом
+          completed_by: currentUser.id,
+          completed_at: new Date().toISOString(),
+          log: [...w.log, { event: 'status', from: 'prepared', to: 'delivered', actor: currentUser.id, at: new Date().toISOString() }],
+        };
+      });
+      const newNotifs = [{
+        id: uid(), recipient_id: wo.created_by,
+        title: 'Списание выдано',
+        body: `${wo.number}: вы получили на складе.`,
+        link_kind: 'writeoff', link_id: wo.id,
         at: new Date().toISOString(), read: false,
       }];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications] };
@@ -2284,7 +2374,7 @@ function App() {
     createOrder, changeStatus, closePickupOrder, cancelOrder,
     approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, transferAdmin,
     createTask, startTask, completeTask, rescheduleTask,
-    createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff,
+    createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createGrindRequest, takeGrindRequest, markGrindReady, completeGrindRequest, closeGrindPickup, cancelGrindRequest,
     createCustomRole, updateRolePermissions, updateRoleMeta, deleteCustomRole,
@@ -3314,8 +3404,22 @@ function DashboardHome({ ctx, title }) {
     const pendingUsers = db.users.filter(u => u.role === 'pending');
     const unread = db.notifications.filter(n => n.recipient_id === userId && !n.read).length;
 
+    // Специально для склада: заявки на сборку и выдачу
+    const isWarehouse = currentUser.role === 'warehouse' || currentUser.role === 'admin';
+    const ordersToAssemble = db.orders.filter(o => o.status === 'paid');           // оплачено — нужно собрать
+    const ordersToShip     = db.orders.filter(o => o.status === 'shipped' && o.delivery_method === 'delivery'); // готово к доставке
+    const ordersAwaitingPickup = db.orders.filter(o => o.status === 'shipped' && o.delivery_method === 'pickup');
+    const ordersReadyPickup = db.orders.filter(o => o.status === 'ready');         // самовывоз, ждёт клиента
+
     return {
       isAdmin,
+      isWarehouse,
+      warehouse: {
+        toAssemble: ordersToAssemble.length,
+        toShip: ordersToShip.length,
+        awaitingPickup: ordersAwaitingPickup.length,
+        readyPickup: ordersReadyPickup.length,
+      },
       orders: {
         active: myOrdersActive.length,
         archived: myArchive.length,
@@ -3447,6 +3551,53 @@ function DashboardHome({ ctx, title }) {
           </div>
           <ChevronRight size={18} style={{ color: '#A8A8AE' }} />
         </button>
+      )}
+
+      {/* СКЛАД — приоритетные плитки на сборку и выдачу */}
+      {stats.isWarehouse && (stats.warehouse.toAssemble + stats.warehouse.toShip + stats.warehouse.awaitingPickup + stats.warehouse.readyPickup) > 0 && (
+        <div className="mb-6">
+          <div className="text-xs uppercase font-bold mb-2" style={{ color: '#64748B', letterSpacing: '0.08em' }}>
+            🏭 Работа склада — сегодня
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <button
+              onClick={() => navigate({ name: 'orders_list', filterStatus: 'paid' })}
+              className="rounded-xl p-3 text-left transition hover:shadow-md"
+              style={{ background: stats.warehouse.toAssemble > 0 ? '#FEF3C7' : 'white', border: '1.5px solid ' + (stats.warehouse.toAssemble > 0 ? '#F59E0B' : '#E5E7EB') }}
+            >
+              <div className="text-2xl font-bold" style={{ color: '#F59E0B' }}>{stats.warehouse.toAssemble}</div>
+              <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>К сборке</div>
+              <div className="text-[10px]" style={{ color: '#64748B' }}>оплачены</div>
+            </button>
+            <button
+              onClick={() => navigate({ name: 'orders_list', filterStatus: 'shipped' })}
+              className="rounded-xl p-3 text-left transition hover:shadow-md"
+              style={{ background: stats.warehouse.toShip > 0 ? '#DBEAFE' : 'white', border: '1.5px solid ' + (stats.warehouse.toShip > 0 ? '#3390EC' : '#E5E7EB') }}
+            >
+              <div className="text-2xl font-bold" style={{ color: '#3390EC' }}>{stats.warehouse.toShip}</div>
+              <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>К отгрузке</div>
+              <div className="text-[10px]" style={{ color: '#64748B' }}>доставка</div>
+            </button>
+            <button
+              onClick={() => navigate({ name: 'orders_list', filterStatus: 'shipped' })}
+              className="rounded-xl p-3 text-left transition hover:shadow-md"
+              style={{ background: stats.warehouse.awaitingPickup > 0 ? '#E0E7FF' : 'white', border: '1.5px solid ' + (stats.warehouse.awaitingPickup > 0 ? '#6366F1' : '#E5E7EB') }}
+            >
+              <div className="text-2xl font-bold" style={{ color: '#6366F1' }}>{stats.warehouse.awaitingPickup}</div>
+              <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>Самовывоз</div>
+              <div className="text-[10px]" style={{ color: '#64748B' }}>выдать код</div>
+            </button>
+            <button
+              onClick={() => navigate({ name: 'orders_list', filterStatus: 'ready' })}
+              className="rounded-xl p-3 text-left transition hover:shadow-md"
+              style={{ background: stats.warehouse.readyPickup > 0 ? '#DCFCE7' : 'white', border: '1.5px solid ' + (stats.warehouse.readyPickup > 0 ? '#22C55E' : '#E5E7EB') }}
+            >
+              <div className="text-2xl font-bold" style={{ color: '#22C55E' }}>{stats.warehouse.readyPickup}</div>
+              <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>Готовы</div>
+              <div className="text-[10px]" style={{ color: '#64748B' }}>ждут клиента</div>
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Плитки дашборда */}
@@ -3751,9 +3902,14 @@ function ActionPill({ label, onClick, icon: Icon, accent }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function OrdersListScreen({ ctx }) {
-  const { db, currentUser, navigate } = ctx;
-  const [filter, setFilter] = useState('all');
+  const { db, currentUser, route, navigate } = ctx;
+  const [filter, setFilter] = useState(route?.filterStatus || 'all');
   const [search, setSearch] = useState('');
+
+  // Применяем фильтр из route при первом открытии
+  useEffect(() => {
+    if (route?.filterStatus) setFilter(route.filterStatus);
+  }, [route?.filterStatus]);
 
   // Какие заявки видит этот пользователь?
   const canSeeAll = currentUser.role === 'admin'
@@ -7267,9 +7423,10 @@ function CreateWriteOffScreen({ ctx }) {
         <div className="space-y-4">
           <Card title="Что будет дальше">
             <div className="text-sm space-y-2" style={{ color: '#64748B' }}>
-              <div className="flex gap-2"><span style={{ color: '#F59E0B' }}>1.</span> Заявка уйдёт на подтверждение директору и старшему менеджеру (кто первым отреагирует).</div>
-              <div className="flex gap-2"><span style={{ color: '#3390EC' }}>2.</span> После одобрения её увидит кассир и спишет в 1С.</div>
-              <div className="flex gap-2"><span style={{ color: '#22C55E' }}>3.</span> Кассир внесёт номер документа <span className="mono-font" style={{ color: '#1A1814' }}>00ЦТ-NNNNNN</span> — после этого заявка закрыта.</div>
+              <div className="flex gap-2"><span style={{ color: '#F59E0B' }}>1.</span> Заявка уйдёт на подтверждение директору и старшему менеджеру.</div>
+              <div className="flex gap-2"><span style={{ color: '#3390EC' }}>2.</span> После одобрения её увидит кассир и проведёт документ через 1С.</div>
+              <div className="flex gap-2"><span style={{ color: '#8B5CF6' }}>3.</span> Склад соберёт товары и присвоит код выдачи.</div>
+              <div className="flex gap-2"><span style={{ color: '#22C55E' }}>4.</span> Вам придёт код — подойдите на склад и получите по нему.</div>
             </div>
           </Card>
 
@@ -7482,9 +7639,40 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
           )}
 
           {canComplete && (
-            <button onClick={() => setCompleteOpen(true)} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#22C55E' }}>
-              Списать в 1С → ввести 00ЦТ-…
+            <button onClick={() => setCompleteOpen(true)} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#8B5CF6' }}>
+              Провести через 1С → ввести 00ЦТ-…
             </button>
+          )}
+
+          {/* Склад: собрать товары — статус invoiced → prepared */}
+          {wo.status === 'invoiced' && (currentUser.role === 'warehouse' || currentUser.role === 'admin') && (
+            <button
+              onClick={() => {
+                if (!window.confirm('Подтвердить что товары собраны? Сгенерируется код выдачи для подавшего.')) return;
+                const r = ctx.prepareWriteOff(wo.id);
+                if (r.error) return showToast(r.error);
+                showToast(`Готово! Код выдачи: ${r.code}`);
+              }}
+              className="w-full py-3 rounded-lg font-semibold text-white"
+              style={{ background: '#6366F1' }}
+            >
+              <Package size={16} className="inline mr-1" /> Собрано — сгенерировать код
+            </button>
+          )}
+
+          {/* Склад: выдать товары — статус prepared → delivered */}
+          {wo.status === 'prepared' && (currentUser.role === 'warehouse' || currentUser.role === 'admin') && (
+            <DeliverWriteOffBlock wo={wo} ctx={ctx} showToast={showToast} />
+          )}
+
+          {/* Подавший видит код когда статус 'prepared' */}
+          {wo.status === 'prepared' && wo.created_by === currentUser.id && wo.pickup_code && (
+            <Card title="Ваш код выдачи на складе">
+              <div className="text-center py-3">
+                <div className="mono-font text-4xl font-bold tracking-wider" style={{ color: '#22C55E' }}>{wo.pickup_code}</div>
+                <div className="text-xs mt-2" style={{ color: '#64748B' }}>Подойдите на склад и назовите этот код</div>
+              </div>
+            </Card>
           )}
 
           {canCancel && (
@@ -7532,6 +7720,39 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
   );
 }
 
+function DeliverWriteOffBlock({ wo, ctx, showToast }) {
+  const [code, setCode] = useState('');
+  return (
+    <Card title="Выдать заявителю">
+      <div className="text-sm mb-2" style={{ color: '#64748B' }}>
+        Попроси клиента назвать код выдачи и введи его сюда:
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={code}
+          onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          placeholder="0000"
+          maxLength={4}
+          className="flex-1 px-3 py-2 rounded-lg outline-none mono-font text-center text-2xl font-bold tracking-wider"
+          style={{ border: '1px solid #E5E7EB' }}
+        />
+        <button
+          onClick={() => {
+            const r = ctx.deliverWriteOff(wo.id, code);
+            if (r.error) return showToast(r.error);
+            showToast('Выдано');
+          }}
+          disabled={code.length !== 4}
+          className="px-4 py-2 rounded-lg font-semibold text-white disabled:opacity-30"
+          style={{ background: '#22C55E' }}
+        >
+          Выдать
+        </button>
+      </div>
+    </Card>
+  );
+}
+
 function WriteOffTimeline({ status }) {
   // rejected — отдельная ветка, рисуем как «Отклонена» вместо цепочки
   if (status === 'rejected') {
@@ -7544,7 +7765,9 @@ function WriteOffTimeline({ status }) {
       </div>
     );
   }
-  const idx = WRITEOFF_STATUS_ORDER.indexOf(status);
+  // Старые записи со status='completed' рассматриваем как 'delivered'
+  const effective = status === 'completed' ? 'delivered' : status;
+  const idx = WRITEOFF_STATUS_ORDER.indexOf(effective);
   return (
     <div className="flex items-center justify-between gap-1">
       {WRITEOFF_STATUS_ORDER.map((s, i) => {
@@ -7622,10 +7845,10 @@ function CompleteWriteOffModal({ onClose, onComplete }) {
   const [docNo, setDocNo] = useState('00ЦТ-');
   const valid = isValidDocNo(docNo);
   return (
-    <Modal onClose={onClose} title="Списать в 1С">
+    <Modal onClose={onClose} title="Провести через 1С">
       <div className="space-y-3">
         <div className="text-sm" style={{ color: '#64748B' }}>
-          Введите номер документа списания из 1С. После сохранения заявка закроется.
+          Введите номер документа списания из 1С. После этого заявка уйдёт на склад для сборки и выдачи.
         </div>
         <div>
           <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Номер документа</label>
