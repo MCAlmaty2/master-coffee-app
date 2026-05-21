@@ -2995,8 +2995,8 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     if (FIELD_ROLES.includes(role) || isManager || hasPermission(db, currentUser, 'tasks_calendar_all')) {
       ops.push({ id: 'field_calendar', label: 'Календарь команды', icon: Eye });
     }
-    // Списания
-    if (['cashier', 'director', 'senior_manager'].includes(role)
+    // Списания (включая склад — он собирает и выдаёт)
+    if (['cashier', 'director', 'senior_manager', 'warehouse'].includes(role)
         || hasPermission(db, currentUser, 'writeoff_view_all') || hasPermission(db, currentUser, 'writeoff_create')) {
       ops.push({ id: 'writeoffs', label: 'Списания', icon: Trash2 });
     }
@@ -3888,18 +3888,59 @@ function SalesHome({ ctx }) {
 }
 
 function WarehouseHome({ ctx }) {
-  const { db, changeStatus, closePickupOrder, showToast } = ctx;
+  const { db, changeStatus, closePickupOrder, showToast, navigate } = ctx;
   const pickupShipped = db.orders.filter(o => o.status === 'shipped' && o.delivery_method === 'pickup');
   const readyToPickup = db.orders.filter(o => o.status === 'ready');
   const [pickupModal, setPickupModal] = useState(null);
   const [enteredCode, setEnteredCode] = useState('');
 
+  // Списания на складе: invoiced — нужно собрать; prepared — нужно выдать
+  const writeoffsToAssemble = (db.writeOffs || []).filter(w => w.status === 'invoiced');
+  const writeoffsToDeliver  = (db.writeOffs || []).filter(w => w.status === 'prepared');
+  const totalWriteoffs = writeoffsToAssemble.length + writeoffsToDeliver.length;
+
   return (
     <div>
-      <PageHeader title="Склад" subtitle={`Готовых: ${readyToPickup.length} · ожидают подготовки: ${pickupShipped.length}`} />
+      <PageHeader
+        title="Склад"
+        subtitle={`Заказы: готовых ${readyToPickup.length} · к подготовке ${pickupShipped.length}${totalWriteoffs > 0 ? ` · списаний к сборке: ${totalWriteoffs}` : ''}`}
+      />
 
-      {readyToPickup.length === 0 && pickupShipped.length === 0 && (
-        <Empty icon={Package} title="Сейчас нечего выдавать" subtitle="Когда менеджер B2B переведёт заявку в «Отгружен» с самовывозом — она появится здесь" />
+      {/* Списания к сборке / выдаче */}
+      {totalWriteoffs > 0 && (
+        <div className="mb-6">
+          <h2 className="display-font text-xl mb-3" style={{ color: '#1A1814' }}>
+            Списания
+            {writeoffsToAssemble.length > 0 && <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: '#EDE9FE', color: '#7C3AED' }}>к сборке: {writeoffsToAssemble.length}</span>}
+            {writeoffsToDeliver.length > 0  && <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: '#DCFCE7', color: '#16A34A' }}>к выдаче: {writeoffsToDeliver.length}</span>}
+          </h2>
+          <div className="space-y-2 mb-4">
+            {[...writeoffsToAssemble, ...writeoffsToDeliver].map(wo => (
+              <button
+                key={wo.id}
+                onClick={() => navigate({ name: 'writeoff_detail', writeOffId: wo.id })}
+                className="w-full text-left rounded-xl p-4 bg-white"
+                style={{ border: `1.5px solid ${wo.status === 'invoiced' ? '#C4B5FD' : '#86EFAC'}` }}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold mono-font text-sm" style={{ color: '#3390EC' }}>{wo.number}</span>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: wo.status === 'invoiced' ? '#EDE9FE' : '#DCFCE7', color: wo.status === 'invoiced' ? '#7C3AED' : '#16A34A' }}>
+                    {wo.status === 'invoiced' ? '📦 Собрать' : `✅ Выдать · код ${wo.pickup_code}`}
+                  </span>
+                </div>
+                <div className="text-sm font-semibold truncate" style={{ color: '#1A1814' }}>
+                  {wo.items[0]?.name}{wo.items.length > 1 ? ` и ещё ${wo.items.length - 1}` : ''}
+                </div>
+                <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>{wo.reason.slice(0, 80)}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {readyToPickup.length === 0 && pickupShipped.length === 0 && totalWriteoffs === 0 && (
+        <Empty icon={Package} title="Сейчас нечего выдавать" subtitle="Когда появятся заказы или списания к сборке — они отобразятся здесь" />
       )}
 
       {readyToPickup.length > 0 && (
@@ -7687,10 +7728,11 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
 
   if (!wo) return <div className="p-6">Заявка не найдена</div>;
 
-  // Доступ к деталям: автор; видящие все; админ
+  // Доступ к деталям: автор; видящие все; админ; склад на своих этапах (invoiced/prepared)
   const canView = currentUser.role === 'admin'
     || wo.created_by === currentUser.id
-    || hasPermission(db, currentUser, 'writeoff_view_all');
+    || hasPermission(db, currentUser, 'writeoff_view_all')
+    || (currentUser.role === 'warehouse' && ['invoiced', 'prepared'].includes(wo.status));
 
   if (!canView) {
     return (
