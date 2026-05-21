@@ -4,7 +4,7 @@ import {
   FileText, Truck, CheckCircle2, XCircle, AlertCircle, Copy, Check,
   ChevronRight, Trash2, Eye, Users, ArrowRight, Hash, ChevronDown,
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
-  LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle,
+  LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
 } from 'lucide-react';
 import { supabase } from './supabase/client';
 import {
@@ -2274,6 +2274,61 @@ function App() {
     }
   };
 
+  /**
+   * Переименовать категорию — все товары с этой категорией перейдут на новое имя.
+   * Для админа.
+   */
+  const renameCategory = async (oldName, newName) => {
+    if (currentUser?.role !== 'admin') return { error: 'Только для админа' };
+    const oldTrim = (oldName || '').trim();
+    const newTrim = (newName || '').trim();
+    if (!oldTrim || !newTrim) return { error: 'Введите имя' };
+    if (oldTrim === newTrim) return { error: 'Имена совпадают' };
+    const affectedIds = (db.products || []).filter(p => p.cat === oldTrim).map(p => p.id);
+    if (affectedIds.length === 0) return { error: 'В этой категории нет товаров' };
+    try {
+      const { error } = await supabase.from('products').update({ cat: newTrim }).in('id', affectedIds);
+      if (error) throw error;
+      setDb(d => ({ ...d, products: d.products.map(p => p.cat === oldTrim ? { ...p, cat: newTrim } : p) }));
+      return { ok: true, affected: affectedIds.length };
+    } catch (e) {
+      reportError({ kind: 'manual', source: 'products', message: 'Не удалось переименовать категорию: ' + e.message });
+      return { error: e.message };
+    }
+  };
+
+  /**
+   * Создать категорию = создать товар-заглушку в этой категории.
+   * Категория без товаров не существует физически — это просто distinct значение из products.
+   */
+  const createCategory = async (name) => {
+    if (currentUser?.role !== 'admin') return { error: 'Только для админа' };
+    const trim = (name || '').trim();
+    if (!trim) return { error: 'Введите имя категории' };
+    const existing = new Set((db.products || []).map(p => p.cat));
+    if (existing.has(trim)) return { error: 'Такая категория уже есть' };
+    // Создаём товар-заглушку (он неактивен и не показывается в обычных списках)
+    const existingIds = new Set((db.products || []).map(p => p.id));
+    let nextN = (db.products || []).length + 1;
+    while (existingIds.has(String(nextN).padStart(3, '0'))) nextN++;
+    const newId = String(nextN).padStart(3, '0');
+    try {
+      const saved = await createProductInDb({
+        id: newId,
+        cat: trim,
+        name: `[служебная запись для категории «${trim}»]`,
+        unit: 'шт',
+        price: 0,
+        active: false,
+      });
+      setDb(d => ({ ...d, products: [...(d.products || []), saved] }));
+      return { ok: true };
+    } catch (e) {
+      reportError({ kind: 'manual', source: 'products', message: 'Не удалось создать категорию: ' + e.message });
+      return { error: e.message };
+    }
+  };
+
   const toggleProductActive = async (productId) => {
     const prev = db.products.find(p => p.id === productId);
     if (!prev) return;
@@ -2400,7 +2455,7 @@ function App() {
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createGrindRequest, takeGrindRequest, markGrindReady, completeGrindRequest, closeGrindPickup, cancelGrindRequest,
     createCustomRole, updateRolePermissions, updateRoleMeta, deleteCustomRole,
-    createProduct, updateProduct, toggleProductActive, deleteProduct, importProducts,
+    createProduct, updateProduct, toggleProductActive, deleteProduct, importProducts, renameCategory, createCategory,
     markNotificationRead, markAllNotificationsRead, clearReadNotifications,
     adminDeleteRecord, adminWipeTable,
     updateTelegramSettings,
@@ -2933,6 +2988,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       admin.push({ id: 'admin_users',    label: 'Пользователи',       icon: Users });
       admin.push({ id: 'admin_roles',    label: 'Роли и права',       icon: KeyRound });
       admin.push({ id: 'admin_products', label: 'Товары / прайс',     icon: Package });
+      admin.push({ id: 'admin_categories', label: 'Категории товаров', icon: Tag });
       admin.push({ id: 'admin_requests', label: 'Запросы доступа',    icon: Bell });
       admin.push({ id: 'admin_telegram', label: 'Telegram-уведомления', icon: Send });
       admin.push({ id: 'admin_feedback', label: 'Сообщения сотрудников', icon: Mail });
@@ -3281,6 +3337,7 @@ function Screen({ ctx }) {
     case 'admin_transfer': return <AdminTransferScreen ctx={ctx} />;
     case 'admin_telegram': return <AdminTelegramScreen ctx={ctx} />;
     case 'admin_products': return <AdminProductsScreen ctx={ctx} />;
+    case 'admin_categories': return <AdminCategoriesScreen ctx={ctx} />;
     case 'product_picker': return <ProductPickerScreen ctx={ctx} pickerTarget={route.pickerTarget} />;
     case 'notifications': return <NotificationsScreen ctx={ctx} />;
     case 'create_task': return <CreateTaskScreen ctx={ctx} />;
@@ -9874,21 +9931,33 @@ function ProductEditModal({ product, existingCats, onSave, onClose }) {
 
         <div>
           <label className="text-xs font-semibold mb-1 block" style={{ color: '#64748B' }}>Категория *</label>
+          {existingCats.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {existingCats.map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => update({ cat: c })}
+                  className="text-xs px-2.5 py-1 rounded-full"
+                  style={{
+                    background: form.cat === c ? '#297b8a' : '#F5F7F8',
+                    color: form.cat === c ? 'white' : '#64748B',
+                    fontWeight: form.cat === c ? 600 : 500,
+                  }}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
           <input
             type="text"
-            list="cat-suggestions"
             value={form.cat}
             onChange={e => update({ cat: e.target.value })}
-            placeholder="Например: Кофе зерно"
+            placeholder="или впиши новую категорию"
             className="w-full px-3 py-2.5 rounded-lg outline-none"
             style={{ border: '1px solid #E5E7EB' }}
           />
-          <datalist id="cat-suggestions">
-            {existingCats.map(c => <option key={c} value={c} />)}
-          </datalist>
-          <div className="text-xs mt-1" style={{ color: '#A8A8AE' }}>
-            Можно выбрать из существующих или ввести новую
-          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -10615,6 +10684,166 @@ function AdminServiceScreen({ ctx }) {
         ⚠️ Каждая операция требует подтверждения вводом фразы. Удалённые записи восстановить нельзя — Supabase удаляет их безвозвратно.
       </div>
     </div>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   АДМИН: управление категориями товаров
+   ═════════════════════════════════════════════════════════════════════════ */
+
+function AdminCategoriesScreen({ ctx }) {
+  const { db, renameCategory, createCategory, showToast, goBack } = ctx;
+  const [newCatModal, setNewCatModal] = useState(false);
+  const [renameModal, setRenameModal] = useState(null); // {oldName}
+
+  // Считаем категории из товаров
+  const categories = useMemo(() => {
+    const map = new Map();
+    (db.products || []).forEach(p => {
+      const cat = p.cat || 'Без категории';
+      if (!map.has(cat)) map.set(cat, { name: cat, count: 0, active: 0 });
+      const c = map.get(cat);
+      c.count++;
+      if (p.active) c.active++;
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [db.products]);
+
+  return (
+    <div>
+      <PageHeader
+        title="Категории товаров"
+        subtitle={`${categories.length} категорий · ${(db.products || []).length} товаров всего`}
+        onBack={goBack}
+        action={
+          <button onClick={() => setNewCatModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-white text-sm" style={{ background: '#297b8a' }}>
+            <Plus size={16} /> Новая категория
+          </button>
+        }
+      />
+
+      {categories.length === 0 ? (
+        <Empty icon={Tag} title="Категорий пока нет" subtitle="Добавь первую — потом сможешь использовать её при создании товаров" />
+      ) : (
+        <div className="space-y-2">
+          {categories.map(c => (
+            <div key={c.name} className="bg-white rounded-xl p-4" style={{ border: '1px solid #E5E7EB' }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold" style={{ color: '#1A1814' }}>{c.name}</div>
+                  <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>
+                    {c.count} {c.count === 1 ? 'товар' : 'товаров'}
+                    {c.active < c.count && <span> · активных {c.active}</span>}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setRenameModal({ oldName: c.name })}
+                  className="text-xs px-3 py-1.5 rounded-lg font-semibold"
+                  style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}
+                >
+                  <Edit3 size={12} className="inline mr-1" /> Переименовать
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 rounded-xl p-3 text-xs" style={{ background: '#F5F7F8', color: '#64748B' }}>
+        💡 Категории создаются автоматически когда у товара заполнено поле «Категория». Если хочешь создать пустую категорию заранее — добавь её здесь, и она появится в выпадающем списке при добавлении нового товара.
+      </div>
+
+      {newCatModal && (
+        <NewCategoryModal
+          onClose={() => setNewCatModal(false)}
+          onCreate={async (name) => {
+            const r = await createCategory(name);
+            if (r.error) { showToast(r.error); return; }
+            setNewCatModal(false);
+            showToast('Категория создана');
+          }}
+        />
+      )}
+      {renameModal && (
+        <RenameCategoryModal
+          oldName={renameModal.oldName}
+          onClose={() => setRenameModal(null)}
+          onRename={async (newName) => {
+            const r = await renameCategory(renameModal.oldName, newName);
+            if (r.error) { showToast(r.error); return; }
+            setRenameModal(null);
+            showToast(`Переименовано · ${r.affected} ${r.affected === 1 ? 'товар' : 'товаров'} обновлено`);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function NewCategoryModal({ onClose, onCreate }) {
+  const [name, setName] = useState('');
+  return (
+    <Modal onClose={onClose} title="Новая категория">
+      <div className="space-y-3">
+        <div className="text-sm" style={{ color: '#64748B' }}>
+          Имя категории. Будет доступно в выпадающем списке при создании товара.
+        </div>
+        <input
+          autoFocus
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Например: Аксессуары"
+          className="w-full px-3 py-2.5 rounded-lg outline-none"
+          style={{ border: '1px solid #E5E7EB' }}
+        />
+        <div className="flex gap-2 pt-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+            Отмена
+          </button>
+          <button
+            onClick={() => onCreate(name)}
+            disabled={!name.trim()}
+            className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50"
+            style={{ background: '#297b8a' }}
+          >
+            Создать
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function RenameCategoryModal({ oldName, onClose, onRename }) {
+  const [name, setName] = useState(oldName);
+  return (
+    <Modal onClose={onClose} title="Переименовать категорию">
+      <div className="space-y-3">
+        <div className="text-sm" style={{ color: '#64748B' }}>
+          Все товары из категории <strong>«{oldName}»</strong> будут перемещены в новую.
+        </div>
+        <input
+          autoFocus
+          value={name}
+          onChange={e => setName(e.target.value)}
+          className="w-full px-3 py-2.5 rounded-lg outline-none"
+          style={{ border: '1px solid #E5E7EB' }}
+        />
+        <div className="flex gap-2 pt-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+            Отмена
+          </button>
+          <button
+            onClick={() => onRename(name)}
+            disabled={!name.trim() || name.trim() === oldName}
+            className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50"
+            style={{ background: '#297b8a' }}
+          >
+            Переименовать
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
