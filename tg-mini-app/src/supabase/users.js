@@ -107,3 +107,27 @@ export async function deleteUserInDb(userId) {
     .eq('id', userId);
   if (error) throw error;
 }
+
+/** Найти активного пользователя по web_token (для входа в браузере) */
+export async function findUserByWebToken(token) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('web_token', token)
+    .eq('active', true)
+    .maybeSingle();
+  if (error) throw error;
+  return data; // null если не найден
+}
+
+/** Сохранить web_token пользователю (генерируется на клиенте как UUID) */
+export async function setWebTokenInDb(userId, token) {
+  const { data, error } = await supabase
+    .from('users')
+    .update({ web_token: token })
+    .eq('id', userId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}

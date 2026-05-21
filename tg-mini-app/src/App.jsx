@@ -5,7 +5,7 @@ import {
   ChevronRight, Trash2, Eye, Users, ArrowRight, Hash, ChevronDown,
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
-  Calendar,
+  Calendar, Monitor,
 } from 'lucide-react';
 import { supabase } from './supabase/client';
 import {
@@ -17,6 +17,8 @@ import {
   deactivateUserInDb,
   activateUserInDb,
   deleteUserInDb,
+  findUserByWebToken,
+  setWebTokenInDb,
 } from './supabase/users';
 import {
   fetchAllProducts,
@@ -40,8 +42,9 @@ import {
    contracts, notifications в Supabase + realtime.
    ═════════════════════════════════════════════════════════════════════════ */
 
-const STORAGE_KEY = 'crm_zayavki_v1';
-const SESSION_KEY = 'crm_session_v1';
+const STORAGE_KEY   = 'crm_zayavki_v1';
+const SESSION_KEY   = 'crm_session_v1';
+const WEB_TOKEN_KEY = 'mc_web_token_v1'; // для входа в браузере без Telegram
 
 const TZ = 'Asia/Almaty';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -2606,6 +2609,20 @@ function App() {
 
 
 
+  /** Генерирует личный web_token для текущего пользователя и сохраняет в Supabase */
+  const generateWebToken = async () => {
+    if (!currentUser) return null;
+    const token = uid();
+    try {
+      await setWebTokenInDb(currentUser.id, token);
+      setDb(d => ({ ...d, users: d.users.map(u => u.id === currentUser.id ? { ...u, web_token: token } : u) }));
+      return token;
+    } catch (e) {
+      showToast('Ошибка генерации ссылки');
+      return null;
+    }
+  };
+
   const ctx = {
     db, currentUser, effectiveRole, actAs, setActAs,
     route, navigate, goBack, showToast,
@@ -2627,6 +2644,7 @@ function App() {
     orderDraft, setOrderDraft, resetOrderDraft,
     quickDraft, setQuickDraft, resetQuickDraft,
     taskDraft, setTaskDraft, resetTaskDraft,
+    generateWebToken,
   };
 
   // ─── Интеграция с Telegram Mini App ───
@@ -2657,7 +2675,34 @@ function App() {
     if (bootStatus.phase !== 'ready') return;
     if (currentUser) return;
 
-    // Берём данные Telegram-юзера либо из реального WebApp, либо из dev-переменной
+    // ── Chrome (не Telegram): вход по web_token ──────────────────────────────
+    if (!tgWebApp) {
+      const urlToken  = new URLSearchParams(window.location.search).get('wt');
+      const savedToken = urlToken || localStorage.getItem(WEB_TOKEN_KEY);
+      if (savedToken) {
+        (async () => {
+          try {
+            const user = await findUserByWebToken(savedToken);
+            if (user) {
+              localStorage.setItem(WEB_TOKEN_KEY, savedToken);
+              // Убираем ?wt= из адресной строки — не светим токен
+              if (urlToken) window.history.replaceState({}, '', window.location.pathname);
+              setSession({ user_id: user.id });
+              setRoute({ name: 'home' });
+              showToast(`С возвращением, ${user.first_name}`);
+            } else {
+              // Токен отозван или недействителен
+              localStorage.removeItem(WEB_TOKEN_KEY);
+            }
+          } catch (e) {
+            console.warn('Web token login failed:', e);
+          }
+        })();
+      }
+      return; // Chrome без токена → TelegramAuthScreen покажет экран с инструкцией
+    }
+
+    // ── Telegram: обычный флоу ────────────────────────────────────────────────
     let tgUser = tgWebApp?.initDataUnsafe?.user || null;
     const devId = import.meta.env.VITE_DEV_TELEGRAM_ID;
     if (!tgUser && devId) {
@@ -3045,24 +3090,61 @@ function TelegramAuthScreen({ ctx }) {
     );
   }
 
-  // Состояние 2: открыто НЕ через Telegram → объясняем как открыть
+  // Состояние 2: открыто в браузере (не Telegram) — нужна личная ссылка
   if (!isInTelegram) {
+    const hasUrlToken = !!new URLSearchParams(window.location.search).get('wt');
     return (
-      <div className="min-h-screen w-full flex items-center justify-center px-6" style={{ background: '#FFFFFF' }}>
-        <div className="text-center max-w-md">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6" style={{ background: '#E7F3FE' }}>
-            <TurtleLogo size={48} color={'#297b8a'} />
+      <div className="min-h-screen w-full flex items-center justify-center px-4" style={{ background: '#F5F7F8' }}>
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4" style={{ background: '#E7F3FE' }}>
+              <TurtleLogo size={48} color={'#297b8a'} />
+            </div>
+            <h1 className="display-font text-2xl mb-1" style={{ color: '#1A1814' }}>Master Coffee CRM</h1>
+            <div className="text-sm" style={{ color: '#64748B' }}>Управление закупками и операциями</div>
           </div>
-          <h1 className="display-font text-2xl mb-2" style={{ color: '#1A1814' }}>Master Coffee Procurement OS</h1>
-          <div className="text-sm mb-6" style={{ color: '#64748B' }}>
-            Это приложение работает только внутри Telegram.<br/>
-            Откройте бота и нажмите кнопку запуска мини-приложения.
+
+          <div className="bg-white rounded-2xl p-6 shadow-sm" style={{ border: '1px solid #E5E7EB' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: hasUrlToken ? '#FEE2E2' : '#FEF3C7' }}>
+                {hasUrlToken
+                  ? <AlertCircle size={20} style={{ color: '#EB5757' }} />
+                  : <Monitor size={20} style={{ color: '#F59E0B' }} />
+                }
+              </div>
+              <div>
+                <div className="font-semibold text-sm" style={{ color: '#1A1814' }}>
+                  {hasUrlToken ? 'Ссылка недействительна' : 'Нужна личная ссылка'}
+                </div>
+                <div className="text-xs" style={{ color: '#64748B' }}>
+                  {hasUrlToken
+                    ? 'Токен отозван или устарел'
+                    : 'Для входа через браузер'
+                  }
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl p-4 space-y-3" style={{ background: '#F8FAFC', border: '1px solid #E5E7EB' }}>
+              <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748B' }}>Как войти</div>
+              <div className="flex items-start gap-2 text-sm" style={{ color: '#1A1814' }}>
+                <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: '#297b8a' }}>1</span>
+                <span>Откройте <strong>Telegram</strong> на телефоне и запустите бот CRM</span>
+              </div>
+              <div className="flex items-start gap-2 text-sm" style={{ color: '#1A1814' }}>
+                <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: '#297b8a' }}>2</span>
+                <span>На главной нажмите <strong>«Открыть в браузере на ПК»</strong></span>
+              </div>
+              <div className="flex items-start gap-2 text-sm" style={{ color: '#1A1814' }}>
+                <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: '#297b8a' }}>3</span>
+                <span>Вставьте открывшуюся ссылку в этот браузер</span>
+              </div>
+            </div>
           </div>
-          <div className="rounded-xl p-4 text-left text-xs" style={{ background: '#F5F7F8', color: '#64748B' }}>
-            <strong style={{ color: '#1A1814' }}>Для разработчика:</strong> чтобы залогиниться вне Telegram,
-            добавь свой Telegram ID в файл <span className="mono-font">.env</span> →{' '}
-            <span className="mono-font">VITE_DEV_TELEGRAM_ID=…</span> и перезапусти dev-сервер. Узнать ID — через{' '}
-            <span className="mono-font">@userinfobot</span>.
+
+          <div className="mt-4 text-center text-xs rounded-xl p-3" style={{ background: 'white', color: '#64748B', border: '1px solid #E5E7EB' }}>
+            <strong style={{ color: '#1A1814' }}>Разработчик:</strong> добавь{' '}
+            <span className="mono-font">VITE_DEV_TELEGRAM_ID=…</span> в <span className="mono-font">.env</span>
           </div>
         </div>
       </div>
@@ -3616,6 +3698,52 @@ function AdminHome({ ctx }) {
  * Используется как главная страница для админа и других ролей.
  * Показывает только те разделы, к которым у текущей роли есть доступ.
  */
+function OpenInBrowserButton({ ctx }) {
+  const { isInTelegram, tgWebApp, generateWebToken, showToast } = ctx;
+  const [loading, setLoading] = useState(false);
+  if (!isInTelegram) return null;
+
+  const handleOpen = async () => {
+    setLoading(true);
+    try {
+      const token = await generateWebToken();
+      if (!token) return;
+      const url = `${window.location.origin}${window.location.pathname}?wt=${token}`;
+      if (tgWebApp?.openLink) {
+        tgWebApp.openLink(url);
+      } else {
+        // Фолбэк: копируем ссылку
+        try { await navigator.clipboard.writeText(url); showToast('Ссылка скопирована'); }
+        catch { showToast(url); }
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleOpen}
+      disabled={loading}
+      className="w-full flex items-center gap-3 rounded-xl px-4 py-3 mb-5 text-left transition hover:shadow-sm"
+      style={{ background: '#F0F9FF', border: '1px solid #BAE6FD' }}
+    >
+      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#0EA5E9' }}>
+        <Monitor size={16} className="text-white" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold" style={{ color: '#0C4A6E' }}>
+          {loading ? 'Открываем…' : 'Открыть в браузере на ПК'}
+        </div>
+        <div className="text-[11px]" style={{ color: '#38BDF8' }}>
+          Генерирует личную ссылку — вставь её в Chrome
+        </div>
+      </div>
+      <ChevronRight size={16} style={{ color: '#38BDF8' }} />
+    </button>
+  );
+}
+
 function DashboardHome({ ctx, title }) {
   const { db, currentUser, navigate } = ctx;
 
@@ -3774,6 +3902,9 @@ function DashboardHome({ ctx, title }) {
     <div>
       {/* Карточка профиля пользователя — приветствие сверху */}
       <UserHeroCard user={currentUser} db={db} />
+
+      {/* Кнопка открытия в браузере — только в Telegram */}
+      <OpenInBrowserButton ctx={ctx} />
 
       <PageHeader
         title={title || 'Главная'}
