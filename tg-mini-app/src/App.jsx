@@ -6993,6 +6993,8 @@ function AdminRolesScreen({ ctx }) {
   const roles = db.roleDefinitions || [];
   const [selectedKey, setSelectedKey] = useState(roles[0]?.key || 'admin');
   const [createOpen, setCreateOpen] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const selected = roles.find(r => r.key === selectedKey) || roles[0];
   const isSystem = !!selected?.is_system;
@@ -7053,19 +7055,11 @@ function AdminRolesScreen({ ctx }) {
 
   const resetToDefault = () => {
     if (!isSystem) return;
-    if (!window.confirm(`Сбросить права роли «${selected.label}» к дефолтным?`)) return;
-    const defaults = defaultPermissionsFor(selected.key);
-    updateRolePermissions(selected.key, defaults);
-    setDraft(d => ({ ...d, permissions: defaults }));
-    showToast('Права сброшены к дефолту');
+    setResetConfirmOpen(true);
   };
 
   const handleDelete = () => {
-    if (!window.confirm(`Удалить роль «${selected.label}»? Это действие нельзя отменить.`)) return;
-    const r = deleteCustomRole(selected.key);
-    if (r.error) return showToast(r.error);
-    showToast('Роль удалена');
-    setSelectedKey(roles[0]?.key);
+    setDeleteConfirmOpen(true);
   };
 
   return (
@@ -7270,6 +7264,49 @@ function AdminRolesScreen({ ctx }) {
             return { ok: true };
           }}
         />
+      )}
+      {resetConfirmOpen && selected && (
+        <Modal onClose={() => setResetConfirmOpen(false)} title="Сбросить права?">
+          <div className="space-y-4">
+            <div className="text-sm" style={{ color: '#64748B' }}>
+              Права роли <strong style={{ color: '#1A1814' }}>{selected.label}</strong> будут сброшены к значениям по умолчанию.
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setResetConfirmOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+              <button
+                onClick={() => {
+                  const defaults = defaultPermissionsFor(selected.key);
+                  updateRolePermissions(selected.key, defaults);
+                  setResetConfirmOpen(false);
+                  showToast('Права сброшены к дефолту');
+                }}
+                className="flex-1 py-2.5 rounded-lg font-semibold text-white" style={{ background: '#F59E0B' }}
+              >Да, сбросить</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {deleteConfirmOpen && selected && (
+        <Modal onClose={() => setDeleteConfirmOpen(false)} title="Удалить роль?">
+          <div className="space-y-4">
+            <div className="text-sm" style={{ color: '#64748B' }}>
+              Роль <strong style={{ color: '#1A1814' }}>{selected.label}</strong> будет удалена. Это действие нельзя отменить.
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteConfirmOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+              <button
+                onClick={() => {
+                  const r = deleteCustomRole(selected.key);
+                  if (r.error) { showToast(r.error); return; }
+                  showToast('Роль удалена');
+                  setDeleteConfirmOpen(false);
+                  setSelectedKey(roles[0]?.key);
+                }}
+                className="flex-1 py-2.5 rounded-lg font-semibold text-white" style={{ background: '#EB5757' }}
+              >Да, удалить</button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );
@@ -7725,6 +7762,8 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
+  const [prepareOpen, setPrepareOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   if (!wo) return <div className="p-6">Заявка не найдена</div>;
 
@@ -7873,12 +7912,7 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
           {/* Склад: собрать товары — статус invoiced → prepared */}
           {wo.status === 'invoiced' && (currentUser.role === 'warehouse' || currentUser.role === 'admin') && (
             <button
-              onClick={() => {
-                if (!window.confirm('Подтвердить что товары собраны? Сгенерируется код выдачи для подавшего.')) return;
-                const r = ctx.prepareWriteOff(wo.id);
-                if (r.error) return showToast(r.error);
-                showToast(`Готово! Код выдачи: ${r.code}`);
-              }}
+              onClick={() => setPrepareOpen(true)}
               className="w-full py-3 rounded-lg font-semibold text-white"
               style={{ background: '#6366F1' }}
             >
@@ -7903,12 +7937,7 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
 
           {canCancel && (
             <button
-              onClick={() => {
-                if (!window.confirm('Отменить эту заявку? Действие нельзя отменить.')) return;
-                const r = cancelWriteOff(wo.id);
-                if (r.error) return showToast(r.error);
-                showToast('Заявка отменена');
-              }}
+              onClick={() => setCancelOpen(true)}
               className="w-full py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F5F7F8', color: '#64748B' }}
             >
               Отменить заявку
@@ -7940,6 +7969,61 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
           setCompleteOpen(false);
           showToast(`${wo.number} списана в 1С (${docNo})`);
         }} />
+      )}
+      {prepareOpen && (
+        <Modal onClose={() => setPrepareOpen(false)} title="Подтвердить сборку">
+          <div className="space-y-4">
+            <div className="text-sm" style={{ color: '#64748B' }}>
+              Товары из заявки <strong style={{ color: '#1A1814' }}>{wo.number}</strong> собраны и готовы к выдаче?
+            </div>
+            <div className="text-sm p-3 rounded-lg" style={{ background: '#EDE9FE', color: '#5B21B6' }}>
+              После подтверждения будет сгенерирован 4-значный код выдачи. Заявитель получит уведомление с кодом.
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setPrepareOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+                Отмена
+              </button>
+              <button
+                onClick={() => {
+                  const r = ctx.prepareWriteOff(wo.id);
+                  if (r.error) { showToast(r.error); return; }
+                  setPrepareOpen(false);
+                  showToast(`Готово! Код выдачи: ${r.code}`);
+                }}
+                className="flex-1 py-2.5 rounded-lg font-semibold text-white"
+                style={{ background: '#6366F1' }}
+              >
+                <Package size={14} className="inline mr-1" /> Да, собрано
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {cancelOpen && (
+        <Modal onClose={() => setCancelOpen(false)} title="Отменить заявку?">
+          <div className="space-y-4">
+            <div className="text-sm" style={{ color: '#64748B' }}>
+              Заявка <strong style={{ color: '#1A1814' }}>{wo.number}</strong> будет отменена. Это действие нельзя отменить.
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setCancelOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+                Не отменять
+              </button>
+              <button
+                onClick={() => {
+                  const r = cancelWriteOff(wo.id);
+                  if (r.error) { showToast(r.error); return; }
+                  setCancelOpen(false);
+                  showToast('Заявка отменена');
+                }}
+                className="flex-1 py-2.5 rounded-lg font-semibold text-white"
+                style={{ background: '#EB5757' }}
+              >
+                Да, отменить
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
       <AdminDeleteButton ctx={ctx} kind="writeoff" id={wo.id} label="это списание" onDeleted={() => ctx.goBack()} />
     </div>
@@ -8535,6 +8619,7 @@ function ContractDetailScreen({ ctx, contractId }) {
   const [reviseOpen, setReviseOpen] = useState(false);
   const [signOpen, setSignOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   if (!cr) return <div className="p-6">Заявка не найдена</div>;
 
@@ -8727,12 +8812,7 @@ function ContractDetailScreen({ ctx, contractId }) {
 
           {canCancel && (
             <button
-              onClick={() => {
-                if (!window.confirm('Отменить эту заявку? Действие нельзя отменить.')) return;
-                const r = cancelContractRequest(cr.id);
-                if (r.error) return showToast(r.error);
-                showToast('Заявка отменена');
-              }}
+              onClick={() => setCancelOpen(true)}
               className="w-full py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F5F7F8', color: '#64748B' }}
             >
               Отменить заявку
@@ -8764,6 +8844,32 @@ function ContractDetailScreen({ ctx, contractId }) {
           setRejectOpen(false);
           showToast('Заявка отклонена');
         }} />
+      )}
+      {cancelOpen && (
+        <Modal onClose={() => setCancelOpen(false)} title="Отменить заявку на договор?">
+          <div className="space-y-4">
+            <div className="text-sm" style={{ color: '#64748B' }}>
+              Заявка <strong style={{ color: '#1A1814' }}>{cr.number}</strong> будет отменена. Это действие нельзя отменить.
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setCancelOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+                Не отменять
+              </button>
+              <button
+                onClick={() => {
+                  const r = cancelContractRequest(cr.id);
+                  if (r.error) { showToast(r.error); return; }
+                  setCancelOpen(false);
+                  showToast('Заявка отменена');
+                }}
+                className="flex-1 py-2.5 rounded-lg font-semibold text-white"
+                style={{ background: '#EB5757' }}
+              >
+                Да, отменить
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
       <AdminDeleteButton ctx={ctx} kind="contract" id={cr.id} label="этот договор" onDeleted={() => ctx.goBack()} />
     </div>
