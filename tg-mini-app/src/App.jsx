@@ -785,7 +785,21 @@ function App() {
     for (const stateKey of Object.keys(SYNC_TABLES)) {
       const ch = subscribeToTable(stateKey, async () => {
         const fresh = await fetchAllOfTable(stateKey).catch(() => null);
-        if (fresh) setDb(d => ({ ...d, [stateKey]: fresh }));
+        if (fresh) {
+          // КРИТИЧНО: сначала обновляем snapshot, потом state.
+          // Иначе syncEffect сравнит "новое состояние из БД" с "локальным с новой записью"
+          // и решит что запись была удалена → отправит DELETE и реально её удалит из БД.
+          // Здесь мы говорим: "пришедшее из реалтайма — это базовый уровень, не считай diff".
+          syncSnapshotRef.current[stateKey] = fresh;
+          setDb(d => {
+            // Слияние: берём fresh, но добавляем локальные записи которых ещё нет в fresh.
+            // Это защищает от ситуации, когда realtime пришёл до того как наш upsert успел отразиться.
+            const freshIds = new Set(fresh.map(r => r.id));
+            const localOnly = (d[stateKey] || []).filter(r => !freshIds.has(r.id));
+            const merged = [...fresh, ...localOnly];
+            return { ...d, [stateKey]: merged };
+          });
+        }
       });
       channels.push(ch);
     }
@@ -829,21 +843,11 @@ function App() {
           });
         }
       }
-      // delete удалённые
-      for (const [id] of prevMap) {
-        if (!currMap.has(id)) {
-          deleteRow(stateKey, id).catch(e => {
-            // eslint-disable-next-line no-console
-            console.error(`[sync] ${stateKey} delete ${id}:`, e);
-            reportError({
-              kind: 'sync',
-              source: stateKey,
-              message: `Не удалось удалить запись из "${stateKey}": ${e?.message || e}`,
-              details: { operation: 'delete', rowId: id, error: String(e?.message || e) },
-            });
-          });
-        }
-      }
+      // ВАЖНО: НЕ делаем автоматический DELETE на основе diff.
+      // Это слишком опасно: при race condition с realtime запись может "исчезнуть" из локального
+      // state не из-за намерения пользователя, и тогда мы реально удалим её из БД.
+      // Все явные удаления делаются напрямую к Supabase в adminDeleteRecord / adminWipeTable /
+      // clearReadNotifications / rejectAccess.
 
       syncSnapshotRef.current[stateKey] = currArr;
     }
