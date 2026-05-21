@@ -5227,6 +5227,9 @@ function CreateQuickScreen({ ctx }) {
   const [detected, setDetected] = useState(new Set()); // ключи полей, распознанных из текста
   const [confirmModal, setConfirmModal] = useState(null); // { order, forwardText } после создания
   const textareaRef = React.useRef(null);
+  // parseLocked = true означает что менеджер вручную отредактировал товары →
+  // авто-парс не перезаписывает. Сбрасывается кнопкой "Разобрать".
+  const [parseLocked, setParseLocked] = useState(false);
 
   // Создать пустой item для ручного добавления
   const emptyItem = () => ({
@@ -5256,20 +5259,27 @@ function CreateQuickScreen({ ctx }) {
 
   const update = patch => setForm(f => ({ ...f, ...patch }));
 
-  // Обновить поле конкретного item
-  const updateItem = (localId, patch) => setForm(f => ({
-    ...f,
-    items: f.items.map(it => it.local_id === localId ? { ...it, ...patch } : it),
-  }));
+  // Обновить поле конкретного item (блокирует авто-ре-парс)
+  const updateItem = (localId, patch) => {
+    setParseLocked(true);
+    setForm(f => ({
+      ...f,
+      items: f.items.map(it => it.local_id === localId ? { ...it, ...patch } : it),
+    }));
+  };
 
-  // Удалить item
-  const removeItem = (localId) => setForm(f => ({
-    ...f,
-    items: f.items.filter(it => it.local_id !== localId),
-  }));
+  // Удалить item (блокирует авто-ре-парс)
+  const removeItem = (localId) => {
+    setParseLocked(true);
+    setForm(f => ({
+      ...f,
+      items: f.items.filter(it => it.local_id !== localId),
+    }));
+  };
 
-  // Добавить пустой item вручную
+  // Добавить пустой item вручную (блокирует авто-ре-парс)
   const addEmptyItem = () => {
+    setParseLocked(true);
     const item = emptyItem();
     setForm(f => ({ ...f, items: [...f.items, item] }));
   };
@@ -5393,95 +5403,114 @@ function CreateQuickScreen({ ctx }) {
     }
 
     // ── Товары ────────────────────────────────────────────────────────────────
-    // Вспомогательные функции парсера
     const stripSep = (s) => s.replace(/[\s.](?=\d{3}\b)/g, ''); // 11.192 → 11192, 14 500 → 14500
 
-    // Ищем явную строку "Заказ: ..." — парсим несколько товаров
-    const orderLineMatch = text.match(/заказ[:\s]+([^\n]+(?:\n(?!(?:адрес|способ|контактн|наименован|доставк|самовывоз|бин|телефон|\d{4,})[:\s])[^\n]+)*)/i);
-    if (orderLineMatch) {
-      const orderText = orderLineMatch[1];
-      // Разбиваем на сегменты — ищем паттерн: <название> - <кол-во> ...
-      // Сегменты разделены запятой перед словом/числом которое похоже на начало нового товара
-      const segments = [];
-      // Нарезаем по "запятая + пробел + заглавная/кириллица" — начало нового товара
-      const rawSegs = orderText.split(/,\s*(?=[А-ЯЁA-Z])/);
-      // Объединяем сегменты-продолжения (цена к предыдущему товару)
-      let buf = '';
-      for (const seg of rawSegs) {
-        // Если сегмент выглядит как цена (только цифры, тенге, тг) и нет тире — продолжение
-        if (buf && /^\s*[\d\s.,]+\s*(?:тг|тенге|тнг|₸|за\s+кг|\/)/i.test(seg) && !/-/.test(seg)) {
-          buf += ', ' + seg;
-        } else {
-          if (buf) segments.push(buf.trim());
-          buf = seg;
-        }
-      }
-      if (buf) segments.push(buf.trim());
+    // Вспомогательная: разобрать один сегмент текста в объект item
+    const parseOneSegment = (seg) => {
+      if (!seg || seg.trim().length < 2) return null;
+      seg = seg.trim();
+      const item = emptyItem();
 
-      const parsedItems = [];
-      for (const seg of segments) {
-        if (!seg || seg.length < 3) continue;
-        const item = emptyItem();
-
-        // Флаг помола
-        if (/с\s+помолом|помол|молотый|молот[ыа]|ground/i.test(seg)) {
-          item.needs_grind = true;
-        }
-
-        // Количество и единица — формат "10 кг" или "0,25" или "250гр"
-        const qtyMatch = seg.match(/[-–]\s*([\d]+(?:[.,]\d+)?)\s*(кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)?/i)
-          || seg.match(/([\d]+(?:[.,]\d+)?)\s*(кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)/i);
-        if (qtyMatch) {
-          item.quantity = qtyMatch[1].replace(',', '.');
-          if (qtyMatch[2]) {
-            const u = qtyMatch[2].toLowerCase();
-            item.unit = /^(гр|г)/.test(u) ? 'г' : u === 'kg' ? 'кг' : u;
-          }
-        }
-
-        // Цена — форматы: "11.192 тенге за кг", "5490 тг/250гр", "по 14500", "14 500 тг"
-        const pricePatterns = [
-          /(\d[\d\s.,]*\d|\d{3,})\s*(?:тг|тенге|тнг|₸)/i,
-          /(?:по|x|х)\s+(\d[\d\s.,]*\d|\d{3,})/i,
-          /,\s*(\d[\d\s.,]*\d|\d{3,})\s*(?:тенге|тг|за)/i,
-        ];
-        for (const pp of pricePatterns) {
-          const pm = seg.match(pp);
-          if (pm) {
-            const p = stripSep(pm[1]);
-            if (p && Number(p) > 99) { item.price = p; break; }
-          }
-        }
-
-        // Название: всё до первого "-" / "×" / числа с единицей
-        let nameRaw = seg
-          .replace(/[-–]\s*[\d.,]+\s*(?:кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)?.*$/i, '')
-          .replace(/[\d]+(?:[.,]\d+)?\s*(?:кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)\s*.*/i, '')
-          .replace(/с\s+помолом|помол\w*/gi, '')
-          .replace(/[,;]$/, '').trim();
-        if (nameRaw.length < 2) nameRaw = seg.replace(/[,;]$/, '').trim().slice(0, 60);
-        item.name = nameRaw;
-
-        // Матчим с каталогом — ищем по ключевым словам из названия товара в каталоге
-        const segLower = seg.toLowerCase();
-        const matched = products.filter(p => p.active).find(p => {
-          const keywords = p.name.split(/[\s,()]+/).filter(w => w.length > 3);
-          return keywords.some(k => segLower.includes(k.toLowerCase()));
-        });
-        if (matched) {
-          item.product_id = matched.id;
-          item.name = matched.name;
-          item.unit = matched.unit;
-          if (!item.price) item.price = String(matched.price);
-          // Если товар — кофе в зерне и не задан нужен_помол, даём возможность выбрать
-          if (matched.cat === 'Кофе зерно' && !item.needs_grind) {
-            item.needs_grind = false; // опционально — покажем grind-селектор через isGrindableProduct
-          }
-        }
-
-        if (item.name || item.product_id) parsedItems.push(item);
+      // Флаг помола — "молотый", "с помолом", "ground"
+      if (/с\s+помолом|помол|молотый|молот[ыа]|ground/i.test(seg)) {
+        item.needs_grind = true;
       }
 
+      // Количество — форматы: "- 5кг", "5 кг", "0,500гр", "0.5"
+      const qtyMatch =
+        seg.match(/[-–]\s*([\d]+(?:[.,]\d+)?)\s*(кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg|pcs)?(?!\d)/i) ||
+        seg.match(/([\d]+(?:[.,]\d+)?)\s*(кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)/i);
+      if (qtyMatch) {
+        const rawNum = qtyMatch[1].replace(',', '.');
+        let qty = Number(rawNum);
+        const rawUnit = (qtyMatch[2] || '').toLowerCase();
+        let unit = /^(гр|г)/.test(rawUnit) ? 'г' : rawUnit === 'kg' ? 'кг' : (rawUnit || 'кг');
+        // "0,500гр" = 0.5 г → очевидно имеется в виду 500г (или 0.5кг)
+        if (qty > 0 && qty < 1) {
+          qty = Math.round(qty * 1000);
+          unit = 'г';
+        }
+        item.quantity = String(qty);
+        item.unit = unit;
+      }
+
+      // Цена — "8.444 тенге за кг", "9.592тг", "по 14500", "14 500 тг"
+      const pricePatterns = [
+        /(\d[\d\s.,]*\d|\d{3,})\s*(?:тг|тенге|тнг|₸)/i,
+        /(?:по|x|х)\s+(\d[\d\s.,]*\d|\d{3,})/i,
+        /,\s*(\d[\d\s.,]*\d|\d{3,})\s*(?:тенге|тг|за)/i,
+      ];
+      for (const pp of pricePatterns) {
+        const pm = seg.match(pp);
+        if (pm) {
+          const p = stripSep(pm[1]);
+          if (p && Number(p) > 99) { item.price = p; break; }
+        }
+      }
+
+      // Название: до первого тире/числа с единицей, без мусора
+      let nameRaw = seg
+        .replace(/[-–]\s*[\d.,]+\s*(?:кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)?.*$/i, '')
+        .replace(/[\d]+(?:[.,]\d+)?\s*(?:кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)\s*.*/i, '')
+        .replace(/с\s+помолом|помол\w*/gi, '')
+        .replace(/[,;]$/, '').trim();
+      if (nameRaw.length < 2) nameRaw = seg.replace(/[,;]$/, '').trim().slice(0, 60);
+      item.name = nameRaw;
+
+      // Матч с каталогом по ключевым словам (>3 символа)
+      const segLower = seg.toLowerCase();
+      const matched = products.filter(p => p.active).find(p => {
+        const keywords = p.name.split(/[\s,()]+/).filter(w => w.length > 3);
+        return keywords.some(k => segLower.includes(k.toLowerCase()));
+      });
+      if (matched) {
+        item.product_id = matched.id;
+        item.name = matched.name;
+        item.unit = matched.unit;
+        if (!item.price) item.price = String(matched.price);
+      }
+
+      return (item.name || item.product_id) ? item : null;
+    };
+
+    // Строки, которые начинают новый раздел (не товар)
+    const isSectionStop = (line) =>
+      /^(?:адрес|способ\s+(?:оплаты|получ)|контактн|наименован|доставк|самовывоз|телефон|оплат|подтвержд|итого)[:\s]/i.test(line.trim()) ||
+      /^\d{4,}$/.test(line.trim()); // только цифры (код, подпись)
+
+    // Ищем секцию "Заказ:"
+    const orderHeaderMatch = text.match(/заказ\s*:/i);
+    if (orderHeaderMatch) {
+      const afterHeader = text.slice(orderHeaderMatch.index + orderHeaderMatch[0].length);
+      const allAfterLines = afterHeader.split('\n');
+      const sameLinePart = allAfterLines[0].trim();
+      let rawSegments = [];
+
+      if (sameLinePart.length > 3) {
+        // ── Однострочный формат: "Заказ: Item1, Item2, Item3"
+        // Нарезаем по "запятая + заглавная/кириллица"
+        const rawParts = sameLinePart.split(/,\s*(?=[А-ЯЁA-Z])/);
+        let buf = '';
+        for (const part of rawParts) {
+          if (buf && /^\s*[\d\s.,]+\s*(?:тг|тенге|тнг|₸|за\s+кг)/i.test(part) && !/-/.test(part)) {
+            buf += ', ' + part; // продолжение предыдущего (цена)
+          } else {
+            if (buf) rawSegments.push(buf.trim());
+            buf = part;
+          }
+        }
+        if (buf) rawSegments.push(buf.trim());
+      } else {
+        // ── Многострочный формат: каждая непустая строка после "Заказ:" — товар
+        for (const line of allAfterLines.slice(1)) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          if (isSectionStop(trimmed)) break;
+          rawSegments.push(trimmed);
+        }
+      }
+
+      const parsedItems = rawSegments.map(parseOneSegment).filter(Boolean);
       if (parsedItems.length > 0) {
         result.items = parsedItems;
         det.add('items');
@@ -5536,7 +5565,8 @@ function CreateQuickScreen({ ctx }) {
     return { result, det };
   };
 
-  // Автопарс с дебаунсом — пользователь вставляет текст, через ~250мс поля заполняются
+  // Автопарс с дебаунсом — пользователь вставляет текст, через ~300мс поля заполняются.
+  // Если менеджер уже редактировал товары вручную (parseLocked) — не перезаписываем items.
   useEffect(() => {
     const text = form.raw_text;
     if (!text || text.trim().length === 0) {
@@ -5546,20 +5576,28 @@ function CreateQuickScreen({ ctx }) {
     const timer = setTimeout(() => {
       setForm(currentForm => {
         const { result, det } = runParse(text, currentForm);
+        if (parseLocked) {
+          // Обновляем все поля кроме items — их трогать нельзя
+          const { items: _ignored, ...restResult } = result;
+          setDetected(new Set([...det].filter(k => k !== 'items')));
+          return { ...currentForm, ...restResult };
+        }
         setDetected(det);
         return result;
       });
-    }, 250);
+    }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.raw_text]);
+  }, [form.raw_text, parseLocked]);
 
-  // Ручной запуск парсера (кнопка)
+  // Ручной запуск парсера (кнопка "Разобрать") — всегда сбрасывает блокировку
   const parseNow = () => {
-    const { result, det } = runParse(form.raw_text || '', form);
+    setParseLocked(false);
+    const { result, det } = runParse(form.raw_text || '', { ...form, items: [] });
     setForm(result);
     setDetected(det);
     if (det.size > 0) showToast(`Распознано полей: ${det.size}`);
+    else showToast('Ничего не распознано');
   };
 
   // Формирует текст для пересылки в чат-группу (несколько товаров)
@@ -5741,14 +5779,19 @@ function CreateQuickScreen({ ctx }) {
               <button
                 onClick={parseNow}
                 disabled={!form.raw_text}
-                className="px-3 py-2 rounded-lg font-semibold text-sm disabled:opacity-40"
-                style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}
-                title="Разобрать сейчас, не дожидаясь автопарса"
+                className="px-3 py-2 rounded-lg font-semibold text-sm disabled:opacity-40 flex items-center gap-1"
+                style={{
+                  background: parseLocked ? '#FEF3C7' : '#F5F7F8',
+                  color: parseLocked ? '#92400E' : '#1A1814',
+                  border: `1px solid ${parseLocked ? '#F59E0B' : '#E5E7EB'}`,
+                }}
+                title={parseLocked ? 'Разобрать заново (сбросит ручные правки товаров)' : 'Разобрать сейчас'}
               >
-                Разобрать
+                {parseLocked && <AlertCircle size={12} />}
+                {parseLocked ? 'Разобрать заново' : 'Разобрать'}
               </button>
               <button
-                onClick={() => { update({ raw_text: '' }); setDetected(new Set()); }}
+                onClick={() => { update({ raw_text: '' }); setDetected(new Set()); setParseLocked(false); }}
                 disabled={!form.raw_text}
                 className="px-3 py-2 rounded-lg font-semibold text-sm disabled:opacity-40"
                 style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}
@@ -5757,11 +5800,12 @@ function CreateQuickScreen({ ctx }) {
                 <X size={14} />
               </button>
             </div>
-            {detected.size > 0 && (
-              <div className="text-[11px] mt-2" style={{ color: '#22C55E' }}>
-                ✓ Распознано полей: {detected.size}
-              </div>
-            )}
+            <div className="text-[11px] mt-2" style={{ color: parseLocked ? '#F59E0B' : '#22C55E' }}>
+              {parseLocked
+                ? '⚠ Товары отредактированы вручную — авто-разбор отключён. Нажмите «Разобрать заново» чтобы сбросить.'
+                : detected.size > 0 ? `✓ Распознано полей: ${detected.size}` : null
+              }
+            </div>
           </Card>
 
           <Card title="Тип клиента и способ получения">
