@@ -9695,7 +9695,7 @@ function GrindDetailScreen({ ctx, grindId }) {
           </div>
         </Modal>
       )}
-      <AdminDeleteButton ctx={ctx} kind="grind" id={grind.id} label="эту заявку" onDeleted={() => ctx.goBack()} />
+      <AdminDeleteButton ctx={ctx} kind="grind" id={g.id} label="эту заявку" onDeleted={() => ctx.goBack()} />
     </div>
   );
 }
