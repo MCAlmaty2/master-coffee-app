@@ -118,21 +118,23 @@ function makeTgLogEntry(db, eventKey, message) {
     ? `chat ${chatId}${topicId ? ` (тема ${topicId})` : ''}`
     : 'не настроено';
 
-  // Fire-and-forget: реально отправляем сообщение через Edge Function
-  if (chatId) {
+  // Fire-and-forget: отправляем через Edge Function send-telegram
+  if (chatId && tg.bot_token) {
     try {
-      supabase.functions.invoke('send-telegram', {
-        body: {
-          chat_id: chatId,
-          message_thread_id: topicId || undefined,
-          text: message,
-        },
-      }).then(({ data, error }) => {
-        if (error) console.error('[tg] send failed:', error);
-        else if (data?.error) console.error('[tg] send error:', data.error);
-      }).catch(e => console.error('[tg] invoke failed:', e));
+      const reqBody = {
+        chat_id: chatId,
+        text: message,
+        bot_token: tg.bot_token,        // fallback если Secret не прописан
+      };
+      if (topicId) reqBody.message_thread_id = topicId;
+      supabase.functions.invoke('send-telegram', { body: reqBody })
+        .then(({ data, error }) => {
+          if (error) console.warn('[tg] send failed:', error);
+          else if (data?.error) console.warn('[tg] send error:', data.error);
+        })
+        .catch(e => console.warn('[tg] invoke failed:', e));
     } catch (e) {
-      console.error('[tg] dispatch failed:', e);
+      console.warn('[tg] dispatch failed:', e);
     }
   }
 
@@ -9433,6 +9435,7 @@ function AdminTelegramScreen({ ctx }) {
     group_chat_id: settings.group_chat_id,
     topics: { ...settings.topics },
   });
+  const [testSending, setTestSending] = useState(false);
 
   const update = patch => setForm(f => ({ ...f, ...patch }));
   const updateTopic = (key, value) => setForm(f => ({ ...f, topics: { ...f.topics, [key]: value } }));
@@ -9442,6 +9445,33 @@ function AdminTelegramScreen({ ctx }) {
     showToast('Настройки сохранены');
   };
 
+  const handleTest = async () => {
+    if (!form.bot_token || !form.group_chat_id) {
+      showToast('Сначала укажите Bot Token и Chat ID');
+      return;
+    }
+    setTestSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-telegram', {
+        body: {
+          chat_id: form.group_chat_id,
+          text: '✅ Тест MasterCoffee CRM\nTelegram-уведомления работают.',
+          bot_token: form.bot_token,
+        },
+      });
+      if (error || data?.error) {
+        showToast(`Ошибка: ${error?.message || data?.error}`);
+      } else {
+        showToast('Тестовое сообщение отправлено!');
+      }
+    } catch (e) {
+      showToast(`Ошибка отправки: ${e.message}`);
+    } finally {
+      setTestSending(false);
+    }
+  };
+
+  const isConfigured = !!(form.bot_token && form.group_chat_id);
   const recentLog = db.telegramLog.slice(0, 30);
 
   const topicGroups = [
@@ -9513,14 +9543,32 @@ function AdminTelegramScreen({ ctx }) {
     <div>
       <PageHeader title="Telegram-уведомления" subtitle="Подключение к группе с темами" />
 
-      <div className="rounded-xl p-4 mb-4" style={{ background: '#FFFBEB', border: '1px solid #FBBF24' }}>
-        <div className="flex items-start gap-2">
-          <AlertCircle size={18} style={{ color: '#92400E', marginTop: 2, flexShrink: 0 }} />
-          <div className="text-sm" style={{ color: '#92400E' }}>
-            <strong>На этом этапе</strong> отправка работает в режиме «журнала»: все настройки сохраняются в базе и видны в журнале ниже. Реальная отправка сообщений в Telegram появится после подключения Edge-функции (на следующем этапе работы).
+      {/* Статус подключения */}
+      {isConfigured ? (
+        <div className="rounded-xl p-3 mb-4 flex items-center justify-between gap-3" style={{ background: '#D1FAE5', border: '1px solid #6EE7B7' }}>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={18} style={{ color: '#065F46', flexShrink: 0 }} />
+            <span className="text-sm font-semibold" style={{ color: '#065F46' }}>Бот подключён — уведомления отправляются</span>
+          </div>
+          <button
+            onClick={handleTest}
+            disabled={testSending}
+            className="px-3 py-1.5 rounded-lg text-sm font-semibold flex-shrink-0 disabled:opacity-50"
+            style={{ background: '#065F46', color: 'white' }}
+          >
+            {testSending ? 'Отправка…' : 'Тест'}
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-xl p-4 mb-4" style={{ background: '#FFFBEB', border: '1px solid #FBBF24' }}>
+          <div className="flex items-start gap-2">
+            <AlertCircle size={18} style={{ color: '#92400E', marginTop: 2, flexShrink: 0 }} />
+            <div className="text-sm" style={{ color: '#92400E' }}>
+              Заполните <strong>Bot Token</strong> и <strong>ID группы</strong> — уведомления начнут отправляться сразу.
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <Card title="Подключение бота">
         <div className="space-y-3">
@@ -9587,9 +9635,21 @@ function AdminTelegramScreen({ ctx }) {
         ))}
       </div>
 
-      <button onClick={handleSave} className="w-full mt-4 py-3 rounded-lg font-semibold text-white" style={{ background: '#297b8a' }}>
-        Сохранить настройки
-      </button>
+      <div className="flex gap-2 mt-4">
+        <button onClick={handleSave} className="flex-1 py-3 rounded-lg font-semibold text-white" style={{ background: '#297b8a' }}>
+          Сохранить настройки
+        </button>
+        {isConfigured && (
+          <button
+            onClick={handleTest}
+            disabled={testSending}
+            className="px-4 py-3 rounded-lg font-semibold disabled:opacity-50"
+            style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}
+          >
+            {testSending ? '…' : 'Тест'}
+          </button>
+        )}
+      </div>
 
       <div className="mt-6">
         <h2 className="display-font text-xl mb-3" style={{ color: '#1A1814' }}>Журнал отправлений</h2>
@@ -9600,10 +9660,10 @@ function AdminTelegramScreen({ ctx }) {
             {recentLog.map(entry => (
               <div key={entry.id} className="bg-white rounded-xl p-3" style={{ border: '1px solid #E5E7EB' }}>
                 <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: '#F5F7F8', color: '#64748B' }}>{entry.event}</span>
-                    <span className={`text-[10px] font-bold rounded-full px-2 py-0.5`} style={{ background: entry.configured ? '#D1FAE5' : '#FEE2E2', color: entry.configured ? '#166534' : '#991B1B' }}>
-                      {entry.configured ? 'отправлено бы' : 'не настроено'}
+                    <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: entry.configured ? '#D1FAE5' : '#FEE2E2', color: entry.configured ? '#166534' : '#991B1B' }}>
+                      {entry.configured ? '✓ отправлено' : '✗ не настроено'}
                     </span>
                     <span className="text-xs" style={{ color: '#64748B' }}>→ {entry.target}</span>
                   </div>
