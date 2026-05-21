@@ -691,11 +691,9 @@ function App() {
   const emptyQuickDraft = {
     client_type: 'individual',
     client_name: '',
-    product_id: '',
-    quantity: '',
-    price: '',
+    items: [],           // [{ local_id, product_id, name, unit, quantity, price, needs_grind, grind_type, grind_custom }]
     delivery_method: '',
-    payment_method: '', // НОВОЕ: on_delivery | kaspi_remote | prepay_invoice
+    payment_method: '', // on_delivery | kaspi_remote | prepay_invoice
     phone: '',
     address: '',
     bin: '',
@@ -4956,7 +4954,7 @@ function CreateOrderScreen({ ctx }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function CreateQuickScreen({ ctx }) {
-  const { db, goBack, navigate, createOrder, changeStatus, showToast, quickDraft, setQuickDraft, resetQuickDraft } = ctx;
+  const { db, goBack, navigate, createOrder, changeStatus, createGrindRequest, showToast, quickDraft, setQuickDraft, resetQuickDraft } = ctx;
   const products = db.products || [];
   const form = quickDraft;
   const setForm = setQuickDraft;
@@ -4965,6 +4963,25 @@ function CreateQuickScreen({ ctx }) {
   const [confirmModal, setConfirmModal] = useState(null); // { order, forwardText } после создания
   const textareaRef = React.useRef(null);
 
+  // Создать пустой item для ручного добавления
+  const emptyItem = () => ({
+    local_id: uid(),
+    product_id: '',
+    name: '',
+    unit: 'кг',
+    quantity: '',
+    price: '',
+    needs_grind: false,
+    grind_type: '',
+    grind_custom: '',
+  });
+
+  // Категории товаров, у которых есть помол
+  const isGrindableProduct = (productId) => {
+    const p = products.find(x => x.id === productId);
+    return p && p.cat === 'Кофе зерно';
+  };
+
   // Автофокус на поле "Текст из чата" при заходе на экран
   useEffect(() => {
     if (textareaRef.current && !form.raw_text) {
@@ -4972,23 +4989,50 @@ function CreateQuickScreen({ ctx }) {
     }
   }, []);
 
-  const product = products.find(p => p.id === form.product_id);
   const update = patch => setForm(f => ({ ...f, ...patch }));
-  const pickProduct = () => navigate({
+
+  // Обновить поле конкретного item
+  const updateItem = (localId, patch) => setForm(f => ({
+    ...f,
+    items: f.items.map(it => it.local_id === localId ? { ...it, ...patch } : it),
+  }));
+
+  // Удалить item
+  const removeItem = (localId) => setForm(f => ({
+    ...f,
+    items: f.items.filter(it => it.local_id !== localId),
+  }));
+
+  // Добавить пустой item вручную
+  const addEmptyItem = () => {
+    const item = emptyItem();
+    setForm(f => ({ ...f, items: [...f.items, item] }));
+  };
+
+  // Открыть пикер для конкретного item (по индексу)
+  const pickItemProduct = (idx) => navigate({
     name: 'product_picker',
     pickerTarget: 'quick',
+    quickItemIdx: idx,
   });
 
-  const total = (Number(form.quantity) || 0) * (Number(form.price) || 0);
+  // Открыть пикер для добавления нового item
+  const addItemFromPicker = () => navigate({
+    name: 'product_picker',
+    pickerTarget: 'quick',
+    quickItemIdx: -1,
+  });
+
+  // Итого по всем items
+  const total = (form.items || []).reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0);
 
   // ─── Чистый парсер: возвращает { result, det } без побочных эффектов
-  // Обрабатывает реалистичные форматы мессенджер-подтверждений:
-  //   "Coffee Boom Almaty\nQazaq Blend 20кг по 14500\nДоставка, Достык 132\n+7 777 123 4567\nРЕА-555"
-  //   "ИП Иванов, БИН: 123456789012, забор со склада, 25 кг Espresso по 13 990"
-  //   "Иван заберёт 5 пачек Supremo по 4590 тг сам"
+  // Обрабатывает форматы менеджерских подтверждений:
+  //   "Наименование заведения: ИП BAL\nЗаказ: Престиж - 10 кг, 11.192 тенге за кг, Декаф зерно - 0,25 с помолом"
+  //   "Coffee Boom Almaty\nQazaq Blend 20кг по 14500\nДоставка, Достык 132\n+7 777 123 4567"
   const runParse = (text, current) => {
     if (!text || text.trim().length === 0) return { result: current, det: new Set() };
-    const result = { ...current };
+    const result = { ...current, items: [...(current.items || [])] };
     const det = new Set();
     const lowerText = text.toLowerCase();
 
@@ -5007,6 +5051,20 @@ function CreateQuickScreen({ ctx }) {
       det.add('client_type');
     }
 
+    // Способ оплаты — стандартные фразы из подтверждений
+    if (/счет\s+на\s+оплату\s+юр|счёт\s+на\s+оплату\s+юр|счёт-фактура|счет-фактура|prepay|предоплат/i.test(text)) {
+      result.payment_method = 'prepay_invoice';
+      result.client_type = 'legal';
+      det.add('payment_method');
+      det.add('client_type');
+    } else if (/kaspi|каспи|qr|ссылку?|удалённый\s+счёт/i.test(text)) {
+      result.payment_method = 'kaspi_remote';
+      det.add('payment_method');
+    } else if (/при\s+получени|наличными|на\s+месте|при\s+вручени/i.test(text)) {
+      result.payment_method = 'on_delivery';
+      det.add('payment_method');
+    }
+
     // БИН — 12 цифр, возможно с подписью "БИН:"
     const binMatch = text.match(/(?:бин\s*[:№]?\s*)?(\b\d{12}\b)/i);
     if (binMatch) {
@@ -5014,73 +5072,49 @@ function CreateQuickScreen({ ctx }) {
       det.add('bin');
     }
 
-    // Телефон — допускаем пробелы, тире, скобки, плюс; \b чтобы не зацепить хвост БИНа
+    // Телефон — допускаем пробелы, тире, скобки, плюс
     const phoneMatch = text.match(/(?:^|[^\d])(\+?[78][\s\-()]*\d{3}[\s\-()]*\d{3}[\s\-()]*\d{2}[\s\-()]*\d{2})(?!\d)/);
     if (phoneMatch) {
       const norm = normalizePhone(phoneMatch[1]);
-      if (norm) {
-        result.phone = norm;
-        det.add('phone');
-      }
+      if (norm) { result.phone = norm; det.add('phone'); }
+    }
+    // Явная строка "Контактный номер: ..."
+    const contactLine = text.match(/контактный\s+номер[:\s]+([^\n]+)/i);
+    if (contactLine) {
+      const norm = normalizePhone(contactLine[1].trim());
+      if (norm) { result.phone = norm; det.add('phone'); }
     }
 
-    // Номер документа реализации — основной формат 00ЦТ-NNNNNN, старый РЕА-... тоже ловим
+    // Номер документа реализации — 00ЦТ-NNNNNN или РЕА-...
     let docMatch = text.match(/00ЦТ[\s\-]*\d{4,7}/i);
     if (!docMatch) docMatch = text.match(/РЕА[\s\-]*\d+/i);
     if (docMatch) {
-      // Нормализуем: 00ЦТ-NNNNNN (заглавные русские Ц, Т)
       let raw = docMatch[0].replace(/\s+/g, '').toUpperCase();
-      // если поймали «00ЦТ123456» без дефиса — добавляем
       raw = raw.replace(/^00ЦТ(\d)/, '00ЦТ-$1');
       result.doc_no = raw;
       det.add('doc_no');
     }
 
-    // Кол-во и цена. Поддерживаем форматы: "20кг по 14500", "25 кг × 13 990", "5 шт x 4590 тг", "20 по 14.500"
-    // Цена с разделителями тысяч: 14 500 / 14.500 / 14,500 (только если рядом нет десятичных)
-    const stripSep = (s) => s.replace(/[\s.,](?=\d{3}\b)/g, '');
-    // более точный двусторонний матч:
-    const m2 = text.match(/(\d+(?:[.,]\d+)?)\s*(?:кг|шт|упак|пач\w*|короб\w*|kg|pcs)?\s*(?:[xх×*]|по)\s*(\d[\d\s.,]*\d|\d{3,})/i);
-    if (m2) {
-      result.quantity = m2[1].replace(',', '.');
-      det.add('quantity');
-      const priceCandidate = stripSep(m2[2]);
-      if (priceCandidate && Number(priceCandidate) > 0) {
-        result.price = priceCandidate;
-        det.add('price');
-      }
+    // ── Имя клиента ──────────────────────────────────────────────────────────
+    // Явная строка "Наименование заведения: ..." или "Клиент: ..."
+    const nameLabelMatch = text.match(/(?:наименование\s+заведения|клиент|компания|от)[:\s]+([^\n]+)/i);
+    if (nameLabelMatch) {
+      const cleaned = nameLabelMatch[1].trim().replace(/[,;]$/, '');
+      if (cleaned.length > 1) { result.client_name = cleaned; det.add('client_name'); }
     } else {
-      const qtyM = text.match(/кол[-\s]?во[:\s]+(\d+)/i) || text.match(/(\d+)\s*(?:кг|шт|упак|пач\w*|короб\w*)/i);
-      if (qtyM) { result.quantity = qtyM[1]; det.add('quantity'); }
-    }
-
-    // Цена — дополнительный поиск, если основной шаблон не нашёл (например, "товар X по 14500")
-    if (!det.has('price')) {
-      const priceM = text.match(/цена[:\s]+(\d[\d\s.,]*\d|\d{3,})/i)
-        || text.match(/(\d[\d\s.,]*\d|\d{3,})\s*(?:тг|тенге|тнг|₸)/i)
-        || text.match(/\bпо\s+(\d[\d\s.,]*\d|\d{3,})/i);
-      if (priceM) {
-        const p = stripSep(priceM[1]);
-        if (p && Number(p) > 99) { result.price = p; det.add('price'); }
+      // Иначе — первая значимая строка
+      const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
+      const greetings = /^(привет|добрый|здравствуй|подтверждаю|подтвердили|оформляем|заказ|заявка|order)/i;
+      const nameCandidate = lines.find(l => !greetings.test(l) && !/^[+\d]/.test(l) && l.length > 2 && l.length < 80);
+      if (nameCandidate) {
+        const cleaned = nameCandidate
+          .replace(/^(клиент|компания|заведение|название|от)[:\s]+/i, '')
+          .replace(/[,;].*$/, '').trim();
+        if (cleaned.length > 2) { result.client_name = cleaned; det.add('client_name'); }
       }
     }
 
-    // Имя клиента / компании — первая значимая строка
-    const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
-    const greetings = /^(привет|добрый|здравствуй|подтверждаю|подтвердили|оформляем|заказ|заявка|order)/i;
-    let nameCandidate = lines.find(l => !greetings.test(l) && !/^[+\d]/.test(l) && l.length > 2 && l.length < 80);
-    if (nameCandidate) {
-      const cleaned = nameCandidate
-        .replace(/^(клиент|компания|заведение|название|от)[:\s]+/i, '')
-        .replace(/[,;].*$/, '')
-        .trim();
-      if (cleaned.length > 2) {
-        result.client_name = cleaned;
-        det.add('client_name');
-      }
-    }
-
-    // Адрес
+    // ── Адрес ────────────────────────────────────────────────────────────────
     const addrLineMatch = text.match(/адрес[:\s]+([^\n]+)/i);
     if (addrLineMatch) {
       result.address = addrLineMatch[1].trim().replace(/[,;]$/, '');
@@ -5093,16 +5127,144 @@ function CreateQuickScreen({ ctx }) {
       }
     }
 
-    // Товар из прайса — ищем по уникальным длинным словам
-    const matched = products.filter(p => p.active).find(p => {
-      const keywords = p.name.split(/[\s,]+/).filter(w => w.length > 3);
-      return keywords.some(k => lowerText.includes(k.toLowerCase()));
-    });
-    if (matched) {
-      result.product_id = matched.id;
-      det.add('product_id');
-      if (!result.price || !det.has('price')) {
-        result.price = String(matched.price);
+    // ── Товары ────────────────────────────────────────────────────────────────
+    // Вспомогательные функции парсера
+    const stripSep = (s) => s.replace(/[\s.](?=\d{3}\b)/g, ''); // 11.192 → 11192, 14 500 → 14500
+
+    // Ищем явную строку "Заказ: ..." — парсим несколько товаров
+    const orderLineMatch = text.match(/заказ[:\s]+([^\n]+(?:\n(?!(?:адрес|способ|контактн|наименован|доставк|самовывоз|бин|телефон|\d{4,})[:\s])[^\n]+)*)/i);
+    if (orderLineMatch) {
+      const orderText = orderLineMatch[1];
+      // Разбиваем на сегменты — ищем паттерн: <название> - <кол-во> ...
+      // Сегменты разделены запятой перед словом/числом которое похоже на начало нового товара
+      const segments = [];
+      // Нарезаем по "запятая + пробел + заглавная/кириллица" — начало нового товара
+      const rawSegs = orderText.split(/,\s*(?=[А-ЯЁA-Z])/);
+      // Объединяем сегменты-продолжения (цена к предыдущему товару)
+      let buf = '';
+      for (const seg of rawSegs) {
+        // Если сегмент выглядит как цена (только цифры, тенге, тг) и нет тире — продолжение
+        if (buf && /^\s*[\d\s.,]+\s*(?:тг|тенге|тнг|₸|за\s+кг|\/)/i.test(seg) && !/-/.test(seg)) {
+          buf += ', ' + seg;
+        } else {
+          if (buf) segments.push(buf.trim());
+          buf = seg;
+        }
+      }
+      if (buf) segments.push(buf.trim());
+
+      const parsedItems = [];
+      for (const seg of segments) {
+        if (!seg || seg.length < 3) continue;
+        const item = emptyItem();
+
+        // Флаг помола
+        if (/с\s+помолом|помол|молотый|молот[ыа]|ground/i.test(seg)) {
+          item.needs_grind = true;
+        }
+
+        // Количество и единица — формат "10 кг" или "0,25" или "250гр"
+        const qtyMatch = seg.match(/[-–]\s*([\d]+(?:[.,]\d+)?)\s*(кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)?/i)
+          || seg.match(/([\d]+(?:[.,]\d+)?)\s*(кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)/i);
+        if (qtyMatch) {
+          item.quantity = qtyMatch[1].replace(',', '.');
+          if (qtyMatch[2]) {
+            const u = qtyMatch[2].toLowerCase();
+            item.unit = /^(гр|г)/.test(u) ? 'г' : u === 'kg' ? 'кг' : u;
+          }
+        }
+
+        // Цена — форматы: "11.192 тенге за кг", "5490 тг/250гр", "по 14500", "14 500 тг"
+        const pricePatterns = [
+          /(\d[\d\s.,]*\d|\d{3,})\s*(?:тг|тенге|тнг|₸)/i,
+          /(?:по|x|х)\s+(\d[\d\s.,]*\d|\d{3,})/i,
+          /,\s*(\d[\d\s.,]*\d|\d{3,})\s*(?:тенге|тг|за)/i,
+        ];
+        for (const pp of pricePatterns) {
+          const pm = seg.match(pp);
+          if (pm) {
+            const p = stripSep(pm[1]);
+            if (p && Number(p) > 99) { item.price = p; break; }
+          }
+        }
+
+        // Название: всё до первого "-" / "×" / числа с единицей
+        let nameRaw = seg
+          .replace(/[-–]\s*[\d.,]+\s*(?:кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)?.*$/i, '')
+          .replace(/[\d]+(?:[.,]\d+)?\s*(?:кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)\s*.*/i, '')
+          .replace(/с\s+помолом|помол\w*/gi, '')
+          .replace(/[,;]$/, '').trim();
+        if (nameRaw.length < 2) nameRaw = seg.replace(/[,;]$/, '').trim().slice(0, 60);
+        item.name = nameRaw;
+
+        // Матчим с каталогом — ищем по ключевым словам из названия товара в каталоге
+        const segLower = seg.toLowerCase();
+        const matched = products.filter(p => p.active).find(p => {
+          const keywords = p.name.split(/[\s,()]+/).filter(w => w.length > 3);
+          return keywords.some(k => segLower.includes(k.toLowerCase()));
+        });
+        if (matched) {
+          item.product_id = matched.id;
+          item.name = matched.name;
+          item.unit = matched.unit;
+          if (!item.price) item.price = String(matched.price);
+          // Если товар — кофе в зерне и не задан нужен_помол, даём возможность выбрать
+          if (matched.cat === 'Кофе зерно' && !item.needs_grind) {
+            item.needs_grind = false; // опционально — покажем grind-селектор через isGrindableProduct
+          }
+        }
+
+        if (item.name || item.product_id) parsedItems.push(item);
+      }
+
+      if (parsedItems.length > 0) {
+        result.items = parsedItems;
+        det.add('items');
+      }
+    }
+
+    // ── Fallback: одиночный товар (если нет строки "Заказ:") ─────────────────
+    if (!det.has('items') && result.items.length === 0) {
+      // Кол-во и цена
+      const m2 = text.match(/(\d+(?:[.,]\d+)?)\s*(?:кг|шт|упак|пач\w*|короб\w*|kg|pcs)?\s*(?:[xх×*]|по)\s*(\d[\d\s.,]*\d|\d{3,})/i);
+      if (m2) {
+        const priceCandidate = stripSep(m2[2]);
+        if (priceCandidate && Number(priceCandidate) > 0) {
+          const fbItem = emptyItem();
+          fbItem.quantity = m2[1].replace(',', '.');
+          fbItem.price = priceCandidate;
+          // Матч по каталогу
+          const matched2 = products.filter(p => p.active).find(p => {
+            const kws = p.name.split(/[\s,]+/).filter(w => w.length > 3);
+            return kws.some(k => lowerText.includes(k.toLowerCase()));
+          });
+          if (matched2) {
+            fbItem.product_id = matched2.id;
+            fbItem.name = matched2.name;
+            fbItem.unit = matched2.unit;
+          } else {
+            // Пробуем вытащить слова до числа как название
+            const beforeQty = text.split(/\d/)[0].trim().replace(/[,;:]$/, '').trim();
+            if (beforeQty.length > 2) fbItem.name = beforeQty.slice(0, 60);
+          }
+          result.items = [fbItem];
+          det.add('items');
+        }
+      } else {
+        // Просто матч товара из каталога
+        const matched3 = products.filter(p => p.active).find(p => {
+          const kws = p.name.split(/[\s,]+/).filter(w => w.length > 3);
+          return kws.some(k => lowerText.includes(k.toLowerCase()));
+        });
+        if (matched3) {
+          const fbItem = emptyItem();
+          fbItem.product_id = matched3.id;
+          fbItem.name = matched3.name;
+          fbItem.unit = matched3.unit;
+          fbItem.price = String(matched3.price);
+          result.items = [fbItem];
+          det.add('items');
+        }
       }
     }
 
@@ -5135,17 +5297,38 @@ function CreateQuickScreen({ ctx }) {
     if (det.size > 0) showToast(`Распознано полей: ${det.size}`);
   };
 
-  // Формирует текст для пересылки в чат-группу (компактный)
+  // Формирует текст для пересылки в чат-группу (несколько товаров)
   const buildForwardText = (order, formSnapshot) => {
-    const prod = products.find(p => p.id === formSnapshot.product_id);
-    const qty = Number(formSnapshot.quantity) || 0;
-    const price = Number(formSnapshot.price) || 0;
-    const sum = qty * price;
     const lines = [];
     lines.push(`🆕 Заявка ${order.order_number}${order.realization_doc_no ? ` · ${order.realization_doc_no}` : ''}`);
     const clientLabel = formSnapshot.client_type === 'legal' ? 'Клиент (юр.)' : 'Клиент';
     lines.push(`${clientLabel}: ${formSnapshot.client_name}${formSnapshot.bin ? ` (БИН ${formSnapshot.bin})` : ''}`);
-    if (prod) lines.push(`Товар: ${prod.name} — ${qty} ${prod.unit} × ${fmtNum(price)} = ${fmtNum(sum)} тг`);
+
+    const items = formSnapshot.items || [];
+    if (items.length === 1) {
+      const it = items[0];
+      const qty = Number(it.quantity) || 0;
+      const price = Number(it.price) || 0;
+      const grindLabel = it.grind_type
+        ? ` [помол: ${it.grind_type === 'custom' ? (it.grind_custom || 'свой') : (GRIND_TYPES[it.grind_type]?.label || it.grind_type)}]`
+        : '';
+      lines.push(`Товар: ${it.name} — ${qty} ${it.unit} × ${fmtNum(price)} = ${fmtNum(qty * price)} тг${grindLabel}`);
+    } else if (items.length > 1) {
+      lines.push('Товары:');
+      let total = 0;
+      items.forEach(it => {
+        const qty = Number(it.quantity) || 0;
+        const price = Number(it.price) || 0;
+        const sum = qty * price;
+        total += sum;
+        const grindLabel = it.grind_type
+          ? ` [помол: ${it.grind_type === 'custom' ? (it.grind_custom || 'свой') : (GRIND_TYPES[it.grind_type]?.label || it.grind_type)}]`
+          : '';
+        lines.push(`  · ${it.name} — ${qty} ${it.unit} × ${fmtNum(price)} = ${fmtNum(sum)} тг${grindLabel}`);
+      });
+      lines.push(`ИТОГО: ${fmtNum(total)} тг`);
+    }
+
     lines.push(`Получение: ${formSnapshot.delivery_method === 'pickup' ? '🏪 Самовывоз' : '🚚 Доставка'}`);
     if (formSnapshot.address && formSnapshot.address !== '—') lines.push(`Адрес: ${formSnapshot.address}`);
     if (formSnapshot.phone && formSnapshot.phone !== '+70000000000') lines.push(`Тел.: ${prettyPhone(formSnapshot.phone)}`);
@@ -5158,12 +5341,20 @@ function CreateQuickScreen({ ctx }) {
   const handleCreate = () => {
     const e = {};
     if (!form.client_name || form.client_name.trim().length < 2) e.client_name = 'Укажите имя клиента';
-    if (!form.product_id) e.product_id = 'Выберите товар';
-    if (!Number(form.quantity) || Number(form.quantity) <= 0) e.quantity = 'Больше 0';
-    if (!Number(form.price) || Number(form.price) <= 0) e.price = 'Больше 0';
+    const items = form.items || [];
+    if (items.length === 0) {
+      e.items = 'Добавьте хотя бы один товар';
+    } else {
+      items.forEach((it, i) => {
+        if (!it.name && !it.product_id) e[`item_${i}_name`] = 'Укажите товар';
+        if (!Number(it.quantity) || Number(it.quantity) <= 0) e[`item_${i}_qty`] = 'Кол-во > 0';
+        if (!Number(it.price) || Number(it.price) <= 0) e[`item_${i}_price`] = 'Укажите цену';
+        if (it.needs_grind && !it.grind_type) e[`item_${i}_grind`] = 'Выберите тип помола';
+        if (it.grind_type === 'custom' && !it.grind_custom?.trim()) e[`item_${i}_grind`] = 'Опишите помол';
+      });
+    }
     if (!form.delivery_method) e.delivery_method = 'Выберите способ получения';
     if (!form.payment_method) e.payment_method = 'Выберите способ оплаты';
-    // Номер 1С не обязателен, но если введён — должен быть в формате 00ЦТ-NNNNNN
     if (form.doc_no && form.doc_no.trim() && !isValidDocNo(form.doc_no.trim())) {
       e.doc_no = 'Формат должен быть 00ЦТ-NNNNNN (например 00ЦТ-012573)';
     }
@@ -5171,6 +5362,17 @@ function CreateQuickScreen({ ctx }) {
     if (Object.keys(e).length > 0) return;
 
     const isLegal = form.client_type === 'legal';
+    const orderItems = items.map(it => {
+      const prod = products.find(p => p.id === it.product_id);
+      return {
+        product_id: it.product_id || null,
+        name: it.name || prod?.name || '—',
+        unit: it.unit || prod?.unit || 'шт',
+        price: Number(it.price),
+        original_price: prod?.price || Number(it.price),
+        quantity: Number(it.quantity),
+      };
+    });
     const payload = {
       client_type: form.client_type || 'individual',
       ...(isLegal
@@ -5180,14 +5382,35 @@ function CreateQuickScreen({ ctx }) {
       address: form.address || '—',
       delivery_method: form.delivery_method,
       payment_method: form.payment_method,
-      items: [{ product_id: product.id, name: product.name, unit: product.unit, price: Number(form.price), original_price: product.price, quantity: Number(form.quantity) }],
+      items: orderItems,
       comment: form.raw_text ? `[Из чата]\n${form.raw_text}` : '—',
       ...(form.doc_no ? { realization_doc_no: form.doc_no.trim() } : {}),
     };
     const order = createOrder(payload, 'quick');
-    // Сразу переводим в "В работе"
     changeStatus(order.id, 'in_work');
-    showToast(`Быстрая заявка ${order.order_number} создана · в работе`);
+
+    // Автоматически создаём заявки на помол для товаров с выбранным grind_type
+    const grindItems = items.filter(it => it.grind_type);
+    grindItems.forEach(it => {
+      const prod = products.find(p => p.id === it.product_id);
+      createGrindRequest({
+        product_id: it.product_id || null,
+        product_name: it.name || prod?.name || '—',
+        quantity: Number(it.quantity),
+        unit: it.unit || prod?.unit || 'кг',
+        grind_type: it.grind_type,
+        grind_custom: it.grind_custom || '',
+        client_type: form.client_type || 'individual',
+        client_name: form.client_name.trim(),
+        delivery_method: form.delivery_method,
+        address: form.address || '',
+        phone: form.phone || '',
+        comment: `Из B2B заявки ${order.order_number}`,
+      });
+    });
+
+    const grindNote = grindItems.length > 0 ? ` · ${grindItems.length} заявка на помол` : '';
+    showToast(`Заявка ${order.order_number} создана · в работе${grindNote}`);
     setConfirmModal({ order, forwardText: buildForwardText(order, form) });
   };
 
@@ -5350,8 +5573,9 @@ function CreateQuickScreen({ ctx }) {
         </div>
 
         <div className="space-y-4">
-          <Card title="Поля заявки (проверьте после разбора)">
+          <Card>
             <div className="space-y-2.5">
+              {/* Имя клиента */}
               <div>
                 <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
                   {form.client_type === 'legal' ? 'Компания' : 'Имя клиента'} <Dot field="client_name" />
@@ -5365,48 +5589,7 @@ function CreateQuickScreen({ ctx }) {
                 {errors.client_name && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.client_name}</div>}
               </div>
 
-              <div>
-                <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
-                  Товар <Dot field="product_id" />
-                </label>
-                <button onClick={pickProduct} className="w-full px-3 py-2 rounded-lg flex items-center justify-between text-left text-sm" style={{ border: `1px solid ${errors.product_id ? '#EB5757' : '#E5E7EB'}`, background: 'white' }}>
-                  {product ? (
-                    <span className="truncate" style={{ color: '#1A1814' }}>{product.name} <span style={{ color: '#64748B' }}>({product.unit})</span></span>
-                  ) : (
-                    <span style={{ color: '#A8A8AE' }}>Выбрать из прайса…</span>
-                  )}
-                  <ChevronRight size={16} style={{ color: '#A8A8AE', flexShrink: 0 }} />
-                </button>
-                {errors.product_id && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.product_id}</div>}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
-                    {`Кол-во${product ? ` (${product.unit})` : ''}`} <Dot field="quantity" />
-                  </label>
-                  <input
-                    value={form.quantity || ''}
-                    onChange={e => update({ quantity: e.target.value.replace(/[^0-9.]/g, '') })}
-                    className="w-full px-3 py-2 rounded-lg outline-none"
-                    style={{ border: `1px solid ${errors.quantity ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }}
-                  />
-                  {errors.quantity && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.quantity}</div>}
-                </div>
-                <div>
-                  <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
-                    Цена за ед. <Dot field="price" />
-                  </label>
-                  <input
-                    value={form.price || ''}
-                    onChange={e => update({ price: e.target.value.replace(/[^0-9.]/g, '') })}
-                    className="w-full px-3 py-2 rounded-lg outline-none"
-                    style={{ border: `1px solid ${errors.price ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }}
-                  />
-                  {errors.price && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.price}</div>}
-                </div>
-              </div>
-
+              {/* БИН для юр. лиц */}
               {form.client_type === 'legal' && (
                 <div>
                   <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
@@ -5421,6 +5604,7 @@ function CreateQuickScreen({ ctx }) {
                 </div>
               )}
 
+              {/* Телефон */}
               <div>
                 <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
                   Телефон <Dot field="phone" />
@@ -5433,6 +5617,7 @@ function CreateQuickScreen({ ctx }) {
                 />
               </div>
 
+              {/* Адрес */}
               <div>
                 <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
                   Адрес <Dot field="address" />
@@ -5445,9 +5630,10 @@ function CreateQuickScreen({ ctx }) {
                 />
               </div>
 
+              {/* Номер документа 1С */}
               <div>
                 <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
-                  Номер документа реализации (1С, опц.) <Dot field="doc_no" />
+                  Номер документа 1С (опц.) <Dot field="doc_no" />
                 </label>
                 <input
                   value={form.doc_no || ''}
@@ -5463,14 +5649,203 @@ function CreateQuickScreen({ ctx }) {
                   {errors.doc_no || 'Формат 00ЦТ-NNNNNN (4–7 цифр)'}
                 </div>
               </div>
-
-              {total > 0 && (
-                <div className="flex items-center justify-between pt-2 mt-1" style={{ borderTop: '1px solid #E5E7EB' }}>
-                  <span className="text-sm font-semibold" style={{ color: '#64748B' }}>ИТОГО</span>
-                  <span className="text-lg font-bold" style={{ color: '#1A1814' }}>{fmtNum(total)} тг</span>
-                </div>
-              )}
             </div>
+          </Card>
+
+          {/* ── Список товаров ────────────────────────────────────────────── */}
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold" style={{ color: '#1A1814' }}>
+                Товары <Dot field="items" />
+                {(form.items || []).length > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded text-[11px]" style={{ background: '#EAF4F6', color: '#297b8a' }}>
+                    {(form.items || []).length}
+                  </span>
+                )}
+              </span>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={addItemFromPicker}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
+                  style={{ background: '#297b8a', color: 'white' }}
+                >
+                  <Plus size={12} /> Из прайса
+                </button>
+                <button
+                  onClick={addEmptyItem}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
+                  style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}
+                >
+                  <Plus size={12} /> Вручную
+                </button>
+              </div>
+            </div>
+
+            {errors.items && (
+              <div className="text-xs mb-2 px-2 py-1.5 rounded-lg" style={{ color: '#EB5757', background: '#FEF2F2' }}>
+                {errors.items}
+              </div>
+            )}
+
+            {(form.items || []).length === 0 ? (
+              <div className="text-center py-6 text-sm" style={{ color: '#A8A8AE' }}>
+                Нет товаров — добавьте из прайса или вручную
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {(form.items || []).map((it, idx) => {
+                  const showGrind = it.needs_grind || isGrindableProduct(it.product_id);
+                  const qtyErr = errors[`item_${idx}_qty`];
+                  const priceErr = errors[`item_${idx}_price`];
+                  const grindErr = errors[`item_${idx}_grind`];
+                  return (
+                    <div key={it.local_id} className="rounded-lg p-3 space-y-2" style={{ background: '#F8FAFB', border: '1px solid #E5E7EB' }}>
+                      {/* Строка: товар + кнопка удалить */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => pickItemProduct(idx)}
+                          className="flex-1 px-2.5 py-1.5 rounded-lg flex items-center justify-between text-left text-sm"
+                          style={{ background: 'white', border: `1px solid ${errors[`item_${idx}_name`] ? '#EB5757' : '#E5E7EB'}` }}
+                        >
+                          {it.product_id || it.name ? (
+                            <span className="truncate" style={{ color: '#1A1814' }}>
+                              {it.name || products.find(p => p.id === it.product_id)?.name || '—'}
+                              <span className="ml-1" style={{ color: '#64748B' }}>({it.unit})</span>
+                            </span>
+                          ) : (
+                            <span style={{ color: '#A8A8AE' }}>Выбрать товар…</span>
+                          )}
+                          <ChevronRight size={14} style={{ color: '#A8A8AE', flexShrink: 0 }} />
+                        </button>
+                        <button
+                          onClick={() => removeItem(it.local_id)}
+                          className="p-1.5 rounded-lg flex-shrink-0"
+                          style={{ color: '#A8A8AE' }}
+                          title="Удалить"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                      {errors[`item_${idx}_name`] && (
+                        <div className="text-xs" style={{ color: '#EB5757' }}>{errors[`item_${idx}_name`]}</div>
+                      )}
+
+                      {/* Название (только если нет product_id — ручной ввод) */}
+                      {!it.product_id && (
+                        <input
+                          value={it.name || ''}
+                          onChange={e => updateItem(it.local_id, { name: e.target.value })}
+                          placeholder="Название товара"
+                          className="w-full px-2.5 py-1.5 rounded-lg outline-none text-sm"
+                          style={{ border: '1px solid #E5E7EB', background: 'white' }}
+                        />
+                      )}
+
+                      {/* Кол-во + цена */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <div className="text-[11px] mb-1" style={{ color: '#64748B' }}>Кол-во ({it.unit || 'ед'})</div>
+                          <input
+                            value={it.quantity || ''}
+                            onChange={e => updateItem(it.local_id, { quantity: e.target.value.replace(/[^0-9.]/g, '') })}
+                            className="w-full px-2.5 py-1.5 rounded-lg outline-none text-sm"
+                            style={{ border: `1px solid ${qtyErr ? '#EB5757' : '#E5E7EB'}`, background: 'white' }}
+                          />
+                          {qtyErr && <div className="text-[11px] mt-0.5" style={{ color: '#EB5757' }}>{qtyErr}</div>}
+                        </div>
+                        <div>
+                          <div className="text-[11px] mb-1" style={{ color: '#64748B' }}>Цена / ед. (тг)</div>
+                          <input
+                            value={it.price || ''}
+                            onChange={e => updateItem(it.local_id, { price: e.target.value.replace(/[^0-9.]/g, '') })}
+                            className="w-full px-2.5 py-1.5 rounded-lg outline-none text-sm"
+                            style={{ border: `1px solid ${priceErr ? '#EB5757' : '#E5E7EB'}`, background: 'white' }}
+                          />
+                          {priceErr && <div className="text-[11px] mt-0.5" style={{ color: '#EB5757' }}>{priceErr}</div>}
+                        </div>
+                      </div>
+
+                      {/* Строка итого по item */}
+                      {Number(it.quantity) > 0 && Number(it.price) > 0 && (
+                        <div className="text-xs text-right" style={{ color: '#64748B' }}>
+                          = {fmtNum(Number(it.quantity) * Number(it.price))} тг
+                        </div>
+                      )}
+
+                      {/* Флаг помола для кофе в зерне — кнопка-переключатель */}
+                      {isGrindableProduct(it.product_id) && !it.needs_grind && (
+                        <button
+                          onClick={() => updateItem(it.local_id, { needs_grind: true })}
+                          className="text-xs px-2 py-1 rounded-lg"
+                          style={{ background: '#EAF4F6', color: '#297b8a', border: '1px dashed #297b8a' }}
+                        >
+                          + Нужен помол
+                        </button>
+                      )}
+
+                      {/* Grind-селектор */}
+                      {showGrind && (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <div className="text-[11px] font-semibold" style={{ color: it.needs_grind ? '#297b8a' : '#64748B' }}>
+                              {it.needs_grind ? '☕ Помол (обязательно)' : '☕ Помол (опционально)'}
+                            </div>
+                            {it.needs_grind && isGrindableProduct(it.product_id) && (
+                              <button
+                                onClick={() => updateItem(it.local_id, { needs_grind: false, grind_type: '' })}
+                                className="text-[10px]"
+                                style={{ color: '#A8A8AE' }}
+                              >
+                                Убрать
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {Object.entries(GRIND_TYPES).map(([key, val]) => (
+                              <button
+                                key={key}
+                                onClick={() => updateItem(it.local_id, { grind_type: it.grind_type === key ? '' : key })}
+                                className="px-2 py-1 rounded-lg text-[11px] font-semibold"
+                                style={{
+                                  background: it.grind_type === key ? '#297b8a' : '#F5F7F8',
+                                  color: it.grind_type === key ? 'white' : '#1A1814',
+                                  border: it.grind_type === key ? '1px solid #297b8a' : '1px solid #E5E7EB',
+                                }}
+                              >
+                                {val.label}
+                              </button>
+                            ))}
+                          </div>
+                          {it.grind_type === 'custom' && (
+                            <input
+                              value={it.grind_custom || ''}
+                              onChange={e => updateItem(it.local_id, { grind_custom: e.target.value })}
+                              placeholder="Опишите помол…"
+                              className="w-full px-2.5 py-1.5 rounded-lg outline-none text-sm"
+                              style={{ border: '1px solid #E5E7EB', background: 'white' }}
+                            />
+                          )}
+                          {it.grind_type && (
+                            <div className="text-[10px] flex items-center gap-1" style={{ color: '#22C55E' }}>
+                              <CheckCircle2 size={10} /> Заявка на помол создастся автоматически
+                            </div>
+                          )}
+                          {grindErr && <div className="text-xs" style={{ color: '#EB5757' }}>{grindErr}</div>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Итого */}
+            {total > 0 && (
+              <div className="flex items-center justify-between pt-3 mt-3" style={{ borderTop: '1px solid #E5E7EB' }}>
+                <span className="text-sm font-semibold" style={{ color: '#64748B' }}>ИТОГО</span>
+                <span className="text-lg font-bold" style={{ color: '#1A1814' }}>{fmtNum(total)} тг</span>
+              </div>
+            )}
           </Card>
 
           <button onClick={handleCreate} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#297b8a' }}>
@@ -5567,7 +5942,40 @@ function ProductPickerScreen({ ctx, pickerTarget }) {
     if (pickerTarget === 'order') {
       setOrderDraft(f => ({ ...f, items: [...f.items, { product_id: p.id, name: p.name, unit: p.unit, price: p.price, original_price: p.price, quantity: 1 }] }));
     } else if (pickerTarget === 'quick') {
-      setQuickDraft(f => ({ ...f, product_id: p.id, price: f.price || String(p.price) }));
+      const idx = ctx.route?.quickItemIdx;
+      if (idx === undefined || idx === null) {
+        // Совместимость со старыми вызовами (не должно случаться)
+        setQuickDraft(f => ({ ...f }));
+      } else if (idx >= 0) {
+        // Замена существующего item по индексу
+        setQuickDraft(f => ({
+          ...f,
+          items: (f.items || []).map((it, i) =>
+            i === idx
+              ? { ...it, product_id: p.id, name: p.name, unit: p.unit, price: String(p.price) }
+              : it
+          ),
+        }));
+      } else {
+        // idx === -1 — добавить новый item
+        setQuickDraft(f => ({
+          ...f,
+          items: [
+            ...(f.items || []),
+            {
+              local_id: uid(),
+              product_id: p.id,
+              name: p.name,
+              unit: p.unit,
+              quantity: '1',
+              price: String(p.price),
+              needs_grind: false,
+              grind_type: '',
+              grind_custom: '',
+            },
+          ],
+        }));
+      }
     }
     goBack();
   };
