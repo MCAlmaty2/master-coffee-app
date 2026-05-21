@@ -5,6 +5,7 @@ import {
   ChevronRight, Trash2, Eye, Users, ArrowRight, Hash, ChevronDown,
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
+  Calendar,
 } from 'lucide-react';
 import { supabase } from './supabase/client';
 import {
@@ -1464,8 +1465,8 @@ function App() {
     if (!task) return { error: 'Задача не найдена' };
     if (!task.visit_date) return { error: 'Задача ещё не в работе' };
     if (!summary || summary.trim().length < 3) return { error: 'Опишите кратко выполненную работу' };
-    // Проверка: дата устройства совпадает с датой посещения
-    const today = new Date().toISOString().slice(0, 10);
+    // Проверка: дата устройства совпадает с датой посещения (используем локальное время, не UTC)
+    const today = todayISO();
     if (today !== task.visit_date) {
       return { error: `Задачу можно закрыть только в день посещения (${task.visit_date}). Сегодня по устройству: ${today}.` };
     }
@@ -6902,7 +6903,7 @@ function RescheduleTaskModal({ task, onClose, onReschedule }) {
 
 function CompleteTaskModal({ task, onClose, onComplete }) {
   const [summary, setSummary] = useState('');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO(); // локальное время (не UTC), важно для Казахстана UTC+5
   const dateMatches = today === task.visit_date;
   return (
     <Modal onClose={onClose} title="Подтвердить выполнение">

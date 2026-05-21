@@ -4,19 +4,20 @@
 
 import { supabase } from './client';
 
-// Конфиг всех синхронизируемых таблиц
+// Конфиг всех синхронизируемых таблиц.
+// ВАЖНО: ключи объекта должны совпадать с ключами состояния в db (camelCase),
+// а поле table — с именем таблицы в Supabase (snake_case).
 export const SYNC_TABLES = {
-  orders:              { table: 'orders', pk: 'id' },
-  grind_requests:      { table: 'grind_requests', pk: 'id' },
-  tasks:               { table: 'tasks', pk: 'id' },
-  write_offs:          { table: 'write_offs', pk: 'id' },
-  contract_requests:   { table: 'contract_requests', pk: 'id' },
-  notifications:       { table: 'notifications', pk: 'id' },
-  role_definitions:    { table: 'role_definitions', pk: 'key' },
-  telegram_settings:   { table: 'telegram_settings', pk: 'id' },
-  telegram_log:        { table: 'telegram_log', pk: 'id' },
-  feedback_messages:   { table: 'feedback_messages', pk: 'id' },
-  error_reports:       { table: 'error_reports', pk: 'id' },
+  orders:             { table: 'orders',            pk: 'id' },
+  grindRequests:      { table: 'grind_requests',    pk: 'id' },
+  tasks:              { table: 'tasks',             pk: 'id' },
+  writeOffs:          { table: 'write_offs',        pk: 'id' },
+  contractRequests:   { table: 'contract_requests', pk: 'id' },
+  notifications:      { table: 'notifications',     pk: 'id' },
+  roleDefinitions:    { table: 'role_definitions',  pk: 'key' },
+  telegramLog:        { table: 'telegram_log',      pk: 'id' },
+  // feedback_messages и error_reports пишутся напрямую через supabase.from(),
+  // поэтому их не включаем в автосинхронизацию.
 };
 
 /**
