@@ -1112,21 +1112,52 @@ function App() {
   };
 
   const closePickupOrder = (orderId, code) => {
+    const order = (db.orders || []).find(o => o.id === orderId);
+    if (!order) return { error: 'Заявка не найдена' };
+    if (order.status !== 'ready') return { error: 'Заявка не готова к выдаче' };
+    if (!order.pickup_code) return { error: 'У заявки нет кода выдачи' };
+    if ((code || '').trim() !== order.pickup_code) return { error: 'Код не совпадает' };
+    // Только склад или админ могут выдать
+    if (currentUser.role !== 'warehouse' && currentUser.role !== 'admin') {
+      return { error: 'Выдавать может только склад' };
+    }
     setDb(d => ({
       ...d,
       orders: d.orders.map(o => {
-        if (o.id !== orderId || o.pickup_code !== code) return o;
-        return { ...o, status: 'archived', log: [...o.log, { event: 'pickup_closed', actor: currentUser.id, at: new Date().toISOString() }] };
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          status: 'archived',
+          log: [...o.log, { event: 'pickup_closed', actor: currentUser.id, at: new Date().toISOString() }]
+        };
       }),
+      notifications: [
+        { id: uid(), recipient_id: order.created_by,
+          title: 'Заказ выдан клиенту',
+          body: `${order.order_number}: клиент забрал самовывоз`,
+          link_kind: 'order', link_id: order.id,
+          at: new Date().toISOString(), read: false },
+        ...d.notifications,
+      ],
     }));
+    return { ok: true };
   };
 
   const cancelOrder = (orderId, reason = '') => {
     const order = (db.orders || []).find(o => o.id === orderId);
     if (!order) return { error: 'Заявка не найдена' };
     if (['archived', 'cancelled'].includes(order.status)) return { error: 'Уже завершена или отменена' };
-    // Отменить может только автор, менеджер или админ
-    const canCancel = order.created_by === currentUser.id || effectiveRole === 'b2b' || currentUser.role === 'admin';
+
+    // Защита от отмены после отгрузки: только админ может отменить заявку
+    // в статусе 'shipped' или 'ready' (когда товар уже передан / клиенту назван код).
+    const isShippedOrReady = ['shipped', 'ready'].includes(order.status);
+    if (isShippedOrReady && currentUser.role !== 'admin') {
+      return { error: 'Отменить заявку после отгрузки может только администратор' };
+    }
+
+    // Отменить может только автор, менеджер B2B/sales/директор/ст.менеджер или админ
+    const canCancel = order.created_by === currentUser.id
+      || ['admin', 'b2b', 'sales', 'director', 'senior_manager'].includes(currentUser.role);
     if (!canCancel) return { error: 'Нет прав отменить' };
     
     setDb(d => ({
@@ -4205,6 +4236,46 @@ function Empty({ icon: Icon = Inbox, title, subtitle }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 /**
+ * Блок выдачи самовывоза. Склад вводит код, который ему называет клиент.
+ * При совпадении — заявка переходит в архив, подавшему уходит уведомление.
+ */
+function PickupDeliverBlock({ order, closePickupOrder, showToast }) {
+  const [code, setCode] = useState('');
+  return (
+    <div className="rounded-xl p-4" style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC' }}>
+      <div className="text-xs font-bold uppercase mb-2" style={{ color: '#15803D', letterSpacing: '0.08em' }}>
+        Выдача клиенту
+      </div>
+      <div className="text-sm mb-3" style={{ color: '#15803D' }}>
+        Попроси клиента назвать 4-значный код и введи его. Код у клиента: <strong className="mono-font">{order.pickup_code}</strong>
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={code}
+          onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          placeholder="0000"
+          maxLength={4}
+          className="flex-1 px-3 py-2 rounded-lg outline-none mono-font text-center text-2xl font-bold tracking-wider"
+          style={{ border: '1px solid #86EFAC', background: 'white' }}
+        />
+        <button
+          onClick={() => {
+            const r = closePickupOrder(order.id, code);
+            if (r?.error) return showToast(r.error);
+            showToast('Заказ выдан · перенесён в архив');
+          }}
+          disabled={code.length !== 4}
+          className="px-4 py-2 rounded-lg font-semibold text-white disabled:opacity-30"
+          style={{ background: '#22C55E' }}
+        >
+          Выдать
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Кнопка «удалить навсегда» для админа на детальных экранах сущностей.
  * Видна только админу. Требует ввода подтверждающего текста.
  */
@@ -4234,7 +4305,7 @@ function AdminDeleteButton({ ctx, kind, id, label, onDeleted }) {
 }
 
 function OrderDetailScreen({ ctx, orderId }) {
-  const { db, currentUser, effectiveRole, goBack, changeStatus, showToast } = ctx;
+  const { db, currentUser, effectiveRole, goBack, changeStatus, closePickupOrder, showToast } = ctx;
   const order = db.orders.find(o => o.id === orderId);
   if (!order) return <div className="p-6">Заявка не найдена</div>;
 
@@ -4389,14 +4460,19 @@ function OrderDetailScreen({ ctx, orderId }) {
             </button>
           )}
 
-          {order.status !== 'shipped' && order.status !== 'archived' && order.status !== 'cancelled' && (
-            <button
-              onClick={() => setStatusModal({ to: 'cancelled' })}
-              className="w-full py-3 rounded-lg font-semibold"
-              style={{ background: '#FEE2E2', color: '#991B1B' }}
-            >
-              <X size={16} className="inline mr-1" /> Отменить заявку
-            </button>
+          {order.status !== 'archived' && order.status !== 'cancelled' && (
+            // После отгрузки (shipped/ready) отменить может ТОЛЬКО админ.
+            // Все остальные — только до отгрузки.
+            (['shipped', 'ready'].includes(order.status) ? currentUser.role === 'admin' : true) && (
+              <button
+                onClick={() => setStatusModal({ to: 'cancelled' })}
+                className="w-full py-3 rounded-lg font-semibold"
+                style={{ background: '#FEE2E2', color: '#991B1B' }}
+              >
+                <X size={16} className="inline mr-1" /> Отменить заявку
+                {['shipped', 'ready'].includes(order.status) && <span className="text-xs ml-2 opacity-70">(только админ)</span>}
+              </button>
+            )
           )}
 
           {effectiveRole === 'warehouse' && order.status === 'shipped' && order.delivery_method === 'pickup' && (
@@ -4405,8 +4481,13 @@ function OrderDetailScreen({ ctx, orderId }) {
               className="w-full py-3 rounded-lg font-semibold text-white"
               style={{ background: '#22C55E' }}
             >
-              Подтвердить готовность
+              <Package size={16} className="inline mr-1" /> Готов к выдаче — сгенерировать код
             </button>
+          )}
+
+          {/* Блок выдачи самовывоза по коду — для склада/админа когда статус 'ready' */}
+          {(currentUser.role === 'warehouse' || currentUser.role === 'admin') && order.status === 'ready' && order.delivery_method === 'pickup' && order.pickup_code && (
+            <PickupDeliverBlock order={order} closePickupOrder={closePickupOrder} showToast={showToast} />
           )}
         </div>
       </div>
