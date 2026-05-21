@@ -110,8 +110,27 @@ function gen4DigitCode(existing = []) {
 }
 
 // Хелпер: сформировать запись о том, что Telegram-бот "отправил бы"
-function makeTgLogEntry(db, eventKey, message) {
+// makeTgLogEntry(db, eventKey, vars)
+// vars — объект переменных для шаблона, ИЛИ строка (legacy-совместимость)
+function makeTgLogEntry(db, eventKey, vars) {
   const tg = db.telegramSettings || {};
+  const now = new Date().toISOString();
+
+  // Проверяем флаг включения (по умолчанию включено)
+  const enabled = tg.topics_enabled?.[eventKey] !== false;
+  if (!enabled) {
+    return { id: uid(), at: now, event: eventKey, target: 'отключено', configured: false, message: '[отключено]', disabled: true };
+  }
+
+  // Рендерим сообщение: из шаблона (с vars) или напрямую (строка)
+  let message;
+  if (typeof vars === 'string') {
+    message = vars; // legacy: уже готовая строка
+  } else {
+    const template = tg.templates?.[eventKey] || DEFAULT_TG_TEMPLATES[eventKey] || '';
+    message = renderTemplate(template, vars);
+  }
+
   const topicId = tg.topics?.[eventKey] || '';
   const chatId = tg.group_chat_id || '';
   const target = chatId
@@ -121,11 +140,7 @@ function makeTgLogEntry(db, eventKey, message) {
   // Fire-and-forget: отправляем через Edge Function send-telegram
   if (chatId && tg.bot_token) {
     try {
-      const reqBody = {
-        chat_id: chatId,
-        text: message,
-        bot_token: tg.bot_token,        // fallback если Secret не прописан
-      };
+      const reqBody = { chat_id: chatId, text: message, bot_token: tg.bot_token };
       if (topicId) reqBody.message_thread_id = topicId;
       supabase.functions.invoke('send-telegram', { body: reqBody })
         .then(({ data, error }) => {
@@ -138,14 +153,7 @@ function makeTgLogEntry(db, eventKey, message) {
     }
   }
 
-  return {
-    id: uid(),
-    at: new Date().toISOString(),
-    event: eventKey,
-    target,
-    configured: !!tg.bot_token && !!chatId,
-    message,
-  };
+  return { id: uid(), at: now, event: eventKey, target, configured: !!tg.bot_token && !!chatId, message };
 }
 
 // Отправить личное сообщение пользователю (требует Telegram chat_id = telegram_id юзера,
@@ -462,6 +470,85 @@ const GRIND_TYPES = {
   custom:      { label: 'Свой вариант', hint: 'Опишите в комментарии' },
 };
 
+// ─── Рендерер шаблонов Telegram: {{variable}} → значение ───────────────────
+function renderTemplate(template, vars) {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    const val = vars[key];
+    return (val !== undefined && val !== null) ? String(val) : '';
+  });
+}
+
+// Дефолтные шаблоны — используются если в telegramSettings.templates нет своего
+const DEFAULT_TG_TEMPLATES = {
+  access_request:
+    '🔐 Запрос доступа\n{{first_name}} {{last_name}}\nTelegram: @{{username}}',
+
+  sales_new_b2b:
+    '🆕 Заявка {{order_number}}{{doc_no}}\nКлиент: {{client}}\nСумма: {{total}} тг\nПолучение: {{delivery}}\nМенеджер: {{manager}}',
+
+  sales_pickup_code:
+    '🏷️ Заявка {{order_number}} готова к выдаче\nКлиент: {{client}}\nКод самовывоза: {{pickup_code}}\nСумма: {{total}} тг',
+
+  storage_shipped_pickup:
+    '📦 Самовывоз отгружен · {{order_number}}{{doc_no}}\nКлиент: {{client}}\nКод выдачи: {{pickup_code}}\nСумма: {{total}} тг',
+
+  new_task_technician:
+    '🔧 Задача {{task_number}}\nКлиент: {{client}}\nАдрес: {{address}}\nТел: {{phone}}\nПроблема: {{problem}}\nИсполнитель: {{assignee}}{{date_time}}',
+
+  new_task_barista:
+    '☕ Задача {{task_number}}\nКлиент: {{client}}\nАдрес: {{address}}\nТел: {{phone}}\nПроблема: {{problem}}\nИсполнитель: {{assignee}}{{date_time}}',
+
+  task_done:
+    '✅ Задача {{task_number}} выполнена\nКлиент: {{client}}\nИтог: {{summary}}',
+
+  writeoff_approved:
+    '📝 Акт списания {{wo_number}}\nОдобрил: {{approver}}\nИнициатор: {{creator}}\n\nПозиции:\n{{items}}\n\nПричина: {{reason}}',
+
+  writeoff_to_warehouse:
+    '📦 Списание {{wo_number}}\n{{items_short}}\nСобрать для: {{recipient}}',
+
+  writeoff_ready:
+    '🟢 Списание {{wo_number}} готово — код {{pickup_code}}',
+
+  contract_new:
+    '📑 Новая заявка на договор {{cr_number}}\nТип: {{contract_type}}\nОт: {{manager}}\nПозиций: {{items_count}}',
+
+  contract_signed:
+    '✅ Договор подписан\nЗаявка: {{cr_number}}\nНомер: {{contract_number}}\nКлиент: {{client}}\nТип: {{contract_type}}',
+
+  grind_new:
+    '☕ Заявка на помол {{gr_number}}\nКофе: {{product}} · {{quantity}} {{unit}}\nПомол: {{grind_type}}{{machine}}\nПолучение: {{delivery}}\nМенеджер: {{manager}}',
+
+  grind_ready:
+    '✅ Помол {{gr_number}} готов\n{{product}} · {{quantity}} {{unit}}\nМенеджер: {{manager}}',
+
+  grind_pickup_code:
+    '🏷️ Помол {{gr_number}} готов к выдаче\nКлиент: {{client}}\nКод самовывоза: {{pickup_code}}',
+
+  grind_completed:
+    '📦 Помол {{gr_number}} выдан\n{{product}} · {{quantity}} {{unit}}\n{{delivery_details}}',
+};
+
+// Переменные доступные в каждом шаблоне (для подсказок в UI)
+const TG_TEMPLATE_VARS = {
+  access_request:         ['first_name', 'last_name', 'username'],
+  sales_new_b2b:          ['order_number', 'doc_no', 'client', 'total', 'delivery', 'manager'],
+  sales_pickup_code:      ['order_number', 'client', 'pickup_code', 'total'],
+  storage_shipped_pickup: ['order_number', 'doc_no', 'client', 'pickup_code', 'total'],
+  new_task_technician:    ['task_number', 'client', 'address', 'phone', 'problem', 'assignee', 'date_time'],
+  new_task_barista:       ['task_number', 'client', 'address', 'phone', 'problem', 'assignee', 'date_time'],
+  task_done:              ['task_number', 'client', 'summary'],
+  writeoff_approved:      ['wo_number', 'approver', 'creator', 'items', 'reason'],
+  writeoff_to_warehouse:  ['wo_number', 'items_short', 'recipient'],
+  writeoff_ready:         ['wo_number', 'pickup_code'],
+  contract_new:           ['cr_number', 'contract_type', 'manager', 'items_count'],
+  contract_signed:        ['cr_number', 'contract_number', 'client', 'contract_type'],
+  grind_new:              ['gr_number', 'product', 'quantity', 'unit', 'grind_type', 'machine', 'delivery', 'manager'],
+  grind_ready:            ['gr_number', 'product', 'quantity', 'unit', 'manager'],
+  grind_pickup_code:      ['gr_number', 'client', 'pickup_code'],
+  grind_completed:        ['gr_number', 'product', 'quantity', 'unit', 'delivery_details'],
+};
+
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 МБ на файл (ограничение localStorage)
 
 // Валидатор номера 1С: 00ЦТ-NNNNNN (или Ц/Т в любом регистре, ровно так как в 1С)
@@ -493,7 +580,9 @@ function loadDB() {
       db.writeOffs = [];
       db.contractRequests = [];
       db.notifications = [];
-      if (!db.telegramSettings) db.telegramSettings = { bot_token: '', bot_username: '', group_chat_id: '', topics: {} };
+      if (!db.telegramSettings) db.telegramSettings = { bot_token: '', bot_username: '', group_chat_id: '', topics: {}, topics_enabled: {}, templates: {} };
+      if (!db.telegramSettings.topics_enabled) db.telegramSettings.topics_enabled = {};
+      if (!db.telegramSettings.templates) db.telegramSettings.templates = {};
       // Дозалив отсутствующих полей подключения
       if (!('bot_username' in db.telegramSettings)) db.telegramSettings.bot_username = '';
       // Дозалив ключей тем — без удаления старых (чтобы не потерять ранее настроенные chat_id)
@@ -582,29 +671,15 @@ function seedDB() {
       bot_username: '',
       group_chat_id: '',
       topics: {
-        // Sales Department
-        sales_new_b2b: '',
-        sales_pickup_code: '',
-        // Technical Service
-        new_task_technician: '',
-        // Storage and Delivery
-        storage_shipped_pickup: '',
-        // Partner Support Department
-        new_task_barista: '',
-        // Акты списаний
-        writeoff_approved: '',
-        // Договоры
-        contract_new: '',
-        contract_signed: '',
-        // Дополнительные (необязательно)
-        task_done: '',
-        access_request: '',
-        // Помол кофе
-        grind_new: '',
-        grind_ready: '',
-        grind_pickup_code: '',
-        grind_completed: '',
+        sales_new_b2b: '', sales_pickup_code: '',
+        new_task_technician: '', storage_shipped_pickup: '',
+        new_task_barista: '', writeoff_approved: '',
+        contract_new: '', contract_signed: '',
+        task_done: '', access_request: '',
+        grind_new: '', grind_ready: '', grind_pickup_code: '', grind_completed: '',
       },
+      topics_enabled: {}, // по умолчанию всё включено (true = отсутствие ключа)
+      templates: {},      // по умолчанию используются DEFAULT_TG_TEMPLATES
     },
     telegramLog: [],
     seeded: true,
@@ -980,7 +1055,7 @@ function App() {
               ...d.notifications,
             ],
             telegramLog: [
-              makeTgLogEntry(d, 'access_request', `🔐 Запрос доступа\n${user.first_name} ${user.last_name || ''}\nTelegram: @${tgUser.username || tgUser.id}`),
+              makeTgLogEntry(d, 'access_request', { first_name: user.first_name, last_name: user.last_name || '', username: tgUser.username || String(tgUser.id) }),
               ...d.telegramLog,
             ],
           }));
@@ -1041,7 +1116,14 @@ function App() {
       // (если создатель не B2B и это не быстрая заявка — в Telegram не шлём, чтобы не засорять)
       const sendToSales = kind === 'quick' || currentUser.role === 'b2b';
       const tgEntries = sendToSales
-        ? [makeTgLogEntry(d, 'sales_new_b2b', `🆕 Новая B2B-заявка ${order.order_number}${order.realization_doc_no ? ` · ${order.realization_doc_no}` : ''}\nКлиент: ${clientName}\nСумма: ${fmtNum(order.total_amount)} тг\nПолучение: ${order.delivery_method === 'pickup' ? '🏪 Самовывоз' : '🚚 Доставка'}\nМенеджер: ${getUserName(d, currentUser.id)}`)]
+        ? [makeTgLogEntry(d, 'sales_new_b2b', {
+            order_number: order.order_number,
+            doc_no: order.realization_doc_no ? ` · ${order.realization_doc_no}` : '',
+            client: clientName,
+            total: fmtNum(order.total_amount),
+            delivery: order.delivery_method === 'pickup' ? '🏪 Самовывоз' : '🚚 Доставка',
+            manager: getUserName(d, currentUser.id),
+          })]
         : [];
       return { ...d, orders: [order, ...d.orders], notifications: [...newNotifs, ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
@@ -1097,15 +1179,22 @@ function App() {
       const updatedOrder = orders.find(o => o.id === orderId);
       if (newStatus === 'ready' && updatedOrder?.delivery_method === 'pickup' && updatedOrder?.pickup_code) {
         // → Sales Department: присвоен код для самовывоза
-        tgEntries.push(makeTgLogEntry(d, 'sales_pickup_code',
-          `🏷️ Заявка ${updatedOrder.order_number} готова к выдаче\nКлиент: ${updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name}\nКод самовывоза: ${updatedOrder.pickup_code}\nСумма: ${fmtNum(updatedOrder.total_amount)} тг`
-        ));
+        tgEntries.push(makeTgLogEntry(d, 'sales_pickup_code', {
+          order_number: updatedOrder.order_number,
+          client: updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name,
+          pickup_code: updatedOrder.pickup_code,
+          total: fmtNum(updatedOrder.total_amount),
+        }));
       }
       if (newStatus === 'shipped' && updatedOrder?.delivery_method === 'pickup') {
         // → Storage and Delivery: отгружен заказ-самовывоз
-        tgEntries.push(makeTgLogEntry(d, 'storage_shipped_pickup',
-          `📦 Самовывоз отгружен · ${updatedOrder.order_number}${updatedOrder.realization_doc_no ? ` · ${updatedOrder.realization_doc_no}` : ''}\nКлиент: ${updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name}\nКод выдачи: ${updatedOrder.pickup_code || '—'}\nСумма: ${fmtNum(updatedOrder.total_amount)} тг`
-        ));
+        tgEntries.push(makeTgLogEntry(d, 'storage_shipped_pickup', {
+          order_number: updatedOrder.order_number,
+          doc_no: updatedOrder.realization_doc_no ? ` · ${updatedOrder.realization_doc_no}` : '',
+          client: updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name,
+          pickup_code: updatedOrder.pickup_code || '—',
+          total: fmtNum(updatedOrder.total_amount),
+        }));
       }
       // Прочие смены статуса в Telegram не шлём — это шум по требованию.
       return { ...d, orders, notifications: [...newNotifs, ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
@@ -1367,8 +1456,15 @@ function App() {
         });
       }
       const tgEvent = data.department === 'barista' ? 'new_task_barista' : 'new_task_technician';
-      const when = hasTime ? `\nКогда: ${data.visit_date} ${data.visit_time}` : '';
-      const tgEntry = makeTgLogEntry(d, tgEvent, `🆕 Новая задача ${task.task_number}\nКлиент: ${task.client_name}\nАдрес: ${task.address}\nТел: ${task.phone}\nПроблема: ${task.problem}\nИсполнитель: ${getUserName(d, data.assignee_id)}${when}`);
+      const tgEntry = makeTgLogEntry(d, tgEvent, {
+        task_number: task.task_number,
+        client: task.client_name,
+        address: task.address,
+        phone: task.phone,
+        problem: task.problem,
+        assignee: getUserName(d, data.assignee_id),
+        date_time: hasTime ? `\nКогда: ${data.visit_date} ${data.visit_time}` : '',
+      });
       return {
         ...d,
         tasks: [task, ...d.tasks],
@@ -1486,7 +1582,7 @@ function App() {
         { id: uid(), recipient_id: task.created_by, title: 'Задача выполнена', body: `${task.task_number}: ${task.client_name}`, link_kind: 'task', link_id: task.id, at: new Date().toISOString(), read: false },
         ...d.notifications,
       ],
-      telegramLog: [makeTgLogEntry(d, 'task_done', `✅ Задача ${task.task_number} выполнена\nКлиент: ${task.client_name}\nИтог: ${summary.trim()}`), ...d.telegramLog],
+      telegramLog: [makeTgLogEntry(d, 'task_done', { task_number: task.task_number, client: task.client_name, summary: summary.trim() }), ...d.telegramLog],
     }));
     return { ok: true };
   };
@@ -1578,8 +1674,13 @@ function App() {
         at: new Date().toISOString(), read: false,
       }));
       const itemsSummary = wo.items.map(i => `· ${i.name} — ${i.quantity} ${i.unit}`).join('\n');
-      const tgMsg = `📝 Акт списания ${wo.number}\nОдобрил: ${getUserName(d, currentUser.id)}\nИнициатор: ${getUserName(d, wo.created_by)}\n\nПозиции:\n${itemsSummary}\n\nПричина: ${wo.reason}`;
-      const tgEntry = makeTgLogEntry(d, 'writeoff_approved', tgMsg);
+      const tgEntry = makeTgLogEntry(d, 'writeoff_approved', {
+        wo_number: wo.number,
+        approver: getUserName(d, currentUser.id),
+        creator: getUserName(d, wo.created_by),
+        items: itemsSummary,
+        reason: wo.reason,
+      });
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
     });
     return { ok: true };
@@ -1651,7 +1752,11 @@ function App() {
           link_kind: 'writeoff', link_id: wo.id, at: new Date().toISOString(), read: false,
         })),
       ];
-      const tgEntries = [makeTgLogEntry(d, 'writeoff_to_warehouse', `📦 Списание ${wo.number} (${trimmed}) — собрать для ${author ? author.first_name : '—'}`)];
+      const tgEntries = [makeTgLogEntry(d, 'writeoff_to_warehouse', {
+        wo_number: wo.number,
+        items_short: trimmed,
+        recipient: author ? `${author.first_name} ${author.last_name || ''}`.trim() : '—',
+      })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
     return { ok: true };
@@ -1688,7 +1793,7 @@ function App() {
         link_kind: 'writeoff', link_id: wo.id,
         at: new Date().toISOString(), read: false,
       }];
-      const tgEntries = [makeTgLogEntry(d, 'writeoff_ready', `🟢 Списание ${wo.number} готово — код ${code}`)];
+      const tgEntries = [makeTgLogEntry(d, 'writeoff_ready', { wo_number: wo.number, pickup_code: code })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
     return { ok: true, code };
@@ -1810,7 +1915,7 @@ function App() {
         body: `${number}: ${CONTRACT_TYPE[cr.contract_type].short} от ${getUserName(d, currentUser.id)}`,
         at: new Date().toISOString(), read: false,
       }));
-      const tgMsg = `📑 Новая заявка на договор ${number}\nТип: ${CONTRACT_TYPE[cr.contract_type].label}\nОт: ${getUserName(d, currentUser.id)}\nПозиций: ${spec.length}`;
+      const tgMsg = { cr_number: number, contract_type: CONTRACT_TYPE[cr.contract_type].label, manager: getUserName(d, currentUser.id), items_count: spec.length };
       return {
         ...d,
         contractRequests: [cr, ...d.contractRequests],
@@ -1916,7 +2021,12 @@ function App() {
             title: 'Договор подписан', body: `${cr.number} → ${trimmedNo}`, at: new Date().toISOString(), read: false },
         ...d.notifications,
       ],
-      telegramLog: [makeTgLogEntry(d, 'contract_signed', `✅ Договор подписан\nЗаявка: ${cr.number}\nНомер договора: ${trimmedNo}\nКлиент: ${cr.client_details.split('\n')[0].slice(0, 80)}\nТип: ${CONTRACT_TYPE[cr.contract_type].label}`), ...d.telegramLog],
+      telegramLog: [makeTgLogEntry(d, 'contract_signed', {
+        cr_number: cr.number,
+        contract_number: trimmedNo,
+        client: cr.client_details.split('\n')[0].slice(0, 80),
+        contract_type: CONTRACT_TYPE[cr.contract_type].label,
+      }), ...d.telegramLog],
     }));
     return { ok: true };
   };
@@ -2083,14 +2193,16 @@ function App() {
         body: `${number}: ${grind.product_name} · ${qty} ${grind.unit} · ${GRIND_TYPES[grind.grind_type]?.label || grind.grind_type}`,
         at: new Date().toISOString(), read: false,
       }));
-      const tgMsg = `☕ Заявка на помол ${number}\n` +
-        `Кофе: ${grind.product_name}\n` +
-        `Количество: ${qty} ${grind.unit}\n` +
-        `Помол: ${grind.grind_type === 'custom' ? grind.grind_custom : (GRIND_TYPES[grind.grind_type]?.label || grind.grind_type)}\n` +
-        (grind.machine_model ? `Машина: ${grind.machine_model}\n` : '') +
-        `Получение: ${grind.delivery_method === 'pickup' ? 'самовывоз' : 'доставка по адресу: ' + grind.address}\n` +
-        `Менеджер: ${getUserName(d, currentUser.id)}`;
-      const tgEntry = makeTgLogEntry(d, 'grind_new', tgMsg);
+      const tgEntry = makeTgLogEntry(d, 'grind_new', {
+        gr_number: number,
+        product: grind.product_name,
+        quantity: qty,
+        unit: grind.unit,
+        grind_type: grind.grind_type === 'custom' ? grind.grind_custom : (GRIND_TYPES[grind.grind_type]?.label || grind.grind_type),
+        machine: grind.machine_model ? `\nМашина: ${grind.machine_model}` : '',
+        delivery: grind.delivery_method === 'pickup' ? 'самовывоз' : `доставка: ${grind.address}`,
+        manager: getUserName(d, currentUser.id),
+      });
       return {
         ...d,
         grindRequests: [grind, ...(d.grindRequests || [])],
@@ -2156,14 +2268,19 @@ function App() {
       }];
       const tgEntries = [];
       // ТГ-уведомление о готовности
-      tgEntries.push(makeTgLogEntry(d, 'grind_ready',
-        `✅ Помол ${updated.number} готов\n${updated.product_name} · ${updated.quantity} ${updated.unit}\nМенеджер: ${getUserName(d, updated.created_by)}`
-      ));
-      // Если самовывоз — отдельная тема с кодом
+      tgEntries.push(makeTgLogEntry(d, 'grind_ready', {
+        gr_number: updated.number,
+        product: updated.product_name,
+        quantity: updated.quantity,
+        unit: updated.unit,
+        manager: getUserName(d, updated.created_by),
+      }));
       if (updated.pickup_code) {
-        tgEntries.push(makeTgLogEntry(d, 'grind_pickup_code',
-          `🏷️ ${updated.number} готов к выдаче\nКлиент: ${updated.client_name || '—'}\nКод самовывоза: ${updated.pickup_code}`
-        ));
+        tgEntries.push(makeTgLogEntry(d, 'grind_pickup_code', {
+          gr_number: updated.number,
+          client: updated.client_name || '—',
+          pickup_code: updated.pickup_code,
+        }));
       }
       return {
         ...d,
@@ -2194,10 +2311,13 @@ function App() {
         };
         return updated;
       });
-      const tgMsg = updated.delivery_method === 'delivery'
-        ? `🚚 Помол ${updated.number} отгружен курьеру\n${updated.product_name} · ${updated.quantity} ${updated.unit}\nАдрес: ${updated.address}`
-        : `📦 Помол ${updated.number} выдан клиенту по коду\n${updated.product_name} · ${updated.quantity} ${updated.unit}`;
-      const tgEntry = makeTgLogEntry(d, 'grind_completed', tgMsg);
+      const tgEntry = makeTgLogEntry(d, 'grind_completed', {
+        gr_number: updated.number,
+        product: updated.product_name,
+        quantity: updated.quantity,
+        unit: updated.unit,
+        delivery_details: updated.delivery_method === 'delivery' ? `🚚 Отгружен курьеру · Адрес: ${updated.address}` : '📦 Выдан клиенту по коду',
+      });
       return { ...d, grindRequests: list, telegramLog: [tgEntry, ...d.telegramLog].slice(0, 200) };
     });
     return { ok: true };
@@ -9430,15 +9550,43 @@ function AdminTelegramScreen({ ctx }) {
   const { db, updateTelegramSettings, showToast } = ctx;
   const settings = db.telegramSettings;
   const [form, setForm] = useState({
-    bot_token: settings.bot_token,
+    bot_token: settings.bot_token || '',
     bot_username: settings.bot_username || '',
-    group_chat_id: settings.group_chat_id,
+    group_chat_id: settings.group_chat_id || '',
     topics: { ...settings.topics },
+    topics_enabled: { ...settings.topics_enabled },
+    templates: { ...settings.templates },
   });
   const [testSending, setTestSending] = useState(false);
+  const [expandedTemplates, setExpandedTemplates] = useState({}); // { [key]: bool }
 
   const update = patch => setForm(f => ({ ...f, ...patch }));
   const updateTopic = (key, value) => setForm(f => ({ ...f, topics: { ...f.topics, [key]: value } }));
+  const toggleEnabled = (key) => setForm(f => ({
+    ...f,
+    topics_enabled: { ...f.topics_enabled, [key]: f.topics_enabled[key] === false ? true : false },
+  }));
+  const updateTemplate = (key, value) => setForm(f => ({ ...f, templates: { ...f.templates, [key]: value } }));
+  const resetTemplate = (key) => setForm(f => ({ ...f, templates: { ...f.templates, [key]: '' } }));
+  const toggleTemplate = (key) => setExpandedTemplates(e => ({ ...e, [key]: !e[key] }));
+  const isEnabled = (key) => form.topics_enabled[key] !== false;
+
+  // Вставить {{var}} в textarea по позиции курсора
+  const insertVar = (key, varName, textareaRef) => {
+    const ta = textareaRef?.current;
+    const insert = `{{${varName}}}`;
+    if (ta) {
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const current = form.templates[key] || DEFAULT_TG_TEMPLATES[key] || '';
+      const newVal = current.slice(0, start) + insert + current.slice(end);
+      updateTemplate(key, newVal);
+      setTimeout(() => { ta.focus(); ta.setSelectionRange(start + insert.length, start + insert.length); }, 0);
+    } else {
+      const current = form.templates[key] || DEFAULT_TG_TEMPLATES[key] || '';
+      updateTemplate(key, current + insert);
+    }
+  };
 
   const handleSave = () => {
     updateTelegramSettings(form);
@@ -9477,43 +9625,39 @@ function AdminTelegramScreen({ ctx }) {
   const topicGroups = [
     {
       title: 'Sales Department',
-      hint: 'Новые B2B-заявки и присвоение кода самовывоза',
+      hint: 'Новые B2B-заявки и самовывоз',
       items: [
-        { key: 'sales_new_b2b',     label: 'Новая B2B-заявка' },
-        { key: 'sales_pickup_code', label: 'Присвоен код для самовывоза' },
+        { key: 'sales_new_b2b',          label: 'Новая B2B-заявка' },
+        { key: 'sales_pickup_code',       label: 'Присвоен код для самовывоза' },
+        { key: 'storage_shipped_pickup',  label: 'Самовывоз отгружен со склада' },
       ],
     },
     {
       title: 'Technical Service',
-      hint: 'Новые задачи для отдела техников',
+      hint: 'Задачи для отдела техников',
       items: [
         { key: 'new_task_technician', label: 'Новая задача (Техник)' },
       ],
     },
     {
-      title: 'Storage and Delivery',
-      hint: 'Заказы для самовывоза, перешедшие в статус «Отгружен»',
-      items: [
-        { key: 'storage_shipped_pickup', label: 'Самовывоз отгружен' },
-      ],
-    },
-    {
       title: 'Partner Support Department',
-      hint: 'Новые задачи для отдела бариста',
+      hint: 'Задачи для отдела бариста',
       items: [
         { key: 'new_task_barista', label: 'Новая задача (Бариста)' },
       ],
     },
     {
       title: 'Акты списаний',
-      hint: 'Только после одобрения директором или ст.менеджером',
+      hint: 'Жизненный цикл актов списания',
       items: [
-        { key: 'writeoff_approved', label: 'Акт списания одобрен' },
+        { key: 'writeoff_approved',      label: 'Акт одобрен (в Telegram)' },
+        { key: 'writeoff_to_warehouse',  label: 'Отправлено на склад собирать' },
+        { key: 'writeoff_ready',         label: 'Склад собрал, код выдачи' },
       ],
     },
     {
       title: 'Договоры',
-      hint: 'Жизненный цикл договоров — от заявки до подписания',
+      hint: 'Жизненный цикл договоров',
       items: [
         { key: 'contract_new',    label: 'Новая заявка на договор' },
         { key: 'contract_signed', label: 'Договор подписан' },
@@ -9521,20 +9665,20 @@ function AdminTelegramScreen({ ctx }) {
     },
     {
       title: 'Помол кофе',
-      hint: 'Жизненный цикл заявок на помол — от заявки склада до выдачи клиенту',
+      hint: 'Жизненный цикл заявок на помол',
       items: [
-        { key: 'grind_new',         label: 'Новая заявка на помол (складу)' },
-        { key: 'grind_ready',       label: 'Помол готов (менеджеру)' },
-        { key: 'grind_pickup_code', label: 'Код для самовывоза (клиенту)' },
-        { key: 'grind_completed',   label: 'Помол выдан (в архиве)' },
+        { key: 'grind_new',         label: 'Новая заявка на помол' },
+        { key: 'grind_ready',       label: 'Помол готов' },
+        { key: 'grind_pickup_code', label: 'Код для самовывоза' },
+        { key: 'grind_completed',   label: 'Помол выдан клиенту' },
       ],
     },
     {
-      title: 'Дополнительные (необязательно)',
-      hint: 'Если оставить пустыми — никуда не отправляется',
+      title: 'Прочее',
+      hint: 'Задачи выполнены, запросы доступа',
       items: [
-        { key: 'task_done',       label: 'Задача выполнена' },
-        { key: 'access_request',  label: 'Запрос доступа' },
+        { key: 'task_done',      label: 'Задача выполнена' },
+        { key: 'access_request', label: 'Запрос доступа в CRM' },
       ],
     },
   ];
@@ -9615,21 +9759,109 @@ function AdminTelegramScreen({ ctx }) {
         {topicGroups.map(group => (
           <Card key={group.title} title={group.title}>
             <div className="text-xs mb-3" style={{ color: '#64748B' }}>{group.hint}</div>
-            <div className="space-y-2">
-              {group.items.map(({ key, label }) => (
-                <div key={key} className="grid grid-cols-2 gap-2 items-center">
-                  <div className="text-sm" style={{ color: '#1A1814' }}>
-                    {label}
-                    <div className="text-[10px] mono-font" style={{ color: '#A8A8AE' }}>{key}</div>
+            <div className="space-y-3">
+              {group.items.map(({ key, label }) => {
+                const enabled = isEnabled(key);
+                const templateVal = form.templates[key] ?? '';
+                const defaultTpl = DEFAULT_TG_TEMPLATES[key] || '';
+                const displayTpl = templateVal || defaultTpl;
+                const isExpanded = !!expandedTemplates[key];
+                const vars = TG_TEMPLATE_VARS[key] || [];
+                // Ref для вставки переменной в позицию курсора
+                const taRef = React.createRef();
+                return (
+                  <div key={key} className="rounded-lg overflow-hidden" style={{ border: `1px solid ${enabled ? '#E5E7EB' : '#F1F5F9'}`, opacity: enabled ? 1 : 0.6 }}>
+                    {/* Заголовок строки */}
+                    <div className="flex items-center gap-2 p-2.5" style={{ background: enabled ? 'white' : '#F8FAFC' }}>
+                      {/* Toggle вкл/выкл */}
+                      <button
+                        onClick={() => toggleEnabled(key)}
+                        className="flex-shrink-0 w-9 h-5 rounded-full relative transition-colors"
+                        style={{ background: enabled ? '#297b8a' : '#CBD5E1' }}
+                        title={enabled ? 'Отключить уведомление' : 'Включить уведомление'}
+                      >
+                        <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all" style={{ left: enabled ? '18px' : '2px' }} />
+                      </button>
+
+                      {/* Название и key */}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate" style={{ color: '#1A1814' }}>{label}</div>
+                        <div className="text-[10px] mono-font" style={{ color: '#A8A8AE' }}>{key}</div>
+                      </div>
+
+                      {/* ID темы */}
+                      <input
+                        value={form.topics[key] || ''}
+                        onChange={e => updateTopic(key, e.target.value.replace(/\D/g, ''))}
+                        placeholder="ID темы"
+                        disabled={!enabled}
+                        className="w-24 px-2 py-1.5 rounded-lg text-sm text-center mono-font disabled:opacity-40"
+                        style={{ border: '1px solid #E5E7EB', background: enabled ? 'white' : '#F8FAFC' }}
+                      />
+
+                      {/* Кнопка раскрытия шаблона */}
+                      <button
+                        onClick={() => toggleTemplate(key)}
+                        className="flex-shrink-0 p-1.5 rounded-lg"
+                        style={{ background: isExpanded ? '#EAF4F6' : '#F5F7F8', color: '#64748B' }}
+                        title="Редактировать шаблон"
+                      >
+                        <ChevronDown size={14} style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+                      </button>
+                    </div>
+
+                    {/* Редактор шаблона — раскрывается */}
+                    {isExpanded && (
+                      <div className="p-2.5 space-y-2" style={{ borderTop: '1px solid #F1F5F9', background: '#FAFBFC' }}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold" style={{ color: '#64748B' }}>Шаблон сообщения</span>
+                          {templateVal && (
+                            <button
+                              onClick={() => resetTemplate(key)}
+                              className="text-[10px] px-2 py-0.5 rounded"
+                              style={{ color: '#64748B', background: '#F1F5F9' }}
+                            >
+                              Сбросить к дефолту
+                            </button>
+                          )}
+                        </div>
+                        <textarea
+                          ref={taRef}
+                          value={displayTpl}
+                          onChange={e => updateTemplate(key, e.target.value)}
+                          rows={Math.max(3, displayTpl.split('\n').length + 1)}
+                          className="w-full px-2.5 py-2 rounded-lg outline-none mono-font text-xs"
+                          style={{ border: '1px solid #E5E7EB', background: 'white', resize: 'vertical', lineHeight: 1.5 }}
+                          placeholder={defaultTpl}
+                        />
+                        {/* Чипы переменных */}
+                        {vars.length > 0 && (
+                          <div>
+                            <div className="text-[10px] mb-1.5" style={{ color: '#A8A8AE' }}>Нажмите переменную — вставится в текст:</div>
+                            <div className="flex flex-wrap gap-1">
+                              {vars.map(v => (
+                                <button
+                                  key={v}
+                                  onClick={() => insertVar(key, v, taRef)}
+                                  className="px-1.5 py-0.5 rounded text-[10px] mono-font font-semibold hover:opacity-80"
+                                  style={{ background: '#EAF4F6', color: '#297b8a', border: '1px solid #BAE6ED' }}
+                                >
+                                  {`{{${v}}}`}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {!enabled && (
+                          <div className="text-[10px] px-2 py-1 rounded" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+                            Уведомление отключено — сообщение не будет отправлено
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <input
-                    value={form.topics[key] || ''}
-                    onChange={e => updateTopic(key, e.target.value.replace(/\D/g, ''))}
-                    placeholder="ID темы (если не указано — основной чат)"
-                    className="px-3 py-2 rounded-lg text-sm" style={{ border: '1px solid #E5E7EB' }}
-                  />
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
         ))}
@@ -9662,8 +9894,11 @@ function AdminTelegramScreen({ ctx }) {
                 <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: '#F5F7F8', color: '#64748B' }}>{entry.event}</span>
-                    <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: entry.configured ? '#D1FAE5' : '#FEE2E2', color: entry.configured ? '#166534' : '#991B1B' }}>
-                      {entry.configured ? '✓ отправлено' : '✗ не настроено'}
+                    <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{
+                      background: entry.disabled ? '#F1F5F9' : entry.configured ? '#D1FAE5' : '#FEE2E2',
+                      color: entry.disabled ? '#64748B' : entry.configured ? '#166534' : '#991B1B',
+                    }}>
+                      {entry.disabled ? '○ отключено' : entry.configured ? '✓ отправлено' : '✗ не настроено'}
                     </span>
                     <span className="text-xs" style={{ color: '#64748B' }}>→ {entry.target}</span>
                   </div>
