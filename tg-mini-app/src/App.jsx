@@ -1195,6 +1195,17 @@ function App() {
           pickup_code: updatedOrder.pickup_code || '—',
           total: fmtNum(updatedOrder.total_amount),
         }));
+        // In-app: уведомить всех активных кладовщиков о новом самовывозе
+        const clientName = updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name;
+        d.users.filter(u => u.active && u.role === 'warehouse').forEach(wu => {
+          newNotifs.push({
+            id: uid(), recipient_id: wu.id,
+            title: '📦 Новый самовывоз',
+            body: `${updatedOrder.order_number} · ${clientName}`,
+            link_kind: 'order', link_id: orderId,
+            at: new Date().toISOString(), read: false,
+          });
+        });
       }
       // Прочие смены статуса в Telegram не шлём — это шум по требованию.
       return { ...d, orders, notifications: [...newNotifs, ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
@@ -3502,6 +3513,7 @@ function Screen({ ctx }) {
     case 'contracts': return <ContractListScreen ctx={ctx} />;
     case 'create_contract': return <CreateContractScreen ctx={ctx} />;
     case 'contract_detail': return <ContractDetailScreen ctx={ctx} contractId={route.contractId} />;
+    case 'warehouse': return <WarehouseHome ctx={ctx} />;
     case 'grinds': return <GrindListScreen ctx={ctx} />;
     case 'create_grind': return <CreateGrindScreen ctx={ctx} />;
     case 'grind_detail': return <GrindDetailScreen ctx={ctx} grindId={route.grindId} />;
@@ -3810,16 +3822,16 @@ function DashboardHome({ ctx, title }) {
               <div className="text-[10px]" style={{ color: '#64748B' }}>доставка</div>
             </button>
             <button
-              onClick={() => navigate({ name: 'orders_list', filterStatus: 'shipped' })}
+              onClick={() => navigate({ name: 'warehouse' })}
               className="rounded-xl p-3 text-left transition hover:shadow-md"
               style={{ background: stats.warehouse.awaitingPickup > 0 ? '#E0E7FF' : 'white', border: '1.5px solid ' + (stats.warehouse.awaitingPickup > 0 ? '#6366F1' : '#E5E7EB') }}
             >
               <div className="text-2xl font-bold" style={{ color: '#6366F1' }}>{stats.warehouse.awaitingPickup}</div>
               <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>Самовывоз</div>
-              <div className="text-[10px]" style={{ color: '#64748B' }}>выдать код</div>
+              <div className="text-[10px]" style={{ color: '#64748B' }}>подготовить</div>
             </button>
             <button
-              onClick={() => navigate({ name: 'orders_list', filterStatus: 'ready' })}
+              onClick={() => navigate({ name: 'warehouse' })}
               className="rounded-xl p-3 text-left transition hover:shadow-md"
               style={{ background: stats.warehouse.readyPickup > 0 ? '#DCFCE7' : 'white', border: '1.5px solid ' + (stats.warehouse.readyPickup > 0 ? '#22C55E' : '#E5E7EB') }}
             >

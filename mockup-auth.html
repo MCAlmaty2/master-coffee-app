@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Макет авторизации — MasterCoffee CRM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F5F7F8; }
+
+  /* ── Навигация между экранами ── */
+  .nav { display: flex; gap: 6px; padding: 12px 16px; background: #1A1814; overflow-x: auto; position: sticky; top: 0; z-index: 100; }
+  .nav-btn { padding: 6px 12px; border-radius: 20px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; background: #333; color: #aaa; }
+  .nav-btn.active { background: #297b8a; color: white; }
+
+  /* ── Экраны ── */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ── Мобильный фрейм ── */
+  .mobile-frame {
+    width: 375px; margin: 20px auto; background: white;
+    border-radius: 40px; overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 0 0 8px #1A1814, 0 0 0 9px #333;
+    position: relative; min-height: 700px;
+  }
+  .desktop-frame {
+    max-width: 960px; margin: 20px auto; background: white;
+    border-radius: 16px; overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.15);
+    min-height: 500px;
+  }
+  .frame-label { text-align: center; font-size: 11px; color: #64748B; margin-top: -6px; margin-bottom: 16px; font-weight: 600; letter-spacing: 0.5px; }
+
+  /* ── Утилиты ── */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 20px; border-radius: 12px; border: none; font-weight: 700; font-size: 15px; cursor: pointer; width: 100%; transition: opacity 0.15s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: #297b8a; color: white; }
+  .btn-secondary { background: #F5F7F8; color: #1A1814; border: 1px solid #E5E7EB; }
+  .btn-tg { background: #2AABEE; color: white; }
+  .btn-sm { padding: 8px 14px; font-size: 13px; width: auto; }
+  .card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #E5E7EB; }
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .tag-green { background: #D1FAE5; color: #065F46; }
+  .tag-blue  { background: #EAF4F6; color: #297b8a; }
+
+  /* ── Шаги флоу ── */
+  .flow { display: flex; gap: 0; align-items: stretch; flex-wrap: wrap; padding: 24px 20px; background: #F8FAFB; }
+  .step { flex: 1; min-width: 180px; text-align: center; padding: 0 10px; position: relative; }
+  .step:not(:last-child)::after { content: '→'; position: absolute; right: -8px; top: 20px; font-size: 20px; color: #297b8a; font-weight: bold; }
+  .step-icon { width: 44px; height: 44px; border-radius: 12px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .step-title { font-size: 12px; font-weight: 700; color: #1A1814; margin-bottom: 4px; }
+  .step-desc  { font-size: 11px; color: #64748B; line-height: 1.4; }
+
+  /* ── Сравнение (две колонки) ── */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px; }
+  .compare-col { border-radius: 16px; padding: 16px; }
+  .compare-col.tma  { background: #EAF4F6; border: 2px solid #297b8a; }
+  .compare-col.web  { background: #F0FDF4; border: 2px solid #22C55E; }
+  .compare-title { font-size: 14px; font-weight: 800; margin-bottom: 12px; }
+  .compare-item { font-size: 12px; color: #374151; margin-bottom: 6px; display: flex; gap: 6px; }
+  .compare-item::before { content: '✓'; font-weight: bold; flex-shrink: 0; }
+
+  /* ── Профиль QR ── */
+  .qr-block { background: white; border: 2px dashed #297b8a; border-radius: 16px; padding: 20px; text-align: center; }
+  .qr-img { width: 140px; height: 140px; margin: 0 auto 12px; border-radius: 8px; background: white; padding: 6px; border: 1px solid #E5E7EB; display: flex; align-items: center; justify-content: center; }
+  .qr-svg { width: 128px; height: 128px; }
+
+  /* ── Login экран Chrome ── */
+  .login-desktop { display: grid; grid-template-columns: 1fr 1fr; min-height: 500px; }
+  .login-left { padding: 48px; background: #297b8a; color: white; display: flex; flex-direction: column; justify-content: center; }
+  .login-right { padding: 48px; display: flex; flex-direction: column; justify-content: center; }
+
+  /* ── Анимация переключения ── */
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .screen.active { animation: fadeIn 0.2s ease; }
+
+  /* ── Заголовки ── */
+  h2 { font-size: 22px; font-weight: 800; color: #1A1814; }
+  h3 { font-size: 16px; font-weight: 700; color: #1A1814; }
+  p  { font-size: 14px; color: #64748B; line-height: 1.5; }
+
+  /* ── TMA Profile ── */
+  .tma-page { padding: 16px; background: #F5F7F8; min-height: 600px; }
+  .tma-header { padding: 12px 0 16px; display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 48px; height: 48px; border-radius: 14px; background: #297b8a; color: white; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; flex-shrink: 0; }
+
+  /* ── Ссылка-токен ── */
+  .token-row { background: #F5F7F8; border-radius: 10px; padding: 10px 12px; font-family: monospace; font-size: 11px; color: #64748B; word-break: break-all; margin: 8px 0; border: 1px solid #E5E7EB; }
+
+  /* ── Статус секции ── */
+  .section-header { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px; }
+</style>
+</head>
+<body>
+
+<!-- НАВИГАЦИЯ -->
+<div class="nav">
+  <button class="nav-btn active" onclick="show('flow')">1. Схема флоу</button>
+  <button class="nav-btn" onclick="show('tma-profile')">2. Профиль в TMA (телефон)</button>
+  <button class="nav-btn" onclick="show('web-login')">3. Вход в Chrome</button>
+  <button class="nav-btn" onclick="show('web-app')">4. CRM в браузере</button>
+  <button class="nav-btn" onclick="show('compare')">5. Сравнение / безопасность</button>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН 1: СХЕМА ФЛОУ
+════════════════════════════════════════════ -->
+<div id="screen-flow" class="screen active">
+  <div style="padding: 24px 20px 8px; text-align:center;">
+    <h2>Как сотрудник входит в CRM</h2>
+    <p style="margin-top:6px;">Два варианта — каждый выбирает удобный</p>
+  </div>
+
+  <!-- Выездные -->
+  <div style="padding: 16px 20px 0;">
+    <div class="section-header">📱 Бариста и техники — через Telegram (как сейчас)</div>
+  </div>
+  <div class="flow">
+    <div class="step">
+      <div class="step-icon" style="background:#EAF4F6;">📱</div>
+      <div class="step-title">Открывает Telegram</div>
+      <div class="step-desc">На телефоне, как всегда</div>
+    </div>
+    <div class="step">
+      <div class="step-icon" style="background:#EAF4F6;">🤖</div>
+      <div class="step-title">Нажимает кнопку в боте</div>
+      <div class="step-desc">или ссылку t.me/bot/app</div>
+    </div>
+    <div class="step">
+      <div class="step-icon" style="background:#D1FAE5;">✅</div>
+      <div class="step-title">Автоматически вошёл</div>
+      <div class="step-desc">Telegram ID совпал — сразу в CRM</div>
+    </div>
+  </div>
+
+  <!-- Офисные -->
+  <div style="padding: 8px 20px 0;">
+    <div class="section-header">💻 Офисные сотрудники — через Chrome на ноуте</div>
+  </div>
+  <div class="flow">
+    <div class="step">
+      <div class="step-icon" style="background:#FEF9C3;">🔑</div>
+      <div class="step-title">Получают ссылку один раз</div>
+      <div class="step-desc">Админ генерирует → присылает в Telegram</div>
+    </div>
+    <div class="step">
+      <div class="step-icon" style="background:#FEF9C3;">🌐</div>
+      <div class="step-title">Открывают в Chrome</div>
+      <div class="step-desc">Нажали ссылку → сразу вошли</div>
+    </div>
+    <div class="step">
+      <div class="step-icon" style="background:#D1FAE5;">✅</div>
+      <div class="step-title">Сессия сохранена</div>
+      <div class="step-desc">Браузер запомнил — следующий раз просто открыть сайт</div>
+    </div>
+  </div>
+
+  <!-- QR вариант -->
+  <div style="padding: 8px 20px 0;">
+    <div class="section-header">📷 QR вариант — отсканировать телефоном</div>
+  </div>
+  <div class="flow">
+    <div class="step">
+      <div class="step-icon" style="background:#F3E8FF;">📲</div>
+      <div class="step-title">Открывает свой профиль в TMA</div>
+      <div class="step-desc">Нажимает «Ссылка для браузера»</div>
+    </div>
+    <div class="step">
+      <div class="step-icon" style="background:#F3E8FF;">⬛</div>
+      <div class="step-title">Видит QR-код</div>
+      <div class="step-desc">Или отправляет ссылку себе в Telegram</div>
+    </div>
+    <div class="step">
+      <div class="step-icon" style="background:#F3E8FF;">📷</div>
+      <div class="step-title">Сканирует камерой</div>
+      <div class="step-desc">Chrome на ноуте открывается сразу авторизованным</div>
+    </div>
+    <div class="step">
+      <div class="step-icon" style="background:#D1FAE5;">✅</div>
+      <div class="step-title">Готово</div>
+      <div class="step-desc">Данные те же что и в TMA — синхронизируются через Supabase</div>
+    </div>
+  </div>
+
+  <div style="padding: 16px 20px 24px;">
+    <div class="card" style="background:#FFF9E6; border-color:#FCD34D;">
+      <div style="font-size:13px; color:#92400E;">
+        <strong>⚡ Важно про данные:</strong> все данные хранятся в Supabase (облако). Неважно где открыт CRM — в Telegram или Chrome — данные одни и те же, синхронизируются в реальном времени. Ничего не теряется.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН 2: ПРОФИЛЬ В TMA (телефон)
+════════════════════════════════════════════ -->
+<div id="screen-tma-profile" class="screen">
+  <div style="padding: 16px 20px 8px; text-align:center;">
+    <div class="frame-label">📱 КАК ВЫГЛЯДИТ В TELEGRAM (мини-приложение)</div>
+  </div>
+
+  <div class="mobile-frame">
+    <div class="tma-page">
+      <!-- Заголовок -->
+      <div class="tma-header">
+        <div style="font-size:20px; cursor:pointer; color:#64748B;">←</div>
+        <div>
+          <div style="font-size:16px; font-weight:800; color:#1A1814;">Мой профиль</div>
+        </div>
+      </div>
+
+      <!-- Аватар и имя -->
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div class="avatar">А</div>
+          <div>
+            <div style="font-weight:800; font-size:16px; color:#1A1814;">Алия Бекова</div>
+            <div style="font-size:12px; color:#297b8a; font-weight:600;">Менеджер B2B</div>
+            <div style="font-size:11px; color:#A8A8AE;">@aliya_bekova</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Секция "Ссылка для браузера" — НОВАЯ -->
+      <div class="section-header">💻 Доступ через браузер (Chrome, Safari)</div>
+      <div class="card" style="margin-bottom:12px; border-color:#297b8a; border-width:1.5px;">
+        <div style="font-size:13px; color:#1A1814; font-weight:700; margin-bottom:4px;">Ваша персональная ссылка</div>
+        <div style="font-size:12px; color:#64748B; margin-bottom:12px; line-height:1.4;">
+          Откройте по этой ссылке CRM на любом компьютере — вы сразу войдёте под своим аккаунтом.
+        </div>
+
+        <!-- QR код -->
+        <div class="qr-block" style="margin-bottom:12px;">
+          <div class="qr-img">
+            <!-- Упрощённый QR-паттерн для макета -->
+            <svg class="qr-svg" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg" style="image-rendering:pixelated;">
+              <rect width="21" height="21" fill="white"/>
+              <!-- Finder top-left -->
+              <rect x="0" y="0" width="7" height="7" fill="#1A1814"/><rect x="1" y="1" width="5" height="5" fill="white"/><rect x="2" y="2" width="3" height="3" fill="#1A1814"/>
+              <!-- Finder top-right -->
+              <rect x="14" y="0" width="7" height="7" fill="#1A1814"/><rect x="15" y="1" width="5" height="5" fill="white"/><rect x="16" y="2" width="3" height="3" fill="#1A1814"/>
+              <!-- Finder bottom-left -->
+              <rect x="0" y="14" width="7" height="7" fill="#1A1814"/><rect x="1" y="15" width="5" height="5" fill="white"/><rect x="2" y="16" width="3" height="3" fill="#1A1814"/>
+              <!-- Data dots -->
+              <rect x="8" y="0" width="1" height="1" fill="#1A1814"/><rect x="10" y="0" width="1" height="1" fill="#1A1814"/>
+              <rect x="8" y="2" width="1" height="1" fill="#1A1814"/><rect x="12" y="2" width="1" height="1" fill="#1A1814"/>
+              <rect x="9" y="4" width="2" height="1" fill="#1A1814"/>
+              <rect x="8" y="6" width="1" height="1" fill="#1A1814"/><rect x="11" y="6" width="1" height="1" fill="#1A1814"/>
+              <rect x="0" y="8" width="1" height="1" fill="#1A1814"/><rect x="2" y="8" width="3" height="1" fill="#1A1814"/><rect x="7" y="8" width="1" height="1" fill="#1A1814"/>
+              <rect x="9" y="8" width="1" height="1" fill="#1A1814"/><rect x="11" y="8" width="3" height="1" fill="#1A1814"/><rect x="15" y="8" width="2" height="1" fill="#1A1814"/>
+              <rect x="0" y="10" width="2" height="1" fill="#1A1814"/><rect x="4" y="10" width="1" height="1" fill="#1A1814"/><rect x="8" y="10" width="2" height="1" fill="#1A1814"/>
+              <rect x="12" y="10" width="1" height="1" fill="#1A1814"/><rect x="14" y="10" width="3" height="1" fill="#1A1814"/>
+              <rect x="1" y="12" width="1" height="1" fill="#1A1814"/><rect x="3" y="12" width="2" height="1" fill="#1A1814"/>
+              <rect x="7" y="12" width="1" height="1" fill="#1A1814"/><rect x="10" y="12" width="2" height="1" fill="#1A1814"/><rect x="14" y="12" width="1" height="1" fill="#1A1814"/>
+              <rect x="8" y="14" width="2" height="1" fill="#1A1814"/><rect x="12" y="14" width="2" height="1" fill="#1A1814"/>
+              <rect x="9" y="16" width="1" height="1" fill="#1A1814"/><rect x="11" y="16" width="3" height="1" fill="#1A1814"/>
+              <rect x="8" y="18" width="1" height="1" fill="#1A1814"/><rect x="10" y="18" width="2" height="1" fill="#1A1814"/><rect x="14" y="18" width="2" height="1" fill="#1A1814"/>
+              <rect x="9" y="20" width="1" height="1" fill="#1A1814"/><rect x="12" y="20" width="3" height="1" fill="#1A1814"/>
+              <rect x="16" y="14" width="1" height="1" fill="#1A1814"/><rect x="18" y="14" width="1" height="1" fill="#1A1814"/>
+              <rect x="15" y="16" width="2" height="1" fill="#1A1814"/><rect x="19" y="16" width="1" height="1" fill="#1A1814"/>
+              <rect x="16" y="18" width="3" height="1" fill="#1A1814"/>
+            </svg>
+          </div>
+          <div style="font-size:11px; color:#64748B;">Отсканируйте камерой телефона,<br>чтобы открыть CRM в браузере</div>
+        </div>
+
+        <!-- Ссылка -->
+        <div class="token-row">crm.mastercoffee.kz/?wt=a7f3b2e9c1d4...</div>
+
+        <!-- Кнопки -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
+          <button class="btn btn-primary btn-sm" onclick="showToast('Ссылка скопирована!')">📋 Скопировать</button>
+          <button class="btn btn-tg btn-sm" onclick="showToast('Ссылка отправлена вам в Telegram!')">✈️ Отправить в TG</button>
+        </div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:8px; font-size:11px; color:#A8A8AE;" onclick="showToast('Токен обновлён. Старые ссылки недействительны.')">🔄 Обновить токен (сбросить старые ссылки)</button>
+      </div>
+
+      <!-- Остальной профиль -->
+      <div class="section-header">Настройки аккаунта</div>
+      <div class="card" style="opacity:0.5;">
+        <div style="font-size:13px; color:#64748B;">Уведомления, язык, тема...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН 3: ВХОД В CHROME
+════════════════════════════════════════════ -->
+<div id="screen-web-login" class="screen">
+  <div style="padding: 16px 20px 8px; text-align:center;">
+    <div class="frame-label">💻 КАК ВЫГЛЯДИТ В CHROME (браузер на ноуте)</div>
+  </div>
+
+  <div class="desktop-frame">
+    <div class="login-desktop">
+      <!-- Левая часть — брендинг -->
+      <div class="login-left">
+        <div style="margin-bottom:32px;">
+          <div style="width:56px; height:56px; background:rgba(255,255,255,0.15); border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:28px; margin-bottom:16px;">☕</div>
+          <div style="font-size:24px; font-weight:800; margin-bottom:8px;">Master Coffee</div>
+          <div style="font-size:15px; opacity:0.8;">Procurement OS</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.1); border-radius:12px; padding:16px;">
+          <div style="font-size:12px; opacity:0.9; line-height:1.6;">
+            ✓ Заявки B2B в реальном времени<br>
+            ✓ Помол кофе и выезды<br>
+            ✓ Синхронизация с Telegram
+          </div>
+        </div>
+      </div>
+
+      <!-- Правая часть — форма входа -->
+      <div class="login-right">
+        <div style="max-width:320px; margin:0 auto; width:100%;">
+          <h2 style="margin-bottom:6px;">Войти в CRM</h2>
+          <p style="margin-bottom:28px; font-size:13px;">Вы уже зарегистрированы в системе</p>
+
+          <!-- Вариант 1: уже есть ссылка -->
+          <div style="margin-bottom:20px;">
+            <div style="font-size:12px; font-weight:700; color:#1A1814; margin-bottom:8px;">Если у вас есть персональная ссылка</div>
+            <div style="background:#F0FDF4; border:1px solid #86EFAC; border-radius:12px; padding:14px; font-size:13px; color:#166534; display:flex; align-items:center; gap:10px;">
+              <span style="font-size:20px;">✅</span>
+              <div>
+                <div style="font-weight:700;">Вы авторизованы автоматически</div>
+                <div style="font-size:11px; opacity:0.8;">Ссылка распознана — открываю CRM...</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align:center; color:#A8A8AE; font-size:12px; margin:16px 0;">или</div>
+
+          <!-- Вариант 2: получить ссылку -->
+          <div style="margin-bottom:16px;">
+            <div style="font-size:12px; font-weight:700; color:#1A1814; margin-bottom:8px;">Первый раз? Получите ссылку:</div>
+            <div style="background:#EAF4F6; border-radius:12px; padding:14px; font-size:12px; color:#1A5060; line-height:1.6;">
+              <strong>1.</strong> Откройте CRM в Telegram на телефоне<br>
+              <strong>2.</strong> Перейдите в «Профиль» → «Ссылка для браузера»<br>
+              <strong>3.</strong> Нажмите «Отправить в TG» и откройте ссылку здесь
+            </div>
+          </div>
+
+          <div style="text-align:center; color:#A8A8AE; font-size:12px; margin:16px 0;">или</div>
+
+          <!-- Вариант 3: Telegram виджет -->
+          <div>
+            <div style="font-size:12px; font-weight:700; color:#1A1814; margin-bottom:8px;">Войти напрямую через Telegram:</div>
+            <button class="btn btn-tg" onclick="showToast('Открывается Telegram для подтверждения...')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248l-2.01 9.47c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.18 13.675l-2.95-.924c-.64-.203-.653-.64.136-.948l11.52-4.44c.533-.194 1.001.13.676.885z"/></svg>
+              Войти через Telegram
+            </button>
+            <div style="font-size:11px; color:#A8A8AE; margin-top:8px; text-align:center;">Telegram откроется на вашем устройстве для подтверждения</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Пояснение -->
+  <div style="max-width:960px; margin:0 auto; padding:16px 20px 24px;">
+    <div class="card" style="background:#F8FAFB;">
+      <div style="font-size:13px; color:#64748B;">
+        <strong style="color:#1A1814;">💡 Что видит сотрудник в реальной жизни:</strong><br><br>
+        <strong>Первый раз:</strong> видит экран выше, берёт ссылку из профиля TMA, открывает — всё.<br>
+        <strong>Следующие разы:</strong> просто открывает <code>crm.mastercoffee.kz</code> — браузер помнит сессию и сразу открывает CRM.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН 4: CRM В БРАУЗЕРЕ
+════════════════════════════════════════════ -->
+<div id="screen-web-app" class="screen">
+  <div style="padding: 16px 20px 8px; text-align:center;">
+    <div class="frame-label">💻 CRM ОТКРЫТ В CHROME — без отличий от Telegram версии</div>
+  </div>
+
+  <div class="desktop-frame" style="overflow:hidden;">
+    <!-- Верхняя панель -->
+    <div style="background:#1A1814; padding:10px 20px; display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="font-size:18px;">☕</div>
+        <div style="color:white; font-weight:800; font-size:14px;">Master Coffee CRM</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="background:#297b8a; color:white; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700;">B2B менеджер</div>
+        <div style="color:#A8A8AE; font-size:12px;">Алия Б.</div>
+      </div>
+    </div>
+
+    <!-- Контент -->
+    <div style="display:grid; grid-template-columns:200px 1fr; min-height:420px;">
+      <!-- Сайдбар -->
+      <div style="background:#F8FAFB; padding:16px; border-right:1px solid #E5E7EB;">
+        <div style="font-size:10px; font-weight:700; color:#A8A8AE; margin-bottom:8px; text-transform:uppercase;">Главное</div>
+        <div style="padding:8px 10px; background:#EAF4F6; border-radius:8px; font-size:13px; color:#297b8a; font-weight:700; margin-bottom:2px;">🏠 Главная</div>
+        <div style="padding:8px 10px; border-radius:8px; font-size:13px; color:#64748B; margin-bottom:2px;">🔔 Уведомления</div>
+        <div style="font-size:10px; font-weight:700; color:#A8A8AE; margin:12px 0 8px; text-transform:uppercase;">Операции</div>
+        <div style="padding:8px 10px; border-radius:8px; font-size:13px; color:#64748B; margin-bottom:2px;">📋 Заявки</div>
+        <div style="padding:8px 10px; border-radius:8px; font-size:13px; color:#64748B; margin-bottom:2px;">☕ Помол</div>
+        <div style="padding:8px 10px; border-radius:8px; font-size:13px; color:#64748B; margin-bottom:2px;">📑 Договоры</div>
+        <div style="padding:8px 10px; border-radius:8px; font-size:13px; color:#64748B;">🗑️ Списания</div>
+      </div>
+
+      <!-- Основное -->
+      <div style="padding:20px;">
+        <div style="font-size:18px; font-weight:800; color:#1A1814; margin-bottom:16px;">Главная — B2B</div>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px;">
+          <div style="background:white; border-radius:12px; padding:14px; border:1px solid #E5E7EB;">
+            <div style="font-size:11px; color:#64748B;">Заявки сегодня</div>
+            <div style="font-size:24px; font-weight:800; color:#1A1814;">7</div>
+          </div>
+          <div style="background:white; border-radius:12px; padding:14px; border:1px solid #E5E7EB;">
+            <div style="font-size:11px; color:#64748B;">В работе</div>
+            <div style="font-size:24px; font-weight:800; color:#297b8a;">3</div>
+          </div>
+          <div style="background:white; border-radius:12px; padding:14px; border:1px solid #E5E7EB;">
+            <div style="font-size:11px; color:#64748B;">Ожидают оплаты</div>
+            <div style="font-size:24px; font-weight:800; color:#F59E0B;">2</div>
+          </div>
+        </div>
+        <div style="background:#D1FAE5; border-radius:12px; padding:14px; font-size:13px; color:#065F46; display:flex; align-items:center; gap:10px;">
+          <span style="font-size:18px;">✅</span>
+          <div><strong>Все данные синхронизированы с Telegram-версией.</strong> Открой на телефоне — увидишь то же самое.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН 5: СРАВНЕНИЕ
+════════════════════════════════════════════ -->
+<div id="screen-compare" class="screen">
+  <div style="padding: 24px 20px 8px; text-align:center;">
+    <h2>Итого: что меняется для сотрудников</h2>
+    <p style="margin-top:6px;">Максимально просто, данные не теряются</p>
+  </div>
+
+  <div class="compare">
+    <div class="compare-col tma">
+      <div class="compare-title" style="color:#297b8a;">📱 Telegram (как сейчас)</div>
+      <div class="compare-item">Открыл Telegram → нажал кнопку бота → в CRM</div>
+      <div class="compare-item">Ничего не меняется для выездных</div>
+      <div class="compare-item">Работает на телефоне</div>
+      <div class="compare-item">Уведомления через Telegram</div>
+    </div>
+    <div class="compare-col web">
+      <div class="compare-title" style="color:#22C55E;">💻 Chrome (новое)</div>
+      <div class="compare-item">Один раз получил ссылку → открыл → вошёл</div>
+      <div class="compare-item">Браузер запомнил — следующий раз просто открыть сайт</div>
+      <div class="compare-item">Удобно на ноуте, широкий экран</div>
+      <div class="compare-item">Те же данные, та же роль, те же права</div>
+    </div>
+  </div>
+
+  <!-- Безопасность -->
+  <div style="padding: 0 20px 16px;">
+    <div class="section-header">🔒 Безопасность</div>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px;">
+      <div class="card" style="text-align:center;">
+        <div style="font-size:24px; margin-bottom:8px;">🔑</div>
+        <div style="font-size:12px; font-weight:700; margin-bottom:4px;">Токен = UUID</div>
+        <div style="font-size:11px; color:#64748B;">122 бита случайности — невозможно угадать</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div style="font-size:24px; margin-bottom:8px;">🔄</div>
+        <div style="font-size:12px; font-weight:700; margin-bottom:4px;">Сброс одной кнопкой</div>
+        <div style="font-size:11px; color:#64748B;">Потерял телефон? Нажми «Обновить токен» — старые ссылки мертвы</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div style="font-size:24px; margin-bottom:8px;">👤</div>
+        <div style="font-size:12px; font-weight:700; margin-bottom:4px;">Только зарегистрированные</div>
+        <div style="font-size:11px; color:#64748B;">Посторонний без токена — не войдёт</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Что меняется в коде -->
+  <div style="padding: 0 20px 24px;">
+    <div class="section-header">⚙️ Что меняется технически</div>
+    <div class="card">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:13px;">
+        <div>
+          <div style="font-weight:700; margin-bottom:6px; color:#1A1814;">В Supabase</div>
+          <div style="color:#64748B; line-height:1.7;">
+            + Колонка <code>web_token</code> в таблице users<br>
+            <span style="color:#A8A8AE;">Больше ничего — новых таблиц нет</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-weight:700; margin-bottom:6px; color:#1A1814;">В App.jsx</div>
+          <div style="color:#64748B; line-height:1.7;">
+            + Проверка <code>?wt=</code> при старте<br>
+            + Блок «Ссылка для браузера» в профиле<br>
+            + Новый экран входа в браузере<br>
+            + Функция генерации токена<br>
+            <span style="color:#A8A8AE;">Логика авторизации не меняется</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:#1A1814;color:white;padding:10px 20px;border-radius:12px;font-size:14px;font-weight:600;transition:transform 0.3s;z-index:999;pointer-events:none;white-space:nowrap;">
+</div>
+
+<script>
+function show(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.transform = 'translateX(-50%) translateY(0)';
+  setTimeout(() => { t.style.transform = 'translateX(-50%) translateY(80px)'; }, 2500);
+}
+</script>
+</body>
+</html>
