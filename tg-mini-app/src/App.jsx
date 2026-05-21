@@ -370,7 +370,7 @@ function defaultPermissionsFor(roleKey) {
     case 'sales':
       return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create'];
     case 'warehouse':
-      return ['warehouse_pickup', 'grind_fulfill', 'grind_view_all'];
+      return ['orders_view_all', 'orders_change_status', 'warehouse_pickup', 'grind_fulfill', 'grind_view_all'];
     case 'cashier':
       return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all'];
     case 'barista':
