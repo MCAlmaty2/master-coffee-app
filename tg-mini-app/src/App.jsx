@@ -908,7 +908,25 @@ function App() {
         route_name:    entry.route,
         at:            entry.at,
       }).then(({ error }) => {
-        if (error) console.error('[reportError] не удалось записать в БД:', error);
+        if (error) {
+          // eslint-disable-next-line no-console
+          console.error('[reportError] не удалось записать в БД:', error);
+          // Показываем пользователю что ошибка не доехала до админа
+          const diag = error.message?.includes('relation') || error.message?.includes('does not exist')
+            ? 'Таблица error_reports не создана. Админ должен запустить MIGRATE_ERROR_REPORTS.sql в Supabase.'
+            : error.message?.includes('permission') || error.message?.includes('policy') || error.code === '42501'
+              ? 'Нет прав на запись в журнал ошибок. Проверь RLS-политику для anon на таблицу error_reports.'
+              : error.message || JSON.stringify(error);
+          setErrors(prev => [...prev, {
+            id: uid(),
+            kind: 'sync',
+            source: 'error_reports',
+            message: `⚠️ Ошибка выше НЕ попала к админу: ${diag}`,
+            details: { original_error: error, original_message: entry.message },
+            route: entry.route,
+            at: new Date().toISOString(),
+          }]);
+        }
       });
     } catch (e) {
       console.error('[reportError] сбой:', e);
@@ -10264,14 +10282,16 @@ function GlobalStyles() {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function AdminErrorReportsScreen({ ctx }) {
-  const { showToast } = ctx;
+  const { showToast, currentUser } = ctx;
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [filter, setFilter] = useState('unresolved'); // 'unresolved' | 'resolved' | 'all'
   const [expandedId, setExpandedId] = useState(null);
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const { data, error } = await supabase
         .from('error_reports')
@@ -10281,9 +10301,40 @@ function AdminErrorReportsScreen({ ctx }) {
       if (error) throw error;
       setReports(data || []);
     } catch (e) {
-      showToast('Не удалось загрузить отчёты: ' + e.message);
+      const msg = e.message || JSON.stringify(e);
+      let diag = msg;
+      if (msg.includes('relation') || msg.includes('does not exist')) {
+        diag = 'Таблица error_reports не существует в БД. Нужно запустить миграцию MIGRATE_ERROR_REPORTS.sql в Supabase SQL Editor.';
+      } else if (msg.includes('permission') || e.code === '42501') {
+        diag = 'Нет прав на чтение таблицы error_reports. Проверь RLS-политику для anon.';
+      }
+      setLoadError(diag);
+      showToast('Не удалось загрузить: ' + msg.slice(0, 80));
     }
     setLoading(false);
+  };
+
+  // Тестовая запись для проверки что всё подключено
+  const testWrite = async () => {
+    try {
+      const { error } = await supabase.from('error_reports').insert({
+        id: crypto.randomUUID(),
+        reporter_id: currentUser?.id || null,
+        reporter_name: currentUser ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim() : 'Test',
+        kind: 'manual',
+        source: 'diagnostic',
+        message: '🧪 Тестовая запись от админ-панели — проверка работы записи в журнал',
+        details: { test: true, timestamp: new Date().toISOString() },
+        route_name: 'admin_errors',
+        at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      showToast('Тестовая запись добавлена');
+      load();
+    } catch (e) {
+      showToast('Тест провален: ' + e.message);
+      alert('Не удалось записать тест:\n\n' + e.message + '\n\nЭто значит что сотрудники тоже не могут записать ошибки в журнал.');
+    }
   };
 
   useEffect(() => {
@@ -10340,13 +10391,28 @@ function AdminErrorReportsScreen({ ctx }) {
         title="Отчёты об ошибках"
         subtitle={`${counts.unresolved} новых · ${counts.resolved} решённых`}
         action={
-          counts.resolved > 0 && (
-            <button onClick={clearResolved} className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>
-              <Trash2 size={12} className="inline mr-1" /> Очистить решённые
+          <div className="flex gap-2">
+            <button onClick={testWrite} className="text-xs px-3 py-2 rounded-lg" style={{ background: '#EAF4F6', color: '#297b8a' }}>
+              🧪 Тест записи
             </button>
-          )
+            {counts.resolved > 0 && (
+              <button onClick={clearResolved} className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+                <Trash2 size={12} className="inline mr-1" /> Очистить решённые
+              </button>
+            )}
+          </div>
         }
       />
+
+      {loadError && (
+        <div className="rounded-xl p-4 mb-4" style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}>
+          <div className="text-sm font-semibold mb-1" style={{ color: '#991B1B' }}>⚠️ Журнал ошибок не работает</div>
+          <div className="text-sm" style={{ color: '#7F1D1D' }}>{loadError}</div>
+          <div className="text-xs mt-2" style={{ color: '#991B1B' }}>
+            Пока эта проблема не починена — сотрудники видят ошибки только у себя на экране, к тебе они не доходят.
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-1.5 mb-4">
         <button onClick={() => setFilter('unresolved')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
