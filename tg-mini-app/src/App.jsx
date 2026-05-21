@@ -3782,6 +3782,10 @@ function DashboardHome({ ctx, title }) {
     const ordersAwaitingPickup = db.orders.filter(o => o.status === 'shipped' && o.delivery_method === 'pickup');
     const ordersReadyPickup = db.orders.filter(o => o.status === 'ready');         // самовывоз, ждёт клиента
 
+    // Списания на складе: invoiced — нужно собрать; prepared — нужно выдать
+    const warehouseWOToAssemble = isWarehouse ? allWriteOffs.filter(w => w.status === 'invoiced') : [];
+    const warehouseWOToDeliver  = isWarehouse ? allWriteOffs.filter(w => w.status === 'prepared') : [];
+
     return {
       isAdmin,
       isWarehouse,
@@ -3790,6 +3794,8 @@ function DashboardHome({ ctx, title }) {
         toShip: ordersToShip.length,
         awaitingPickup: ordersAwaitingPickup.length,
         readyPickup: ordersReadyPickup.length,
+        writeOffsToAssemble: warehouseWOToAssemble.length,
+        writeOffsToDeliver: warehouseWOToDeliver.length,
       },
       orders: {
         active: myOrdersActive.length,
@@ -3928,7 +3934,7 @@ function DashboardHome({ ctx, title }) {
       )}
 
       {/* СКЛАД — приоритетные плитки на сборку и выдачу */}
-      {stats.isWarehouse && (stats.warehouse.toAssemble + stats.warehouse.toShip + stats.warehouse.awaitingPickup + stats.warehouse.readyPickup) > 0 && (
+      {stats.isWarehouse && (stats.warehouse.toAssemble + stats.warehouse.toShip + stats.warehouse.awaitingPickup + stats.warehouse.readyPickup + stats.warehouse.writeOffsToAssemble + stats.warehouse.writeOffsToDeliver) > 0 && (
         <div className="mb-6">
           <div className="text-xs uppercase font-bold mb-2" style={{ color: '#64748B', letterSpacing: '0.08em' }}>
             🏭 Работа склада — сегодня
@@ -3970,6 +3976,28 @@ function DashboardHome({ ctx, title }) {
               <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>Готовы</div>
               <div className="text-[10px]" style={{ color: '#64748B' }}>ждут клиента</div>
             </button>
+            {stats.warehouse.writeOffsToAssemble > 0 && (
+              <button
+                onClick={() => navigate({ name: 'warehouse' })}
+                className="rounded-xl p-3 text-left transition hover:shadow-md"
+                style={{ background: '#EDE9FE', border: '1.5px solid #7C3AED' }}
+              >
+                <div className="text-2xl font-bold" style={{ color: '#7C3AED' }}>{stats.warehouse.writeOffsToAssemble}</div>
+                <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>Списания</div>
+                <div className="text-[10px]" style={{ color: '#64748B' }}>к сборке</div>
+              </button>
+            )}
+            {stats.warehouse.writeOffsToDeliver > 0 && (
+              <button
+                onClick={() => navigate({ name: 'warehouse' })}
+                className="rounded-xl p-3 text-left transition hover:shadow-md"
+                style={{ background: '#DCFCE7', border: '1.5px solid #16A34A' }}
+              >
+                <div className="text-2xl font-bold" style={{ color: '#16A34A' }}>{stats.warehouse.writeOffsToDeliver}</div>
+                <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>Списания</div>
+                <div className="text-[10px]" style={{ color: '#64748B' }}>к выдаче</div>
+              </button>
+            )}
           </div>
         </div>
       )}
