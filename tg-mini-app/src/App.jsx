@@ -2942,60 +2942,43 @@ function IntroSplash({ onContinue }) {
     return () => window.removeEventListener('keydown', h);
   }, [onContinue]);
 
-  // Ленты на фоне — рисуем 6 штук с разным смещением и поворотом
-  const ribbons = [
-    { top: '4%',  rotate: -2,  shift: '-10%' },
-    { top: '15%', rotate: 1.5, shift: '20%'  },
-    { top: '26%', rotate: -1,  shift: '-25%' },
-    { bottom: '20%', rotate: -1.5, shift: '10%' },
-    { bottom: '10%', rotate: 2,    shift: '-15%' },
-    { bottom: '2%',  rotate: -2,   shift: '20%' },
-  ];
-
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-between relative overflow-hidden splash-fade"
-         style={{ background: 'linear-gradient(180deg, #FFFFFF 0%, #E8F0F2 70%, #C9D9DC 100%)' }}>
+         style={{ background: '#FFFFFF' }}>
 
-      {/* Декоративные ленты Master Coffee */}
-      {ribbons.map((r, i) => (
-        <div key={i} className="mc-ribbon absolute left-0 right-0"
-             style={{
-               top: r.top, bottom: r.bottom,
-               transform: `translateX(${r.shift}) rotate(${r.rotate}deg)`,
-               width: '130%',
-               marginLeft: '-15%',
-               opacity: 0.92,
-             }}>
-          <span className="mc-ribbon-text">MASTER COFFEE</span>
-          <span className="mc-ribbon-text">·</span>
-          <span className="mc-ribbon-text">MASTER COFFEE</span>
-          <span className="mc-ribbon-text">·</span>
-          <span className="mc-ribbon-text">MASTER COFFEE</span>
-          <span className="mc-ribbon-text">·</span>
-          <span className="mc-ribbon-text">MASTER COFFEE</span>
-        </div>
-      ))}
+      {/* Тонкая цветная полоска сверху */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: '#297b8a' }} />
 
       {/* Центральный блок */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 z-10 w-full max-w-md mx-auto">
 
+        {/* Реальный логотип — символ черепахи */}
         <div className="splash-float mb-6">
-          <TurtleLogo size={130} color="#297b8a" />
+          <img
+            src="/logo-symbol.png"
+            alt="Master Coffee Roasters"
+            style={{ width: 110, height: 110, objectFit: 'contain' }}
+          />
         </div>
 
-        <h1 className="text-center font-bold tracking-wider uppercase text-base sm:text-lg mb-2"
-            style={{ color: '#1A1814', letterSpacing: '0.15em', lineHeight: 1.35 }}>
-          Операционная&nbsp;система<br />отдела&nbsp;закупок&nbsp;и&nbsp;логистик
-        </h1>
+        <div className="text-center mb-2">
+          <div className="font-black tracking-widest uppercase"
+               style={{ fontSize: 28, color: '#297b8a', letterSpacing: '0.18em', lineHeight: 1 }}>
+            MASTER
+          </div>
+          <div className="font-medium tracking-widest uppercase"
+               style={{ fontSize: 13, color: '#64748b', letterSpacing: '0.35em', marginTop: 3 }}>
+            COFFEE ROASTERS
+          </div>
+        </div>
 
-        <p className="text-center text-sm mt-2 mb-1" style={{ color: '#4A5568' }}>
-          Закупки, логистика, заявки, платежи и&nbsp;команда
-        </p>
-        <p className="text-center text-base font-semibold mb-8" style={{ color: '#1A1814' }}>
-          — всё в одном месте
+        <div style={{ width: 40, height: 1, background: '#e2e8f0', margin: '20px auto 20px' }} />
+
+        <p className="text-center text-sm" style={{ color: '#94a3b8', lineHeight: 1.6 }}>
+          Операционная система<br />для команды и логистики
         </p>
 
-        <p className="text-xs splash-hint mb-3" style={{ color: '#4A5568' }}>
+        <p className="text-xs splash-hint mt-8 mb-3" style={{ color: '#94a3b8' }}>
           Проведите вправо, чтобы войти
         </p>
 
@@ -3061,23 +3044,71 @@ function IntroSplash({ onContinue }) {
 }
 
 function BootSplash({ title, subtitle, isError }) {
-  return (
-    <div className="min-h-screen w-full flex items-center justify-center px-6" style={{ background: '#FFFFFF' }}>
-      <div className="text-center max-w-sm">
-        <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6" style={{ background: isError ? '#FEE2E2' : '#E7F3FE' }}>
-          {isError
-            ? <XCircle size={36} style={{ color: '#EB5757' }} />
-            : <TurtleLogo size={48} color={'#297b8a'} />}
-        </div>
-        <h1 className="display-font text-2xl mb-2" style={{ color: '#1A1814' }}>{title}</h1>
-        {subtitle && (
-          <div className="text-sm" style={{ color: isError ? '#EB5757' : '#64748B' }}>{subtitle}</div>
-        )}
-        {!isError && (
-          <div className="mt-6 inline-flex items-center gap-2 text-xs" style={{ color: '#A8A8AE' }}>
-            <Loader2 size={14} className="animate-spin" /> Загрузка…
+  if (isError) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center px-6" style={{ background: '#FFFFFF' }}>
+        <div className="text-center max-w-sm">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-6" style={{ background: '#FEE2E2' }}>
+            <XCircle size={36} style={{ color: '#EB5757' }} />
           </div>
-        )}
+          <h1 className="display-font text-2xl mb-2" style={{ color: '#1A1814' }}>{title}</h1>
+          {subtitle && <div className="text-sm" style={{ color: '#EB5757' }}>{subtitle}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state — анимация pour-over кофе
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={{ background: '#FFFFFF' }}>
+      {/* Coffee scene */}
+      <div style={{ position: 'relative', width: 180, height: 230, marginBottom: 28, flexShrink: 0 }}>
+
+        {/* Pour-over filter */}
+        <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 90, height: 60 }}>
+          <svg viewBox="0 0 90 60" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+            <line x1="12" y1="56" x2="22" y2="14" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round"/>
+            <line x1="78" y1="56" x2="68" y2="14" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round"/>
+            <line x1="10" y1="56" x2="80" y2="56" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round"/>
+            <path d="M22 10 L68 10 L52 44 L38 44 Z" fill="#ede9e4" stroke="#c8bdb5" strokeWidth="1.5" strokeLinejoin="round"/>
+            <path d="M26 13 L64 13 L50 41 L40 41 Z" fill="#faf8f6"/>
+            <ellipse cx="45" cy="34" rx="7" ry="4.5" fill="#7B4F2E" opacity="0.65"/>
+            <ellipse cx="45" cy="32" rx="5" ry="3" fill="#5a3218" opacity="0.5"/>
+            <rect x="42" y="44" width="6" height="9" rx="3" fill="#c8bdb5"/>
+          </svg>
+        </div>
+
+        {/* Drip stream */}
+        <div className="boot-drip-stream" style={{ position: 'absolute', top: 57, left: '50%', transform: 'translateX(-50%)', width: 3, borderRadius: 2, background: 'linear-gradient(to bottom, #5a3218, transparent)' }} />
+        <div className="boot-drip-drop" style={{ position: 'absolute', top: 57, left: '50%', transform: 'translateX(-50%)', width: 6, height: 8, background: '#5a3218', borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%' }} />
+
+        {/* Mug */}
+        <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 140, height: 148 }}>
+          {/* Steam */}
+          <div className="boot-steam-group" style={{ position: 'absolute', top: -38, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 10 }}>
+            <div className="boot-steam boot-steam-1" style={{ width: 3, height: 22, background: 'linear-gradient(to top, #94a3b8, transparent)', borderRadius: 2 }} />
+            <div className="boot-steam boot-steam-2" style={{ width: 3, height: 30, background: 'linear-gradient(to top, #94a3b8, transparent)', borderRadius: 2 }} />
+            <div className="boot-steam boot-steam-3" style={{ width: 3, height: 18, background: 'linear-gradient(to top, #94a3b8, transparent)', borderRadius: 2 }} />
+          </div>
+          {/* Mug body */}
+          <div style={{ position: 'relative', width: 118, height: 130, margin: '0 auto', background: '#f8fafc', border: '3px solid #cbd5e1', borderRadius: '6px 6px 22px 22px', overflow: 'hidden' }}>
+            <div className="boot-mug-fill" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(to bottom, #7B3F1E 0%, #4A2008 50%, #2D1204 100%)', borderRadius: '0 0 19px 19px' }} />
+            <div className="boot-mug-crema" style={{ position: 'absolute', left: 4, right: 4, height: 9, background: 'linear-gradient(90deg, #b87333, #d4956a, #c8813a, #d4956a, #b87333)', borderRadius: 5, opacity: 0 }} />
+          </div>
+          {/* Handle */}
+          <div style={{ position: 'absolute', right: 0, top: 24, width: 24, height: 50, border: '4px solid #cbd5e1', borderLeft: 'none', borderRadius: '0 22px 22px 0' }} />
+        </div>
+      </div>
+
+      <h1 className="display-font text-xl mb-1 text-center" style={{ color: '#1A1814' }}>{title}</h1>
+      <div className="text-sm mb-6 text-center" style={{ color: '#94a3b8' }}>Готовим ваш кофе ☕</div>
+
+      {/* Логотип-пилюля */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: '#f8fafc', borderRadius: 999, border: '1px solid #e2e8f0' }}>
+        <img src="/logo-symbol.png" alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} />
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.5px', color: '#297b8a', textTransform: 'uppercase' }}>
+          Master Coffee Roasters
+        </span>
       </div>
     </div>
   );
@@ -3122,14 +3153,13 @@ function TelegramAuthScreen({ ctx }) {
     // Токен есть в URL и ещё идёт проверка — показываем спиннер
     if (isCheckingToken) {
       return (
-        <div className="min-h-screen w-full flex items-center justify-center px-4" style={{ background: '#F5F7F8' }}>
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4" style={{ background: '#E7F3FE' }}>
-              <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#297b8a', borderTopColor: 'transparent' }} />
-            </div>
-            <div className="font-semibold text-sm" style={{ color: '#1A1814' }}>Проверяем ссылку…</div>
-            <div className="text-xs mt-1" style={{ color: '#64748B' }}>Подождите секунду</div>
+        <div className="min-h-screen w-full flex flex-col items-center justify-center px-4 gap-4" style={{ background: '#F5F7F8' }}>
+          <img src="/logo-symbol.png" alt="" style={{ width: 52, height: 52, objectFit: 'contain' }} />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl" style={{ background: '#E7F3FE' }}>
+            <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#297b8a', borderTopColor: 'transparent' }} />
           </div>
+          <div className="font-semibold text-sm" style={{ color: '#1A1814' }}>Проверяем ссылку…</div>
+          <div className="text-xs" style={{ color: '#64748B' }}>Подождите секунду</div>
         </div>
       );
     }
@@ -3138,11 +3168,17 @@ function TelegramAuthScreen({ ctx }) {
       <div className="min-h-screen w-full flex items-center justify-center px-4" style={{ background: '#F5F7F8' }}>
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4" style={{ background: '#E7F3FE' }}>
-              <TurtleLogo size={48} color={'#297b8a'} />
+            <img src="/logo-symbol.png" alt="Master Coffee Roasters"
+                 style={{ width: 72, height: 72, objectFit: 'contain', marginBottom: 16 }} />
+            <div className="font-black tracking-widest uppercase"
+                 style={{ fontSize: 22, color: '#297b8a', letterSpacing: '0.18em', lineHeight: 1 }}>
+              MASTER
             </div>
-            <h1 className="display-font text-2xl mb-1" style={{ color: '#1A1814' }}>Master Coffee CRM</h1>
-            <div className="text-sm" style={{ color: '#64748B' }}>Управление закупками и операциями</div>
+            <div className="font-medium tracking-widest uppercase"
+                 style={{ fontSize: 11, color: '#94a3b8', letterSpacing: '0.35em', marginTop: 2 }}>
+              COFFEE ROASTERS
+            </div>
+            <div className="text-sm mt-2" style={{ color: '#64748B' }}>Управление закупками и операциями</div>
           </div>
 
           <div className="bg-white rounded-2xl p-6 shadow-sm" style={{ border: '1px solid #E5E7EB' }}>
@@ -3299,15 +3335,8 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       {/* Sidebar Desktop */}
       <aside className="hidden lg:flex flex-col w-64 flex-shrink-0 sticky top-0 h-screen" style={{ background: 'white', borderRight: '1px solid #E5E7EB' }}>
         <div className="p-5">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}>
-              <TurtleLogo size={24} color="#297b8a" />
-            </div>
-            <div>
-              <div className="display-font text-lg leading-tight" style={{ color: '#1A1814' }}>Заявки</div>
-              <div className="text-[10px] uppercase tracking-wider" style={{ color: '#64748B' }}>CRM Mastercoffee</div>
-            </div>
-          </div>
+          <img src="/logo-hor.png" alt="Master Coffee Roasters"
+               style={{ height: 36, objectFit: 'contain', objectPosition: 'left' }} />
         </div>
 
         
@@ -3341,10 +3370,8 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       <div className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 border-b" style={{ background: 'white', borderColor: '#E5E7EB' }}>
         <div className="flex items-center gap-2 min-w-0">
           <button onClick={() => setMobileMenuOpen(true)} className="p-1 -ml-1 flex-shrink-0"><Menu size={22} /></button>
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}>
-            <TurtleLogo size={22} color="#297b8a" />
-          </div>
-          <div className="display-font text-lg truncate" style={{ color: '#1A1814' }}>Master Coffee</div>
+          <img src="/logo-hor.png" alt="Master Coffee Roasters"
+               style={{ height: 28, objectFit: 'contain', maxWidth: 160 }} />
         </div>
         {/* Аватарка пользователя справа — клик ведёт на главную */}
         <button
@@ -3370,12 +3397,8 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
         <div className="lg:hidden fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={() => setMobileMenuOpen(false)}>
           <aside className="w-72 max-w-[80%] h-full flex flex-col overflow-y-auto" style={{ background: 'white' }} onClick={e => e.stopPropagation()}>
             <div className="p-5 flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}>
-                  <TurtleLogo size={24} color="#297b8a" />
-                </div>
-                <div className="display-font text-lg" style={{ color: '#1A1814' }}>Заявки</div>
-              </div>
+              <img src="/logo-hor.png" alt="Master Coffee Roasters"
+                   style={{ height: 30, objectFit: 'contain' }} />
               <button onClick={() => setMobileMenuOpen(false)}><X size={20} /></button>
             </div>
             
@@ -4108,7 +4131,11 @@ function UserHeroCard({ user, db }) {
 
   return (
     <div className="rounded-2xl p-5 mb-5 flex items-center gap-4"
-         style={{ background: 'linear-gradient(135deg, #297b8a 0%, #1f6573 100%)' }}>
+         style={{ background: 'linear-gradient(135deg, #297b8a 0%, #1f6573 100%)', position: 'relative', overflow: 'hidden' }}>
+      {/* Watermark — реальный логотип черепахи */}
+      <img src="/logo-symbol.png" alt=""
+           style={{ position: 'absolute', right: -10, bottom: -14, width: 88, height: 88,
+                    objectFit: 'contain', opacity: 0.12, filter: 'brightness(10)', pointerEvents: 'none' }} />
       <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center text-white font-bold text-xl"
            style={{ background: 'rgba(255,255,255,0.15)' }}>
         {user.photo_url
@@ -11512,11 +11539,11 @@ function GlobalStyles() {
       }
       .splash-fade { animation: splashFadeIn 0.6s ease-out both; }
 
-      @keyframes splashTurtleFloat {
+      @keyframes splashLogoFloat {
         0%, 100% { transform: translateY(0); }
-        50%      { transform: translateY(-6px); }
+        50%      { transform: translateY(-7px); }
       }
-      .splash-float { animation: splashTurtleFloat 3.5s ease-in-out infinite; }
+      .splash-float { animation: splashLogoFloat 3.5s ease-in-out infinite; }
 
       @keyframes splashHintPulse {
         0%, 100% { opacity: 0.4; }
@@ -11524,22 +11551,54 @@ function GlobalStyles() {
       }
       .splash-hint { animation: splashHintPulse 2s ease-in-out infinite; }
 
-      /* Ленты Master Coffee на фоне splash */
-      .mc-ribbon {
-        background: #297b8a;
-        color: white;
-        font-weight: 800;
-        font-size: 14px;
-        letter-spacing: 0.25em;
-        padding: 6px 0;
-        white-space: nowrap;
-        overflow: hidden;
-        text-align: center;
+      /* ── BootSplash: coffee cup animation ── */
+      @keyframes bootFillUp {
+        0%   { height: 0%;  }
+        60%  { height: 76%; }
+        70%  { height: 73%; }
+        80%  { height: 77%; }
+        100% { height: 76%; }
       }
-      .mc-ribbon-text {
-        display: inline-block;
-        padding: 0 1.5em;
+      .boot-mug-fill { animation: bootFillUp 3.2s cubic-bezier(.4,0,.2,1) infinite; }
+
+      @keyframes bootCremaRise {
+        0%, 50% { opacity: 0; bottom: 0%; }
+        60%  { bottom: calc(76% - 9px); opacity: 1; }
+        100% { bottom: calc(76% - 9px); opacity: 1; }
       }
+      .boot-mug-crema { position: absolute; left: 4px; right: 4px; animation: bootCremaRise 3.2s cubic-bezier(.4,0,.2,1) infinite; }
+
+      @keyframes bootDripGrow {
+        0%   { height: 0;   opacity: 0; }
+        10%  { height: 26px; opacity: 1; }
+        65%  { height: 26px; opacity: 1; }
+        80%  { height: 0;   opacity: 0; }
+        100% { height: 0;   opacity: 0; }
+      }
+      .boot-drip-stream { animation: bootDripGrow 3.2s ease-in-out infinite; }
+
+      @keyframes bootDropFall {
+        0%, 65%  { opacity: 0; transform: translateX(-50%) translateY(0); }
+        70%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+        90%  { opacity: 0; transform: translateX(-50%) translateY(58px); }
+        100% { opacity: 0; }
+      }
+      .boot-drip-drop { animation: bootDropFall 3.2s ease-in infinite; }
+
+      @keyframes bootSteamFade {
+        0%, 60%  { opacity: 0; }
+        75%, 95% { opacity: 1; }
+        100%     { opacity: 0; }
+      }
+      .boot-steam-group { animation: bootSteamFade 3.2s ease infinite; }
+
+      @keyframes bootSteamRise {
+        0%   { transform: translateY(0) scaleX(1);    opacity: 0.8; }
+        100% { transform: translateY(-16px) scaleX(0.4); opacity: 0; }
+      }
+      .boot-steam   { animation: bootSteamRise 1.4s ease-in-out infinite; }
+      .boot-steam-2 { animation-delay: 0.45s; }
+      .boot-steam-3 { animation-delay: 0.2s; }
 
       /* Прокрутка swipe-кнопки */
       .swipe-track {
