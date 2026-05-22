@@ -1601,6 +1601,26 @@ function App() {
     return { ok: true };
   };
 
+  /**
+   * Удалить задачу. Доступно исполнителю (если задача не выполнена) и администратору.
+   */
+  const deleteTask = async (taskId) => {
+    const task = db.tasks.find(t => t.id === taskId);
+    if (!task) return { error: 'Задача не найдена' };
+    const isAssignee = task.assignee_id === currentUser.id;
+    const canDelete = currentUser.role === 'admin' || (isAssignee && task.status !== 'done');
+    if (!canDelete) return { error: 'Нет прав удалить эту задачу' };
+    try {
+      const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+      if (error) throw error;
+      setDb(d => ({ ...d, tasks: d.tasks.filter(t => t.id !== taskId) }));
+      return { ok: true };
+    } catch (e) {
+      reportError({ kind: 'manual', source: 'tasks', message: `Ошибка удаления задачи: ${e.message}` });
+      return { error: e.message };
+    }
+  };
+
   /* ═══════════ Заявки на списание ═══════════ */
 
   const createWriteOff = (data) => {
@@ -2630,7 +2650,7 @@ function App() {
     loginViaTelegram, logout,
     createOrder, changeStatus, closePickupOrder, cancelOrder,
     approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, transferAdmin,
-    createTask, startTask, completeTask, rescheduleTask,
+    createTask, startTask, completeTask, rescheduleTask, deleteTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createGrindRequest, takeGrindRequest, markGrindReady, completeGrindRequest, closeGrindPickup, cancelGrindRequest,
@@ -7448,7 +7468,7 @@ function CreateTaskScreen({ ctx }) {
 }
 
 function TaskDetailScreen({ ctx, taskId }) {
-  const { db, currentUser, goBack, startTask, completeTask, rescheduleTask, showToast } = ctx;
+  const { db, currentUser, goBack, startTask, completeTask, rescheduleTask, deleteTask, showToast } = ctx;
   const task = db.tasks.find(t => t.id === taskId);
   if (!task) return <div className="p-6">Задача не найдена</div>;
 
@@ -7572,6 +7592,23 @@ function TaskDetailScreen({ ctx, taskId }) {
                 <Calendar size={14} className="inline mr-1.5 -mt-0.5" /> Перенести визит
               </button>
             </>
+          )}
+
+          {/* Удалить задачу — исполнитель (если не выполнена) или админ */}
+          {(isAssignee && task.status !== 'done') && (
+            <button
+              onClick={async () => {
+                if (!confirm(`Удалить задачу ${task.task_number}? Это нельзя отменить.`)) return;
+                const r = await deleteTask(task.id);
+                if (r.error) { showToast(r.error); return; }
+                showToast('Задача удалена');
+                goBack();
+              }}
+              className="w-full py-2.5 rounded-lg font-semibold text-sm mt-2 flex items-center justify-center gap-2"
+              style={{ background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA' }}
+            >
+              <Trash2 size={14} /> Удалить задачу
+            </button>
           )}
         </div>
       </div>
