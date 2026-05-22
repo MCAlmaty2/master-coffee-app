@@ -2671,6 +2671,7 @@ function App() {
   // 2) Telegram WebApp инициализирован (или активирован VITE_DEV_TELEGRAM_ID)
   // 3) Пользователь ещё не залогинен
   const [pendingTgUser, setPendingTgUser] = useState(null); // показываем экран "ожидайте подтверждения"
+  const [isCheckingToken, setIsCheckingToken] = useState(false); // идёт проверка web_token в браузере
   useEffect(() => {
     if (bootStatus.phase !== 'ready') return;
     if (currentUser) return;
@@ -2680,6 +2681,7 @@ function App() {
       const urlToken  = new URLSearchParams(window.location.search).get('wt');
       const savedToken = urlToken || localStorage.getItem(WEB_TOKEN_KEY);
       if (savedToken) {
+        setIsCheckingToken(true);
         (async () => {
           try {
             const user = await findUserByWebToken(savedToken);
@@ -2696,6 +2698,8 @@ function App() {
             }
           } catch (e) {
             console.warn('Web token login failed:', e);
+          } finally {
+            setIsCheckingToken(false);
           }
         })();
       }
@@ -2745,6 +2749,7 @@ function App() {
   ctx.tgWebApp = tgWebApp;
   ctx.isInTelegram = !!tgWebApp;
   ctx.pendingTgUser = pendingTgUser;
+  ctx.isCheckingToken = isCheckingToken;
 
   // Что показывать: loader / error / экран входа / приложение
   const renderBody = () => {
@@ -3059,7 +3064,7 @@ function BootSplash({ title, subtitle, isError }) {
 }
 
 function TelegramAuthScreen({ ctx }) {
-  const { isInTelegram, pendingTgUser, db } = ctx;
+  const { isInTelegram, pendingTgUser, db, isCheckingToken } = ctx;
   // Сколько админов в системе сейчас? Если ноль — показываем подсказку как поставить первого.
   const adminsCount = db.users.filter(u => u.role === 'admin' && u.active).length;
 
@@ -3093,6 +3098,22 @@ function TelegramAuthScreen({ ctx }) {
   // Состояние 2: открыто в браузере (не Telegram) — нужна личная ссылка
   if (!isInTelegram) {
     const hasUrlToken = !!new URLSearchParams(window.location.search).get('wt');
+
+    // Токен есть в URL и ещё идёт проверка — показываем спиннер
+    if (isCheckingToken) {
+      return (
+        <div className="min-h-screen w-full flex items-center justify-center px-4" style={{ background: '#F5F7F8' }}>
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4" style={{ background: '#E7F3FE' }}>
+              <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#297b8a', borderTopColor: 'transparent' }} />
+            </div>
+            <div className="font-semibold text-sm" style={{ color: '#1A1814' }}>Проверяем ссылку…</div>
+            <div className="text-xs mt-1" style={{ color: '#64748B' }}>Подождите секунду</div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen w-full flex items-center justify-center px-4" style={{ background: '#F5F7F8' }}>
         <div className="w-full max-w-sm">
@@ -3118,7 +3139,7 @@ function TelegramAuthScreen({ ctx }) {
                 </div>
                 <div className="text-xs" style={{ color: '#64748B' }}>
                   {hasUrlToken
-                    ? 'Токен отозван или устарел'
+                    ? 'Токен отозван или устарел — получи новую ссылку'
                     : 'Для входа через браузер'
                   }
                 </div>
@@ -3709,12 +3730,17 @@ function OpenInBrowserButton({ ctx }) {
       const token = await generateWebToken();
       if (!token) return;
       const url = `${window.location.origin}${window.location.pathname}?wt=${token}`;
+      // Всегда копируем в буфер обмена — резерв на случай если браузер не откроется
+      let copied = false;
+      try { await navigator.clipboard.writeText(url); copied = true; } catch { /* ignore */ }
+      // Пробуем открыть в внешнем браузере
       if (tgWebApp?.openLink) {
         tgWebApp.openLink(url);
+        showToast(copied ? 'Открываем в браузере. Ссылка скопирована' : 'Открываем в браузере…');
       } else {
-        // Фолбэк: копируем ссылку
-        try { await navigator.clipboard.writeText(url); showToast('Ссылка скопирована'); }
-        catch { showToast(url); }
+        // Нет openLink — только копируем
+        if (copied) showToast('Ссылка скопирована — вставь в Chrome');
+        else showToast(url); // последний резерв: показываем саму ссылку
       }
     } finally {
       setLoading(false);
