@@ -445,6 +445,77 @@ const TAX_REGIME = {
   OUR: { label: 'ОУР', desc: 'Общеустановленный режим' },
   SNR: { label: 'СНР', desc: 'Специальный налоговый режим' },
 };
+
+// Реквизиты нашей компании по налоговому режиму — для генерации текста юристу
+const OUR_REQUISITES = {
+  OUR: {
+    company:         'ТОО "Мастер Кофе"',
+    address:         'Астана, МИКРОРАЙОН ЖАСТАР. ПЕРЕУЛОК ЖУМАБЕК ТАШЕНОВ, дом 4/2, кв/офис н.п.1',
+    bin:             '140540006103',
+    bank:            'АО "Kaspi Bank"',
+    kbe:             '17',
+    bik:             'CASPKZKA',
+    account:         'KZ24722S000044591862',
+    signatory_name:  'Утегулова Далида Кайыргалиевна',
+    signatory_title: '____________',
+    authority:       'доверенность №1 от 28.03.2025',
+  },
+  SNR: {
+    company:         'ТОО "MASTER COFFEE FOOD"',
+    address:         'Астана, ҚАБАНБАЙ БАТЫР, дом 60, кв/офис 1',
+    bin:             '190840012524',
+    bank:            'АО "Kaspi Bank"',
+    kbe:             '17',
+    bik:             'CASPKZKA',
+    account:         'KZ95722S000050496138',
+    signatory_name:  'Утегулова Далида Кайыргалиевна',
+    signatory_title: 'Директор',
+    authority:       'Приказ №2-К от 30 апреля 2026 г',
+  },
+};
+
+// Генерирует готовый текст для отправки юристу
+function buildLawyerMessage(cr) {
+  const req = OUR_REQUISITES[cr.tax_regime] || OUR_REQUISITES.OUR;
+  const contractLabel = `${CONTRACT_TYPE[cr.contract_type]?.label || cr.contract_type} по ${PAYMENT_TERMS[cr.payment_terms]?.label?.toLowerCase() || cr.payment_terms}`;
+
+  const specLines = cr.specification.map(it => {
+    const price = Number(it.price_per_unit).toLocaleString('ru-RU');
+    return `${it.name} ---------- ${price} тг ---- ${it.volume} ${it.unit}`;
+  }).join('\n');
+  const deliveryLine = cr.delivery_note ? `\n\n${cr.delivery_note}` : '';
+
+  const authorityLink = cr.authority_doc?.value || cr.authority_doc?.name || '';
+
+  return [
+    `Вид договора:\n${contractLabel}`,
+    `1. Спецификация\n\n${specLines}${deliveryLine}`,
+    `2. Реквизиты партнёра\n\n${cr.client_details || '—'}`,
+    [
+      '3. Наши реквизиты',
+      `Компания::  ${req.company}`,
+      `Адрес::  ${req.address}`,
+      `Бин (ИИН)::  ${req.bin}`,
+      `Банк::  ${req.bank}`,
+      `КБе::  ${req.kbe}`,
+      `БИК::  ${req.bik}`,
+      `Номер счета::  ${req.account}`,
+    ].join('\n'),
+    [
+      '4. Подписант со стороны партнёра',
+      `ФИО:  ${cr.signatory_name || '____________'}`,
+      `Должность: ${cr.signatory_title || '____________'}`,
+      authorityLink ? `Основание полномочий — ${authorityLink}` : '',
+    ].filter(Boolean).join('\n'),
+    [
+      '5. Наш подписант',
+      `ФИО: ${req.signatory_name}`,
+      `Должность: ${req.signatory_title}`,
+      `Основание полномочий: ${req.authority}`,
+    ].join('\n'),
+    'ВАЖНО:\nМы проводим доставку и установку по адресу, указанному в заказе, также делаем первичную настройку оборудования и проводим мини-инструктаж по работе с оборудованием. Далее ответственность полностью переходит на покупателя. По гарантии производим ремонт только если в ходе эксплуатации 1 года выявился заводской брак. Если поломка вызвана неправильной эксплуатацией — ремонт платный.',
+  ].join('\n\n');
+}
 const CONTRACT_STATUS = {
   pending:     { label: 'На рассмотрении',  short: 'Новая',     color: '#F59E0B', bg: '#FEF3C7', icon: CircleDot },
   in_progress: { label: 'В работе',         short: 'В работе',  color: '#3390EC', bg: '#E7F3FE', icon: FileText },
@@ -504,6 +575,9 @@ const DEFAULT_TG_TEMPLATES = {
   task_done:
     '✅ Задача {{task_number}} выполнена\nКлиент: {{client}}\nИтог: {{summary}}',
 
+  writeoff_new:
+    '🗑 Новое списание {{wo_number}}\nОт: {{manager}}\nПозиций: {{items_count}}\nПричина: {{reason}}',
+
   writeoff_approved:
     '📝 Акт списания {{wo_number}}\nОдобрил: {{approver}}\nИнициатор: {{creator}}\n\nПозиции:\n{{items}}\n\nПричина: {{reason}}',
 
@@ -541,6 +615,7 @@ const TG_TEMPLATE_VARS = {
   new_task_technician:    ['task_number', 'client', 'address', 'phone', 'problem', 'assignee', 'date_time'],
   new_task_barista:       ['task_number', 'client', 'address', 'phone', 'problem', 'assignee', 'date_time'],
   task_done:              ['task_number', 'client', 'summary'],
+  writeoff_new:           ['wo_number', 'manager', 'items_count', 'reason'],
   writeoff_approved:      ['wo_number', 'approver', 'creator', 'items', 'reason'],
   writeoff_to_warehouse:  ['wo_number', 'items_short', 'recipient'],
   writeoff_ready:         ['wo_number', 'pickup_code'],
@@ -594,7 +669,7 @@ function loadDB() {
         'new_task_technician',
         'storage_shipped_pickup',
         'new_task_barista',
-        'writeoff_approved',
+        'writeoff_new', 'writeoff_approved',
         'contract_new', 'contract_signed',
         'task_done', 'access_request',
         'grind_new', 'grind_ready', 'grind_pickup_code', 'grind_completed',
@@ -1408,6 +1483,18 @@ function App() {
       showToast('Ошибка: ' + e.message);
     }
   };
+  const updateUserTgNotif = async (userId, enabled) => {
+    if (currentUser?.role !== 'admin') return { error: 'Только для администратора' };
+    try {
+      const { error } = await supabase.from('users').update({ tg_notif_enabled: enabled }).eq('id', userId);
+      if (error) throw error;
+      setDb(d => ({ ...d, users: d.users.map(u => u.id === userId ? { ...u, tg_notif_enabled: enabled } : u) }));
+      return { ok: true };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+
   const transferAdmin = async (toUserId) => {
     try {
       // Снимаем admin у текущего, ставим b2b. Ставим admin новому.
@@ -1667,8 +1754,20 @@ function App() {
         body: `${number}: ${items.length} поз. от ${getUserName(d, currentUser.id)}`,
         at: new Date().toISOString(), read: false,
       }));
-      return { ...d, writeOffs: [writeOff, ...d.writeOffs], notifications: [...newNotifs, ...d.notifications] };
+      const tgEntry = makeTgLogEntry(d, 'writeoff_new', {
+        wo_number: number,
+        manager: getUserName(d, currentUser.id),
+        items_count: String(items.length),
+        reason: writeOff.reason.slice(0, 80),
+      });
+      return { ...d, writeOffs: [writeOff, ...d.writeOffs], notifications: [...newNotifs, ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
     });
+    // Личные TG-уведомления для нужных ролей (fire-and-forget)
+    const personalRoles = ['admin', 'director', 'senior_manager', 'warehouse'];
+    const personalText = `🗑 Новое списание ${number}\nОт: ${getUserName(db, currentUser.id)}\nПозиций: ${items.length}\nПричина: ${writeOff.reason.slice(0, 80)}`;
+    db.users
+      .filter(u => u.active && personalRoles.includes(u.role) && u.tg_notif_enabled !== false && u.telegram_id && u.id !== currentUser.id)
+      .forEach(u => sendPrivateTelegram(u, personalText));
     return { writeOff };
   };
 
@@ -1926,6 +2025,9 @@ function App() {
       })),
       identity_doc: data.identity_doc, // { type: 'url'|'file', name, value }
       authority_doc: data.authority_doc,
+      signatory_name:  (data.signatory_name  || '').trim() || null,
+      signatory_title: (data.signatory_title || '').trim() || null,
+      delivery_note:   (data.delivery_note   || '').trim() || null,
       contract_no: null,
       revisions: [],
       taken_by: null,
@@ -2648,7 +2750,7 @@ function App() {
     bootStatus,
     loginViaTelegram, logout,
     createOrder, changeStatus, closePickupOrder, cancelOrder,
-    approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, transferAdmin,
+    approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, transferAdmin,
     createTask, startTask, completeTask, rescheduleTask, deleteTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
@@ -6590,7 +6692,7 @@ function ExportScreen({ ctx }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function AdminUsersScreen({ ctx }) {
-  const { db, updateUserRole, deactivateUser, activateUser, showToast, resetDB } = ctx;
+  const { db, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, showToast, resetDB } = ctx;
 
   const activeUsers = db.users.filter(u => u.active && u.role !== 'pending');
   const inactiveUsers = db.users.filter(u => !u.active && u.role !== 'pending');
@@ -6625,6 +6727,11 @@ function AdminUsersScreen({ ctx }) {
             }}
             onDeactivate={() => deactivateUser(u.id)}
             onActivate={() => activateUser(u.id)}
+            onToggleTgNotif={async (uid, enabled) => {
+              const res = await updateUserTgNotif(uid, enabled);
+              if (res?.error) showToast(res.error);
+              else showToast(enabled ? 'TG-уведомления включены' : 'TG-уведомления отключены');
+            }}
           />
         ))}
       </div>
@@ -6632,7 +6739,7 @@ function AdminUsersScreen({ ctx }) {
   );
 }
 
-function UserRow({ user, db, onChangeRole, onDeactivate, onActivate }) {
+function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgNotif }) {
   const [open, setOpen] = useState(false);
   const r = roleOf(db, user.role);
   // Все роли, доступные для назначения (системные + кастомные), кроме admin и pending
@@ -6671,22 +6778,44 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate }) {
         </div>
       </div>
       {open && user.role !== 'admin' && (
-        <div className="mt-3 pt-3 flex flex-wrap gap-1.5" style={{ borderTop: '1px solid #F1F5F9' }}>
-          {assignableRoles.map(rd => (
-            <button key={rd.key} onClick={() => onChangeRole(rd.key)}
-              className="text-xs font-semibold rounded-full px-3 py-1.5"
-              style={{ background: user.role === rd.key ? rd.color : '#F5F7F8', color: user.role === rd.key ? 'white' : '#64748B' }}>
-              {rd.label}
-            </button>
-          ))}
-          {user.active ? (
-            <button onClick={onDeactivate} className="text-xs font-semibold rounded-full px-3 py-1.5 ml-auto" style={{ background: '#EB5757', color: 'white' }}>
-              Деактивировать
-            </button>
-          ) : (
-            <button onClick={onActivate} className="text-xs font-semibold rounded-full px-3 py-1.5 ml-auto" style={{ background: '#10B981', color: 'white' }}>
-              Активировать
-            </button>
+        <div className="mt-3 pt-3 space-y-2" style={{ borderTop: '1px solid #F1F5F9' }}>
+          {/* Роли */}
+          <div className="flex flex-wrap gap-1.5">
+            {assignableRoles.map(rd => (
+              <button key={rd.key} onClick={() => onChangeRole(rd.key)}
+                className="text-xs font-semibold rounded-full px-3 py-1.5"
+                style={{ background: user.role === rd.key ? rd.color : '#F5F7F8', color: user.role === rd.key ? 'white' : '#64748B' }}>
+                {rd.label}
+              </button>
+            ))}
+            {user.active ? (
+              <button onClick={onDeactivate} className="text-xs font-semibold rounded-full px-3 py-1.5 ml-auto" style={{ background: '#EB5757', color: 'white' }}>
+                Деактивировать
+              </button>
+            ) : (
+              <button onClick={onActivate} className="text-xs font-semibold rounded-full px-3 py-1.5 ml-auto" style={{ background: '#10B981', color: 'white' }}>
+                Активировать
+              </button>
+            )}
+          </div>
+          {/* TG-уведомления в бот */}
+          {user.telegram_id && (
+            <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: '#F5F7F8' }}>
+              <div>
+                <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>Уведомления в Telegram-бот</div>
+                <div className="text-[10px]" style={{ color: '#64748B' }}>Личные сообщения о событиях по роли</div>
+              </div>
+              <button
+                onClick={() => onToggleTgNotif && onToggleTgNotif(user.id, user.tg_notif_enabled === false ? true : false)}
+                className="relative flex-shrink-0 w-10 h-6 rounded-full transition-colors"
+                style={{ background: user.tg_notif_enabled === false ? '#E5E7EB' : '#297b8a' }}
+              >
+                <span
+                  className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
+                  style={{ transform: user.tg_notif_enabled === false ? 'translateX(1px)' : 'translateX(19px)' }}
+                />
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -9218,6 +9347,9 @@ function CreateContractScreen({ ctx }) {
     payment_terms: 'prepay_100',
     tax_regime: 'OUR',
     client_details: '',
+    signatory_name: '',
+    signatory_title: '',
+    delivery_note: '',
     specification: [{ tempId: uid(), product_id: '', name: '', unit: 'кг', volume: '', price_per_unit: '' }],
     identity_doc: null,
     authority_doc: null,
@@ -9381,15 +9513,45 @@ function CreateContractScreen({ ctx }) {
               value={form.client_details}
               onChange={e => update({ client_details: e.target.value })}
               rows={5}
-              placeholder={'ТОО «Coffee Boom Almaty»\nБИН: 123456789012\nЮр.адрес: г. Алматы, ул. Достык 132\nИИК: KZ123ABC...\nБИК: KCJBKZKX\nКегочерпы: Иванов И.И.'}
+              placeholder={'ТОО «Coffee Boom Almaty»\nБИН: 123456789012\nЮр.адрес: г. Алматы, ул. Достык 132\nИИК: KZ123ABC...\nБИК: KCJBKZKX'}
               className="w-full px-3 py-2.5 rounded-lg outline-none mono-font"
               style={{ border: `1px solid ${errors.client_details ? '#EB5757' : '#E5E7EB'}`, fontSize: 13 }}
             />
             {errors.client_details && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.client_details}</div>}
-            <div className="text-[11px] mt-1" style={{ color: '#A8A8AE' }}>Одним сообщением — название, БИН/ИИН, юр.адрес, банковские реквизиты, ФИО подписанта.</div>
+            <div className="text-[11px] mt-1" style={{ color: '#A8A8AE' }}>Название, БИН/ИИН, юр.адрес, банковские реквизиты</div>
           </Card>
 
-          <Card title="5. Налоговый режим клиента">
+          <Card title="5. Подписант со стороны клиента">
+            <div className="space-y-3">
+              <SiteInput
+                label="ФИО подписанта"
+                value={form.signatory_name}
+                onChange={v => update({ signatory_name: v })}
+                placeholder="МАЛАЕВ ХАКИМЖАН АЛТАЕВИЧ"
+              />
+              <SiteInput
+                label="Должность"
+                value={form.signatory_title}
+                onChange={v => update({ signatory_title: v })}
+                placeholder="Директор"
+              />
+            </div>
+            <div className="text-[11px] mt-2" style={{ color: '#A8A8AE' }}>Необязательно — если не заполнено, в тексте для юриста будут прочерки.</div>
+          </Card>
+
+          <Card title="6. Примечание к доставке (для спецификации)">
+            <textarea
+              value={form.delivery_note}
+              onChange={e => update({ delivery_note: e.target.value })}
+              rows={2}
+              placeholder="Доставка до клиента. По прибытию на склад г. Алматы, ориентировочные сроки 15.06.2026"
+              className="w-full px-3 py-2.5 rounded-lg outline-none"
+              style={{ border: '1px solid #E5E7EB', fontSize: 13 }}
+            />
+            <div className="text-[11px] mt-1" style={{ color: '#A8A8AE' }}>Необязательно — появится в конце спецификации в тексте для юриста.</div>
+          </Card>
+
+          <Card title="7. Налоговый режим клиента">
             <div className="grid grid-cols-2 gap-2">
               {Object.entries(TAX_REGIME).map(([k, v]) => (
                 <button key={k} onClick={() => update({ tax_regime: k })}
@@ -9405,7 +9567,7 @@ function CreateContractScreen({ ctx }) {
             </div>
           </Card>
 
-          <Card title="6. Основание полномочий">
+          <Card title="8. Основание полномочий подписанта клиента">
             <FileOrUrlInput
               label=""
               value={form.authority_doc}
@@ -9454,6 +9616,7 @@ function ContractDetailScreen({ ctx, contractId }) {
   const [signOpen, setSignOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [lawyerCopied, setLawyerCopied] = useState(false);
 
   if (!cr) return <div className="p-6">Заявка не найдена</div>;
 
@@ -9529,6 +9692,36 @@ function ContractDetailScreen({ ctx, contractId }) {
           <Card title="Реквизиты клиента">
             <div className="text-sm whitespace-pre-wrap mono-font p-3 rounded-lg" style={{ background: '#F5F7F8', color: '#1A1814', fontSize: 13 }}>{cr.client_details}</div>
           </Card>
+
+          {/* Текст для юриста — показываем когда заявка взята в работу или подписана */}
+          {(cr.status === 'in_progress' || cr.status === 'signed') && (
+            <Card title="📋 Текст для юриста">
+              <div className="text-xs mb-3 rounded-lg px-3 py-2" style={{ background: '#E7F3FE', color: '#1E40AF' }}>
+                Скопируйте и отправьте юристу во внешний мессенджер
+              </div>
+              <div
+                className="text-xs whitespace-pre-wrap mono-font p-3 rounded-lg mb-3 select-all"
+                style={{ background: '#F5F7F8', color: '#1A1814', fontSize: 12, lineHeight: 1.6, maxHeight: 320, overflowY: 'auto', border: '1px solid #E5E7EB' }}
+              >
+                {buildLawyerMessage(cr)}
+              </div>
+              <button
+                onClick={() => {
+                  try {
+                    navigator.clipboard.writeText(buildLawyerMessage(cr));
+                    setLawyerCopied(true);
+                    setTimeout(() => setLawyerCopied(false), 2500);
+                  } catch {
+                    showToast('Нажмите и удерживайте текст, чтобы скопировать');
+                  }
+                }}
+                className="w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+                style={{ background: lawyerCopied ? '#DCFCE7' : '#297b8a', color: lawyerCopied ? '#15803D' : 'white', transition: 'background 0.3s' }}
+              >
+                {lawyerCopied ? <><Check size={14} /> Скопировано!</> : <><Copy size={14} /> Копировать текст для юриста</>}
+              </button>
+            </Card>
+          )}
 
           <Card title="Документы">
             <div className="space-y-2">
