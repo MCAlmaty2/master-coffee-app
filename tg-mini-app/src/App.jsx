@@ -1786,7 +1786,7 @@ function App() {
     const wo = db.writeOffs.find(w => w.id === writeOffId);
     if (!wo) return { error: 'Заявка не найдена' };
     if (wo.status !== 'invoiced') return { error: 'Заявка должна быть в статусе «В 1С»' };
-    const existingCodes = new Set(db.writeOffs.filter(w => w.pickup_code).map(w => w.pickup_code));
+    const existingCodes = db.writeOffs.filter(w => w.pickup_code).map(w => w.pickup_code);
     const code = gen4DigitCode(existingCodes);
     setDb(d => {
       const updatedList = d.writeOffs.map(w => {
