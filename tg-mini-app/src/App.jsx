@@ -724,8 +724,7 @@ function validateOrderForm(form) {
     if (!cp) errors.contact_person = 'Укажите контактное лицо';
     else if (cp.split(/\s+/).filter(Boolean).length < 2) errors.contact_person = 'Минимум 2 слова';
     const email = (form.email || '').trim();
-    if (!email) errors.email = 'Укажите email';
-    else if (!EMAIL_RE.test(email)) errors.email = 'Некорректный email';
+    if (email && !EMAIL_RE.test(email)) errors.email = 'Некорректный email';
   }
   if (!form.phone || !form.phone.trim()) errors.phone = 'Укажите телефон';
   else if (!normalizePhone(form.phone)) errors.phone = 'Некорректный казахстанский номер';
@@ -5184,7 +5183,7 @@ function CreateOrderScreen({ ctx }) {
                   <SiteInput label="Название компании" value={form.company_name} onChange={v => update({ company_name: v })} error={errors.company_name} placeholder='ТОО "Coffee Boom"' />
                   <SiteInput label="БИН" value={form.bin} onChange={v => update({ bin: v.replace(/\D/g, '').slice(0, 12) })} error={errors.bin} placeholder="180440019877" />
                   <SiteInput label="Контактное лицо" value={form.contact_person} onChange={v => update({ contact_person: v })} error={errors.contact_person} placeholder="Касымов Ержан" />
-                  <SiteInput label="Email" value={form.email} onChange={v => update({ email: v })} error={errors.email} type="email" placeholder="info@company.kz" />
+                  <SiteInput label="Email (необязательно)" value={form.email} onChange={v => update({ email: v })} error={errors.email} type="email" placeholder="info@company.kz" />
                 </>
               )}
               <SiteInput label="Телефон" value={form.phone} onChange={v => update({ phone: v })} error={errors.phone} placeholder="+7 777 123 45 67" />
