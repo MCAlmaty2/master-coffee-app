@@ -185,6 +185,36 @@ async function sendPrivateTelegram(user, text) {
   }
 }
 
+// Создать in-app уведомление + fire-and-forget личный Telegram получателю.
+// Используй вместо inline-объекта { id: uid(), recipient_id, title, body, at, read: false }.
+function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id }) {
+  const notif = {
+    id: uid(),
+    recipient_id,
+    title,
+    body,
+    at: new Date().toISOString(),
+    read: false,
+    ...(link_kind != null ? { link_kind } : {}),
+    ...(link_id   != null ? { link_id }   : {}),
+  };
+  const tgs       = db?.telegramSettings;
+  const recipient = db?.users?.find(u => u.id === recipient_id);
+  if (recipient?.telegram_id && recipient.tg_notif_enabled !== false && tgs?.bot_token) {
+    const tgText = `🔔 *${title}*${body ? `\n${body}` : ''}`;
+    try {
+      supabase.functions.invoke('send-telegram', {
+        body: { chat_id: recipient.telegram_id, text: tgText, bot_token: tgs.bot_token },
+      })
+        .then(({ error }) => { if (error) console.warn('[tg:notif] send failed:', error); })
+        .catch(e => console.warn('[tg:notif] invoke failed:', e));
+    } catch (e) {
+      console.warn('[tg:notif] dispatch failed:', e);
+    }
+  }
+  return notif;
+}
+
 function getUserName(db, userId) {
   const u = db.users.find(x => x.id === userId);
   return u ? `${u.first_name} ${u.last_name}` : '—';
@@ -1134,12 +1164,11 @@ function App() {
           setDb(d => ({
             ...d,
             notifications: [
-              ...admins.map(a => ({
-                id: uid(), recipient_id: a.id,
+              ...admins.map(a => makeNotif(d, {
+                recipient_id: a.id,
                 link_kind: 'access', link_id: '',
-              title: 'Новый запрос на доступ',
+                title: 'Новый запрос на доступ',
                 body: `${user.first_name} ${user.last_name || ''} (Telegram @${tgUser.username || tgUser.id}) запросил доступ`,
-                at: new Date().toISOString(), read: false,
               })),
               ...d.notifications,
             ],
@@ -1191,14 +1220,11 @@ function App() {
     };
     setDb(d => {
       const b2bUsers = d.users.filter(u => u.role === 'b2b' && u.active);
-      const newNotifs = b2bUsers.map(u => ({
-        id: uid(),
+      const newNotifs = b2bUsers.map(u => makeNotif(d, {
         recipient_id: u.id,
         title: 'Новая заявка',
         body: `${order.order_number}: ${order.client_type === 'individual' ? order.full_name : order.company_name}, ${fmtNum(order.total_amount)} тг`,
         link_kind: 'order', link_id: order.id,
-        at: new Date().toISOString(),
-        read: false,
       }));
       const clientName = order.client_type === 'individual' ? order.full_name : order.company_name;
       // Telegram: новая B2B-заявка → тема «Sales Department»
@@ -1245,22 +1271,20 @@ function App() {
       const author = d.users.find(u => u.id === order?.created_by);
       const newNotifs = [];
       if (author && author.role === 'sales') {
-        newNotifs.push({
-          id: uid(), recipient_id: author.id,
+        newNotifs.push(makeNotif(d, {
+          recipient_id: author.id,
           title: 'Изменение статуса',
           body: `${order.order_number}: ${STATUS[order.status].label} → ${STATUS[newStatus].label}`,
-          at: new Date().toISOString(), read: false,
-        });
+        }));
       }
       if (newStatus === 'ready') {
         const ord = orders.find(o => o.id === orderId);
         if (ord?.pickup_code) {
-          newNotifs.push({
-            id: uid(), recipient_id: order.created_by,
+          newNotifs.push(makeNotif(d, {
+            recipient_id: order.created_by,
             title: 'Код самовывоза',
             body: `${order.order_number}: код ${ord.pickup_code}`,
-            at: new Date().toISOString(), read: false,
-          });
+          }));
         }
       }
       // Telegram-маршрутизация — только конкретные значимые события, не «всё подряд»
@@ -1287,13 +1311,12 @@ function App() {
         // In-app: уведомить всех активных кладовщиков о новом самовывозе
         const clientName = updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name;
         d.users.filter(u => u.active && u.role === 'warehouse').forEach(wu => {
-          newNotifs.push({
-            id: uid(), recipient_id: wu.id,
+          newNotifs.push(makeNotif(d, {
+            recipient_id: wu.id,
             title: '📦 Новый самовывоз',
             body: `${updatedOrder.order_number} · ${clientName}`,
             link_kind: 'order', link_id: orderId,
-            at: new Date().toISOString(), read: false,
-          });
+          }));
         });
       }
       // Прочие смены статуса в Telegram не шлём — это шум по требованию.
@@ -1322,11 +1345,12 @@ function App() {
         };
       }),
       notifications: [
-        { id: uid(), recipient_id: order.created_by,
+        makeNotif(d, {
+          recipient_id: order.created_by,
           title: 'Заказ выдан клиенту',
           body: `${order.order_number}: клиент забрал самовывоз`,
           link_kind: 'order', link_id: order.id,
-          at: new Date().toISOString(), read: false },
+        }),
         ...d.notifications,
       ],
     }));
@@ -1368,14 +1392,11 @@ function App() {
         };
       }),
       notifications: [
-        {
-          id: uid(),
+        makeNotif(d, {
           recipient_id: order.created_by,
           title: 'Заявка отменена',
           body: `Заявка ${order.order_number} была отменена. Причина: ${reason.trim() || 'не указана'}`,
-          at: new Date().toISOString(),
-          read: false,
-        },
+        }),
         ...d.notifications,
       ],
     }));
@@ -1440,19 +1461,11 @@ function App() {
         ...d,
         users: d.users.map(u => u.id === userId ? updated : u),
         notifications: [
-          { id: uid(), recipient_id: updated.id, title: 'Доступ предоставлен', body: `Роль: ${roleOf(d, role).label}. Откройте бота в Telegram и зайдите снова.`, at: new Date().toISOString(), read: false },
+          makeNotif(d, { recipient_id: updated.id, title: 'Доступ предоставлен', body: `Роль: ${roleOf(d, role).label}. Откройте бота в Telegram и зайдите снова.` }),
           ...d.notifications,
         ],
       }));
-      // Отправляем личное уведомление пользователю через бота
-      const roleLabel = roleOf(db, role).label;
-      sendPrivateTelegram(updated, `✅ Ваш доступ к Master Coffee CRM одобрен!\n\nРоль: ${roleLabel}\n\nОткройте бота и запустите Mini App снова.`)
-        .then(r => {
-          if (r.error) {
-            console.warn('[tg] не удалось уведомить лично:', r.error);
-            // Это не блокер: пользователь увидит уведомление в самом приложении
-          }
-        });
+      // TG уведомление отправляется автоматически через makeNotif
       return { ok: true };
     } catch (e) {
       return { error: e.message };
@@ -1559,13 +1572,12 @@ function App() {
       const notifs = [];
       // Если ставлю задачу не себе — уведомить исполнителя
       if (data.assignee_id !== currentUser.id) {
-        notifs.push({
-          id: uid(), recipient_id: data.assignee_id,
+        notifs.push(makeNotif(d, {
+          recipient_id: data.assignee_id,
           title: 'Новая задача',
           body: `${task.task_number}: ${task.client_name} — ${task.problem.slice(0, 60)}${task.problem.length > 60 ? '…' : ''}`,
           link_kind: 'task', link_id: task.id,
-          at: new Date().toISOString(), read: false,
-        });
+        }));
       }
       const tgEvent = data.department === 'barista' ? 'new_task_barista' : 'new_task_technician';
       const tgEntry = makeTgLogEntry(d, tgEvent, {
@@ -1647,21 +1659,19 @@ function App() {
       }),
       notifications: [
         // Уведомляем постановщика если переносит исполнитель
-        ...(isAssignee && task.created_by !== currentUser.id ? [{
-          id: uid(), recipient_id: task.created_by,
+        ...(isAssignee && task.created_by !== currentUser.id ? [makeNotif(d, {
+          recipient_id: task.created_by,
           title: 'Задача перенесена',
           body: `${task.task_number}: ${newDate}${newTime ? ' ' + newTime : ''}${reason ? ` · ${reason.trim()}` : ''}`,
           link_kind: 'task', link_id: task.id,
-          at: new Date().toISOString(), read: false,
-        }] : []),
+        })] : []),
         // Уведомляем исполнителя если переносит менеджер
-        ...(!isAssignee && task.assignee_id !== currentUser.id ? [{
-          id: uid(), recipient_id: task.assignee_id,
+        ...(!isAssignee && task.assignee_id !== currentUser.id ? [makeNotif(d, {
+          recipient_id: task.assignee_id,
           title: 'Задача перенесена',
           body: `${task.task_number}: новая дата ${newDate}${newTime ? ' ' + newTime : ''}`,
           link_kind: 'task', link_id: task.id,
-          at: new Date().toISOString(), read: false,
-        }] : []),
+        })] : []),
         ...d.notifications,
       ],
     }));
@@ -1691,7 +1701,7 @@ function App() {
         };
       }),
       notifications: [
-        { id: uid(), recipient_id: task.created_by, title: 'Задача выполнена', body: `${task.task_number}: ${task.client_name}`, link_kind: 'task', link_id: task.id, at: new Date().toISOString(), read: false },
+        makeNotif(d, { recipient_id: task.created_by, title: 'Задача выполнена', body: `${task.task_number}: ${task.client_name}`, link_kind: 'task', link_id: task.id }),
         ...d.notifications,
       ],
       telegramLog: [makeTgLogEntry(d, 'task_done', { task_number: task.task_number, client: task.client_name, summary: summary.trim() }), ...d.telegramLog],
@@ -1760,11 +1770,10 @@ function App() {
     setDb(d => {
       // Уведомить всех, кто может одобрять (директор/старший менеджер)
       const approvers = d.users.filter(u => u.active && ['director', 'senior_manager'].includes(u.role));
-      const newNotifs = approvers.map(a => ({
-        id: uid(), recipient_id: a.id,
+      const newNotifs = approvers.map(a => makeNotif(d, {
+        recipient_id: a.id,
         title: 'Заявка на списание',
         body: `${number}: ${items.length} поз. от ${getUserName(d, currentUser.id)}`,
-        at: new Date().toISOString(), read: false,
       }));
       const tgEntry = makeTgLogEntry(d, 'writeoff_new', {
         wo_number: number,
@@ -1774,11 +1783,10 @@ function App() {
       });
       return { ...d, writeOffs: [writeOff, ...d.writeOffs], notifications: [...newNotifs, ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
     });
-    // Личные TG-уведомления для нужных ролей (fire-and-forget)
-    const personalRoles = ['admin', 'director', 'senior_manager', 'warehouse'];
+    // Личные TG для admin — у них нет in-app уведомления, но стоит знать (fire-and-forget)
     const personalText = `🗑 Новое списание ${number}\nОт: ${getUserName(db, currentUser.id)}\nПозиций: ${items.length}\nПричина: ${writeOff.reason.slice(0, 80)}`;
     db.users
-      .filter(u => u.active && personalRoles.includes(u.role) && u.tg_notif_enabled !== false && u.telegram_id && u.id !== currentUser.id)
+      .filter(u => u.active && u.role === 'admin' && u.tg_notif_enabled !== false && u.telegram_id && u.id !== currentUser.id)
       .forEach(u => sendPrivateTelegram(u, personalText));
     return { writeOff };
   };
@@ -1802,21 +1810,19 @@ function App() {
       });
       const newNotifs = [];
       // Уведомить автора
-      newNotifs.push({
-        id: uid(), recipient_id: wo.created_by,
+      newNotifs.push(makeNotif(d, {
+        recipient_id: wo.created_by,
         title: 'Списание одобрено',
         link_kind: 'writeoff', link_id: wo.id,
         body: `${wo.number}: одобрена ${getUserName(d, currentUser.id)}`,
-        at: new Date().toISOString(), read: false,
-      });
+      }));
       // Уведомить кассиров
       const cashiers = d.users.filter(u => u.active && u.role === 'cashier');
-      cashiers.forEach(c => newNotifs.push({
-        id: uid(), recipient_id: c.id,
+      cashiers.forEach(c => newNotifs.push(makeNotif(d, {
+        recipient_id: c.id,
         title: 'К списанию в 1С',
         body: `${wo.number}: одобрена, требуется списать в 1С`,
-        at: new Date().toISOString(), read: false,
-      }));
+      })));
       const itemsSummary = wo.items.map(i => `· ${i.name} — ${i.quantity} ${i.unit}`).join('\n');
       const tgEntry = makeTgLogEntry(d, 'writeoff_approved', {
         wo_number: wo.number,
@@ -1848,13 +1854,12 @@ function App() {
           log: [...w.log, { event: 'status', from: 'pending', to: 'rejected', actor: currentUser.id, at: new Date().toISOString(), meta: { comment: comment.trim() } }],
         };
       });
-      const newNotifs = [{
-        id: uid(), recipient_id: wo.created_by,
+      const newNotifs = [makeNotif(d, {
+        recipient_id: wo.created_by,
         title: 'Списание отклонено',
         link_kind: 'writeoff', link_id: wo.id,
         body: `${wo.number}: причина — ${comment.trim().slice(0, 80)}`,
-        at: new Date().toISOString(), read: false,
-      }];
+      })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications] };
     });
     return { ok: true };
@@ -1887,13 +1892,13 @@ function App() {
       const author = d.users.find(u => u.id === wo.created_by);
       const warehouseUsers = d.users.filter(u => u.active && u.role === 'warehouse');
       const newNotifs = [
-        { id: uid(), recipient_id: wo.created_by, title: 'Документ списания проведён',
+        makeNotif(d, { recipient_id: wo.created_by, title: 'Документ списания проведён',
           body: `${wo.number} → ${trimmed}. Ждите когда склад соберёт.`,
-          link_kind: 'writeoff', link_id: wo.id, at: new Date().toISOString(), read: false },
-        ...warehouseUsers.map(wu => ({
-          id: uid(), recipient_id: wu.id, title: 'Списание · собрать',
+          link_kind: 'writeoff', link_id: wo.id }),
+        ...warehouseUsers.map(wu => makeNotif(d, {
+          recipient_id: wu.id, title: 'Списание · собрать',
           body: `${wo.number}: ${(d.writeOffs.find(w => w.id === writeOffId)?.items || []).length} поз. для ${author ? author.first_name + ' ' + (author.last_name||'') : '—'}`,
-          link_kind: 'writeoff', link_id: wo.id, at: new Date().toISOString(), read: false,
+          link_kind: 'writeoff', link_id: wo.id,
         })),
       ];
       const tgEntries = [makeTgLogEntry(d, 'writeoff_to_warehouse', {
@@ -1930,13 +1935,12 @@ function App() {
           log: [...w.log, { event: 'status', from: 'invoiced', to: 'prepared', actor: currentUser.id, at: new Date().toISOString(), meta: { pickup_code: code } }],
         };
       });
-      const newNotifs = [{
-        id: uid(), recipient_id: wo.created_by,
+      const newNotifs = [makeNotif(d, {
+        recipient_id: wo.created_by,
         title: 'Списание готово к выдаче',
         body: `${wo.number}: код выдачи ${code}. Подойдите на склад.`,
         link_kind: 'writeoff', link_id: wo.id,
-        at: new Date().toISOString(), read: false,
-      }];
+      })];
       const tgEntries = [makeTgLogEntry(d, 'writeoff_ready', { wo_number: wo.number, pickup_code: code })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
@@ -1968,13 +1972,12 @@ function App() {
           log: [...w.log, { event: 'status', from: 'prepared', to: 'delivered', actor: currentUser.id, at: new Date().toISOString() }],
         };
       });
-      const newNotifs = [{
-        id: uid(), recipient_id: wo.created_by,
+      const newNotifs = [makeNotif(d, {
+        recipient_id: wo.created_by,
         title: 'Списание выдано',
         body: `${wo.number}: вы получили на складе.`,
         link_kind: 'writeoff', link_id: wo.id,
-        at: new Date().toISOString(), read: false,
-      }];
+      })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications] };
     });
     return { ok: true };
@@ -2055,12 +2058,11 @@ function App() {
     setDb(d => {
       // Уведомить ст.менеджера и директора
       const approvers = d.users.filter(u => u.active && ['director', 'senior_manager'].includes(u.role));
-      const newNotifs = approvers.map(a => ({
-        id: uid(), recipient_id: a.id,
+      const newNotifs = approvers.map(a => makeNotif(d, {
+        recipient_id: a.id,
         link_kind: 'contract', link_id: cr.id,
-            title: 'Новая заявка на договор',
+        title: 'Новая заявка на договор',
         body: `${number}: ${CONTRACT_TYPE[cr.contract_type].short} от ${getUserName(d, currentUser.id)}`,
-        at: new Date().toISOString(), read: false,
       }));
       const tgMsg = { cr_number: number, contract_type: CONTRACT_TYPE[cr.contract_type].label, manager: getUserName(d, currentUser.id), items_count: spec.length };
       return {
@@ -2088,8 +2090,8 @@ function App() {
         log: [...c.log, { event: 'status', from: 'pending', to: 'in_progress', actor: currentUser.id, at: new Date().toISOString() }],
       } : c),
       notifications: [
-        { id: uid(), recipient_id: cr.created_by, link_kind: 'contract', link_id: cr.id,
-            title: 'Заявка на договор в работе', body: `${cr.number}: ${getUserName(d, currentUser.id)} принял в работу`, at: new Date().toISOString(), read: false },
+        makeNotif(d, { recipient_id: cr.created_by, link_kind: 'contract', link_id: cr.id,
+          title: 'Заявка на договор в работе', body: `${cr.number}: ${getUserName(d, currentUser.id)} принял в работу` }),
         ...d.notifications,
       ],
     }));
@@ -2126,8 +2128,8 @@ function App() {
       } : c),
       // Уведомить автора и/или принявшего, кроме того, кто сейчас добавляет
       notifications: [
-        ...(cr.created_by !== currentUser.id ? [{ id: uid(), recipient_id: cr.created_by, title: `Правка #${revision.version} к договору`, body: `${cr.number}: ${revision.comment.slice(0, 60)}`, at: revision.created_at, read: false }] : []),
-        ...(cr.taken_by && cr.taken_by !== currentUser.id ? [{ id: uid(), recipient_id: cr.taken_by, title: `Правка #${revision.version} к договору`, body: `${cr.number}: ${revision.comment.slice(0, 60)}`, at: revision.created_at, read: false }] : []),
+        ...(cr.created_by !== currentUser.id ? [makeNotif(d, { recipient_id: cr.created_by, title: `Правка #${revision.version} к договору`, body: `${cr.number}: ${revision.comment.slice(0, 60)}` })] : []),
+        ...(cr.taken_by && cr.taken_by !== currentUser.id ? [makeNotif(d, { recipient_id: cr.taken_by, title: `Правка #${revision.version} к договору`, body: `${cr.number}: ${revision.comment.slice(0, 60)}` })] : []),
         ...d.notifications,
       ],
     }));
@@ -2164,8 +2166,8 @@ function App() {
         log: [...c.log, { event: 'status', from: 'in_progress', to: 'signed', actor: currentUser.id, at: new Date().toISOString(), meta: { contract_no: trimmedNo } }],
       } : c),
       notifications: [
-        { id: uid(), recipient_id: cr.created_by, link_kind: 'contract', link_id: cr.id,
-            title: 'Договор подписан', body: `${cr.number} → ${trimmedNo}`, at: new Date().toISOString(), read: false },
+        makeNotif(d, { recipient_id: cr.created_by, link_kind: 'contract', link_id: cr.id,
+          title: 'Договор подписан', body: `${cr.number} → ${trimmedNo}` }),
         ...d.notifications,
       ],
       telegramLog: [makeTgLogEntry(d, 'contract_signed', {
@@ -2196,8 +2198,8 @@ function App() {
         log: [...c.log, { event: 'status', from: c.status, to: 'rejected', actor: currentUser.id, at: new Date().toISOString(), meta: { comment: comment.trim() } }],
       } : c),
       notifications: [
-        { id: uid(), recipient_id: cr.created_by, link_kind: 'contract', link_id: cr.id,
-            title: 'Заявка на договор отклонена', body: `${cr.number}: ${comment.trim().slice(0, 80)}`, at: new Date().toISOString(), read: false },
+        makeNotif(d, { recipient_id: cr.created_by, link_kind: 'contract', link_id: cr.id,
+          title: 'Заявка на договор отклонена', body: `${cr.number}: ${comment.trim().slice(0, 80)}` }),
         ...d.notifications,
       ],
     }));
@@ -2324,12 +2326,11 @@ function App() {
 
     setDb(d => {
       const warehouseUsers = d.users.filter(u => u.active && hasPermission(d, u, 'grind_fulfill'));
-      const newNotifs = warehouseUsers.map(w => ({
-        id: uid(), recipient_id: w.id,
+      const newNotifs = warehouseUsers.map(w => makeNotif(d, {
+        recipient_id: w.id,
         title: 'Новая заявка на помол',
         link_kind: 'grind', link_id: grind.id,
         body: `${number}: ${grind.product_name} · ${qty} ${grind.unit} · ${GRIND_TYPES[grind.grind_type]?.label || grind.grind_type}`,
-        at: new Date().toISOString(), read: false,
       }));
       const tgEntry = makeTgLogEntry(d, 'grind_new', {
         gr_number: number,
@@ -2389,13 +2390,12 @@ function App() {
         return updated;
       });
       // Уведомить менеджера-автора
-      const newNotifs = [{
-        id: uid(), recipient_id: updated.created_by,
+      const newNotifs = [makeNotif(d, {
+        recipient_id: updated.created_by,
         link_kind: 'grind', link_id: updated.id,
         title: '☕ Помол готов',
         body: `${updated.number}: ${updated.product_name} — помол завершён, ушёл в архив`,
-        at: new Date().toISOString(), read: false,
-      }];
+      })];
       const tgEntry = makeTgLogEntry(d, 'grind_ready', {
         gr_number: updated.number,
         product: updated.product_name,
@@ -2657,16 +2657,16 @@ function App() {
       };
       setDb(d => ({ ...d, feedbackMessages: [...(d.feedbackMessages || []), feedback] }));
       // Админу уведомление
-      const notif = {
-        id: uid(),
-        recipient_id: db.users.find(u => u.role === 'admin')?.id,
-        title: 'Новая обратная связь',
-        body: `От ${currentUser.first_name}: ${message.slice(0, 50)}...`,
-        at: new Date().toISOString(),
-        read: false,
-      };
-      if (notif.recipient_id) {
-        setDb(d => ({ ...d, notifications: [...(d.notifications || []), notif] }));
+      const adminId = db.users.find(u => u.role === 'admin')?.id;
+      if (adminId) {
+        setDb(d => ({
+          ...d,
+          notifications: [...(d.notifications || []), makeNotif(d, {
+            recipient_id: adminId,
+            title: 'Новая обратная связь',
+            body: `От ${currentUser.first_name}: ${message.slice(0, 50)}...`,
+          })],
+        }));
       }
       return { ok: true };
     } catch (e) {
