@@ -34,6 +34,15 @@ import {
   deleteRow,
   subscribeToTable,
 } from './supabase/sync';
+import {
+  DeliveryRegistriesScreen,
+  DeliveryNewRegistryScreen,
+  DeliveryRegistryDetailScreen,
+  DeliveryFailedQueueScreen,
+  CourierRegistryScreen,
+  CourierOrderDetailScreen,
+  CourierDeliveryWidget,
+} from './screens/DeliveryScreen';
 
 /* ═════════════════════════════════════════════════════════════════════════
    ГИБРИДНАЯ ВЕРСИЯ: users + products → Supabase, остальное → localStorage.
@@ -322,6 +331,7 @@ const ROLES = {
   cashier:        { label: 'Кассир',                 short: 'Кассир',       color: '#0D9488' },
   barista:        { label: 'Бариста',                short: 'Бариста',      color: '#0EA5E9' },
   technician:     { label: 'Техник',                 short: 'Техник',       color: '#16A34A' },
+  courier:        { label: 'Курьер',                 short: 'Курьер',       color: '#0891B2' },
   pending:        { label: 'Ожидает подтверждения',  short: 'Ожидает',      color: '#A8A8AE' },
 };
 
@@ -357,9 +367,13 @@ const PERMISSIONS = {
   contract_create:      { group: 'Договоры', label: 'Подавать заявки на договор' },
   contract_take:        { group: 'Договоры', label: 'Принимать заявку на договор в работу' },
   contract_view_all:    { group: 'Договоры', label: 'Видеть все заявки на договор' },
+  // Доставка
+  delivery_manage:      { group: 'Доставка', label: 'Создавать реестры и принимать решения по недоставленным' },
+  delivery_view_all:    { group: 'Доставка', label: 'Видеть все реестры доставок' },
+  delivery_courier:     { group: 'Доставка', label: 'Брать заказы из реестра и отмечать доставку' },
   // Помол кофе
   grind_create:         { group: 'Помол', label: 'Создавать заявки на помол' },
-  grind_fulfill:        { group: 'Помол', label: 'Молоть кофе (склад): брать в работу, отмечать готовность, выдавать' },
+  grind_fulfill:        { group: 'Помол', label: 'Молоть кофе (склад): брать в работу, отмечать готовность' },
   grind_view_all:       { group: 'Помол', label: 'Видеть все заявки на помол' },
   // Админ
   admin_users:          { group: 'Администрирование', label: 'Управлять пользователями' },
@@ -369,7 +383,7 @@ const PERMISSIONS = {
 };
 
 // Системные роли — пресеты. Admin их редактирует, но удалить нельзя.
-const SYSTEM_ROLES = ['admin', 'director', 'senior_manager', 'b2b', 'sales', 'warehouse', 'cashier', 'barista', 'technician', 'pending'];
+const SYSTEM_ROLES = ['admin', 'director', 'senior_manager', 'b2b', 'sales', 'warehouse', 'cashier', 'barista', 'technician', 'courier', 'pending'];
 
 function defaultPermissionsFor(roleKey) {
   switch (roleKey) {
@@ -378,7 +392,9 @@ function defaultPermissionsFor(roleKey) {
       return Object.keys(PERMISSIONS);
     case 'director':
     case 'senior_manager':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all'];
+    case 'courier':
+      return ['delivery_courier'];
     case 'b2b':
       return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all'];
     case 'sales':
@@ -525,14 +541,15 @@ const CONTRACT_STATUS_ORDER = ['pending', 'in_progress', 'signed'];
 
 // Заявки на помол кофе
 const GRIND_STATUS = {
-  new:            { label: 'Новая заявка',     short: 'Новая',     color: '#3390EC', bg: '#E7F3FE', icon: Inbox },
-  in_progress:    { label: 'В работе (склад мелет)', short: 'Мелют', color: '#F59E0B', bg: '#FEF3C7', icon: Loader2 },
-  ready:          { label: 'Готово',           short: 'Готово',    color: '#8B5CF6', bg: '#EDE9FE', icon: CheckCircle2 },
-  awaiting_pickup:{ label: 'Ждёт самовывоза',  short: 'Самовывоз', color: '#22C55E', bg: '#DCFCE7', icon: KeyRound },
-  completed:      { label: 'Выдано / в архиве',short: 'Выдано',    color: '#10B981', bg: '#D1FAE5', icon: Check },
-  cancelled:      { label: 'Отменена',         short: 'Отменена',  color: '#EB5757', bg: '#FEE2E2', icon: XCircle },
+  new:            { label: 'Новая заявка',  short: 'Новая',    color: '#3390EC', bg: '#E7F3FE', icon: Inbox },
+  in_progress:    { label: 'Мелют',        short: 'Мелют',    color: '#F59E0B', bg: '#FEF3C7', icon: Loader2 },
+  completed:      { label: 'Готово / архив',short: 'Готово',   color: '#10B981', bg: '#D1FAE5', icon: Check },
+  cancelled:      { label: 'Отменена',     short: 'Отменена', color: '#EB5757', bg: '#FEE2E2', icon: XCircle },
+  // legacy — для старых записей
+  ready:          { label: 'Готово',       short: 'Готово',   color: '#10B981', bg: '#D1FAE5', icon: Check },
+  awaiting_pickup:{ label: 'Готово',       short: 'Готово',   color: '#10B981', bg: '#D1FAE5', icon: Check },
 };
-const GRIND_STATUS_ORDER = ['new', 'in_progress', 'ready', 'awaiting_pickup', 'completed'];
+const GRIND_STATUS_ORDER = ['new', 'in_progress', 'completed'];
 
 const GRIND_TYPES = {
   espresso:    { label: 'Эспрессо',     hint: 'Мелкий помол для рожковых машин' },
@@ -593,16 +610,10 @@ const DEFAULT_TG_TEMPLATES = {
     '✅ Договор подписан\nЗаявка: {{cr_number}}\nНомер: {{contract_number}}\nКлиент: {{client}}\nТип: {{contract_type}}',
 
   grind_new:
-    '☕ Заявка на помол {{gr_number}}\nКофе: {{product}} · {{quantity}} {{unit}}\nПомол: {{grind_type}}{{machine}}\nПолучение: {{delivery}}\nМенеджер: {{manager}}',
+    '☕ Помол {{gr_number}}\nКлиент: {{client}}\nКофе: {{product}} · {{quantity}} {{unit}}\nПомол: {{grind_type}}{{order_1c}}\nМенеджер: {{manager}}',
 
   grind_ready:
-    '✅ Помол {{gr_number}} готов\n{{product}} · {{quantity}} {{unit}}\nМенеджер: {{manager}}',
-
-  grind_pickup_code:
-    '🏷️ Помол {{gr_number}} готов к выдаче\nКлиент: {{client}}\nКод самовывоза: {{pickup_code}}',
-
-  grind_completed:
-    '📦 Помол {{gr_number}} выдан\n{{product}} · {{quantity}} {{unit}}\n{{delivery_details}}',
+    '✅ Помол {{gr_number}} готов → архив\n{{product}} · {{quantity}} {{unit}}\nМенеджер: {{manager}}',
 };
 
 // Переменные доступные в каждом шаблоне (для подсказок в UI)
@@ -620,10 +631,8 @@ const TG_TEMPLATE_VARS = {
   writeoff_ready:         ['wo_number', 'pickup_code'],
   contract_new:           ['cr_number', 'contract_type', 'manager', 'items_count'],
   contract_signed:        ['cr_number', 'contract_number', 'client', 'contract_type'],
-  grind_new:              ['gr_number', 'product', 'quantity', 'unit', 'grind_type', 'machine', 'delivery', 'manager'],
+  grind_new:              ['gr_number', 'client', 'product', 'quantity', 'unit', 'grind_type', 'order_1c', 'manager'],
   grind_ready:            ['gr_number', 'product', 'quantity', 'unit', 'manager'],
-  grind_pickup_code:      ['gr_number', 'client', 'pickup_code'],
-  grind_completed:        ['gr_number', 'product', 'quantity', 'unit', 'delivery_details'],
 };
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 МБ на файл (ограничение localStorage)
@@ -671,7 +680,7 @@ function loadDB() {
         'writeoff_new', 'writeoff_approved',
         'contract_new', 'contract_signed',
         'task_done', 'access_request',
-        'grind_new', 'grind_ready', 'grind_pickup_code', 'grind_completed',
+        'grind_new', 'grind_ready',
       ];
       db.telegramSettings.topics = db.telegramSettings.topics || {};
       requiredTopics.forEach(key => {
@@ -717,6 +726,7 @@ function saveDB(db) {
     const {
       users: _u, products: _p, orders: _o, grindRequests: _g, tasks: _t,
       writeOffs: _w, contractRequests: _c, notifications: _n, roleDefinitions: _r,
+      deliveryRegistries: _dr, deliveryOrders: _do,
       ...rest
     } = db;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
@@ -735,6 +745,8 @@ function seedDB() {
     contractRequests: [],
     grindRequests: [],
     notifications: [],
+    deliveryRegistries: [],
+    deliveryOrders: [],
     roleDefinitions: SYSTEM_ROLES.map(key => ({
       key,
       label: ROLES[key].label,
@@ -753,7 +765,7 @@ function seedDB() {
         new_task_barista: '', writeoff_approved: '',
         contract_new: '', contract_signed: '',
         task_done: '', access_request: '',
-        grind_new: '', grind_ready: '', grind_pickup_code: '', grind_completed: '',
+        grind_new: '', grind_ready: '',
       },
       topics_enabled: {}, // по умолчанию всё включено (true = отсутствие ключа)
       templates: {},      // по умолчанию используются DEFAULT_TG_TEMPLATES
@@ -2272,8 +2284,6 @@ function App() {
     if (!qty || qty <= 0) return { error: 'Количество должно быть больше нуля' };
     if (!data.grind_type) return { error: 'Выберите степень помола' };
     if (data.grind_type === 'custom' && !data.grind_custom?.trim()) return { error: 'Опишите свой вариант помола' };
-    if (!data.delivery_method) return { error: 'Выберите способ получения' };
-    if (data.delivery_method === 'delivery' && !data.address?.trim()) return { error: 'Укажите адрес доставки' };
 
     const year = new Date().getFullYear();
     const lastNum = (db.grindRequests || [])
@@ -2289,7 +2299,6 @@ function App() {
       created_by: currentUser.id,
       created_at: new Date().toISOString(),
       // Клиент
-      client_type: data.client_type || 'individual',
       client_name: (data.client_name || '').trim(),
       // Товар
       product_id: data.product_id || null,
@@ -2300,25 +2309,19 @@ function App() {
       unit: data.unit || 'кг',
       grind_type: data.grind_type,
       grind_custom: data.grind_type === 'custom' ? (data.grind_custom || '').trim() : '',
-      machine_model: (data.machine_model || '').trim(),
-      // Получение
-      delivery_method: data.delivery_method,
-      address: (data.address || '').trim(),
-      phone: (data.phone || '').trim(),
-      pickup_code: null,
-      // Доп
+      // Номер заказа в 1С
+      order_1c: (data.order_1c || '').trim(),
+      // Комментарий
       comment: (data.comment || '').trim(),
       // Исполнение
       warehouse_user_id: null,
       ready_at: null,
-      shipped_at: null,
       completed_at: null,
       cancelled_at: null,
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
     };
 
     setDb(d => {
-      // Уведомить склад — у кого есть право grind_fulfill
       const warehouseUsers = d.users.filter(u => u.active && hasPermission(d, u, 'grind_fulfill'));
       const newNotifs = warehouseUsers.map(w => ({
         id: uid(), recipient_id: w.id,
@@ -2329,12 +2332,12 @@ function App() {
       }));
       const tgEntry = makeTgLogEntry(d, 'grind_new', {
         gr_number: number,
+        client: grind.client_name || '—',
         product: grind.product_name,
         quantity: qty,
         unit: grind.unit,
         grind_type: grind.grind_type === 'custom' ? grind.grind_custom : (GRIND_TYPES[grind.grind_type]?.label || grind.grind_type),
-        machine: grind.machine_model ? `\nМашина: ${grind.machine_model}` : '',
-        delivery: grind.delivery_method === 'pickup' ? 'самовывоз' : `доставка: ${grind.address}`,
+        order_1c: grind.order_1c ? `\n1С: ${grind.order_1c}` : '',
         manager: getUserName(d, currentUser.id),
       });
       return {
@@ -2375,20 +2378,12 @@ function App() {
       let updated = null;
       const list = d.grindRequests.map(x => {
         if (x.id !== grindId) return x;
-        let nextStatus = 'ready';
-        let pickupCode = x.pickup_code;
-        // Если самовывоз — сразу присваиваем код и переводим в awaiting_pickup
-        if (x.delivery_method === 'pickup') {
-          nextStatus = 'awaiting_pickup';
-          const existingCodes = (d.grindRequests || []).filter(p => p.pickup_code && p.status !== 'completed').map(p => p.pickup_code);
-          pickupCode = gen4DigitCode(existingCodes);
-        }
         updated = {
           ...x,
-          status: nextStatus,
-          pickup_code: pickupCode,
+          status: 'completed',
           ready_at: new Date().toISOString(),
-          log: [...x.log, { event: 'status', from: 'in_progress', to: nextStatus, actor: currentUser.id, at: new Date().toISOString() }],
+          completed_at: new Date().toISOString(),
+          log: [...x.log, { event: 'status', from: 'in_progress', to: 'completed', actor: currentUser.id, at: new Date().toISOString() }],
         };
         return updated;
       });
@@ -2396,74 +2391,25 @@ function App() {
       const newNotifs = [{
         id: uid(), recipient_id: updated.created_by,
         link_kind: 'grind', link_id: updated.id,
-        title: 'Помол готов',
-        body: `${updated.number}: ${updated.product_name}` + (updated.pickup_code ? ` · код самовывоза ${updated.pickup_code}` : ''),
+        title: '☕ Помол готов',
+        body: `${updated.number}: ${updated.product_name} — помол завершён, ушёл в архив`,
         at: new Date().toISOString(), read: false,
       }];
-      const tgEntries = [];
-      // ТГ-уведомление о готовности
-      tgEntries.push(makeTgLogEntry(d, 'grind_ready', {
+      const tgEntry = makeTgLogEntry(d, 'grind_ready', {
         gr_number: updated.number,
         product: updated.product_name,
         quantity: updated.quantity,
         unit: updated.unit,
         manager: getUserName(d, updated.created_by),
-      }));
-      if (updated.pickup_code) {
-        tgEntries.push(makeTgLogEntry(d, 'grind_pickup_code', {
-          gr_number: updated.number,
-          client: updated.client_name || '—',
-          pickup_code: updated.pickup_code,
-        }));
-      }
+      });
       return {
         ...d,
         grindRequests: list,
         notifications: [...newNotifs, ...d.notifications],
-        telegramLog: [...tgEntries, ...d.telegramLog].slice(0, 200),
+        telegramLog: [tgEntry, ...d.telegramLog].slice(0, 200),
       };
     });
     return { ok: true };
-  };
-
-  // Завершение: для доставки — после отгрузки; для самовывоза — после ввода кода
-  const completeGrindRequest = (grindId) => {
-    const g = (db.grindRequests || []).find(x => x.id === grindId);
-    if (!g) return { error: 'Заявка не найдена' };
-    if (!['ready', 'awaiting_pickup'].includes(g.status)) return { error: 'Нельзя закрыть в этом статусе' };
-    if (!hasPermission(db, currentUser, 'grind_fulfill')) return { error: 'Нет прав' };
-    setDb(d => {
-      let updated = null;
-      const list = d.grindRequests.map(x => {
-        if (x.id !== grindId) return x;
-        updated = {
-          ...x,
-          status: 'completed',
-          shipped_at: x.delivery_method === 'delivery' ? new Date().toISOString() : x.shipped_at,
-          completed_at: new Date().toISOString(),
-          log: [...x.log, { event: 'status', from: x.status, to: 'completed', actor: currentUser.id, at: new Date().toISOString() }],
-        };
-        return updated;
-      });
-      const tgEntry = makeTgLogEntry(d, 'grind_completed', {
-        gr_number: updated.number,
-        product: updated.product_name,
-        quantity: updated.quantity,
-        unit: updated.unit,
-        delivery_details: updated.delivery_method === 'delivery' ? `🚚 Отгружен курьеру · Адрес: ${updated.address}` : '📦 Выдан клиенту по коду',
-      });
-      return { ...d, grindRequests: list, telegramLog: [tgEntry, ...d.telegramLog].slice(0, 200) };
-    });
-    return { ok: true };
-  };
-
-  // Закрытие самовывоза по 4-значному коду
-  const closeGrindPickup = (grindId, code) => {
-    const g = (db.grindRequests || []).find(x => x.id === grindId);
-    if (!g) return { error: 'Заявка не найдена' };
-    if (g.status !== 'awaiting_pickup') return { error: 'Заявка не в статусе ожидания самовывоза' };
-    if (g.pickup_code !== code) return { error: 'Неверный код' };
-    return completeGrindRequest(grindId);
   };
 
   const cancelGrindRequest = (grindId, reason) => {
@@ -2744,7 +2690,7 @@ function App() {
   };
 
   const ctx = {
-    db, currentUser, effectiveRole, actAs, setActAs,
+    db, setDb, currentUser, effectiveRole, actAs, setActAs,
     route, navigate, goBack, showToast,
     bootStatus,
     loginViaTelegram, logout,
@@ -2753,7 +2699,7 @@ function App() {
     createTask, startTask, completeTask, rescheduleTask, deleteTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
-    createGrindRequest, takeGrindRequest, markGrindReady, completeGrindRequest, closeGrindPickup, cancelGrindRequest,
+    createGrindRequest, takeGrindRequest, markGrindReady, cancelGrindRequest,
     createCustomRole, updateRolePermissions, updateRoleMeta, deleteCustomRole,
     createProduct, updateProduct, toggleProductActive, deleteProduct, importProducts, renameCategory, createCategory,
     markNotificationRead, markAllNotificationsRead, clearReadNotifications,
@@ -3394,6 +3340,13 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     if (hasPermission(db, currentUser, 'contract_view_all') || hasPermission(db, currentUser, 'contract_create')) {
       ops.push({ id: 'contracts', label: 'Договоры', icon: FileText });
     }
+    // Доставка
+    if (hasPermission(db, currentUser, 'delivery_manage') || hasPermission(db, currentUser, 'delivery_view_all')) {
+      ops.push({ id: 'delivery_registries', label: 'Доставки', icon: Truck });
+    }
+    if (hasPermission(db, currentUser, 'delivery_courier')) {
+      ops.push({ id: 'courier_registry', label: 'Мои доставки', icon: Truck });
+    }
     // Архив
     if (role === 'admin' || role === 'b2b' || hasPermission(db, currentUser, 'orders_archive_view')) {
       ops.push({ id: 'archive', label: 'Архив', icon: Inbox });
@@ -3765,6 +3718,14 @@ function Screen({ ctx }) {
     case 'grind_detail': return <GrindDetailScreen ctx={ctx} grindId={route.grindId} />;
     case 'feedback': return <FeedbackScreen ctx={ctx} />;
     case 'admin_feedback': return <AdminFeedbackScreen ctx={ctx} />;
+    // ─── Доставка (менеджер) ───
+    case 'delivery_registries':    return <DeliveryRegistriesScreen ctx={ctx} />;
+    case 'delivery_new_registry':  return <DeliveryNewRegistryScreen ctx={ctx} />;
+    case 'delivery_registry_detail': return <DeliveryRegistryDetailScreen ctx={ctx} registryId={route.registryId} />;
+    case 'delivery_failed_queue':  return <DeliveryFailedQueueScreen ctx={ctx} registryId={route.registryId} />;
+    // ─── Доставка (курьер) ───
+    case 'courier_registry': return <CourierRegistryScreen ctx={ctx} />;
+    case 'courier_order':    return <CourierOrderDetailScreen ctx={ctx} orderId={route.orderId} />;
     default: return <div className="p-6">Не найдено</div>;
   }
 }
@@ -4036,6 +3997,17 @@ function DashboardHome({ ctx, title }) {
       go: () => navigate({ name: 'contracts' }),
     });
   }
+  // Доставки (менеджер/директор)
+  if (has('delivery_manage') || has('delivery_view_all')) {
+    const activeRegs = (db.deliveryRegistries || []).filter(r => r.status === 'active');
+    tiles.push({
+      icon: Truck, label: 'Доставки',
+      value: activeRegs.length,
+      hint: activeRegs.length > 0 ? 'активных реестров' : 'нет активных',
+      color: '#0891B2',
+      go: () => navigate({ name: 'delivery_registries' }),
+    });
+  }
   // Только для админа
   if (stats.isAdmin) {
     tiles.push({
@@ -4077,6 +4049,9 @@ function DashboardHome({ ctx, title }) {
     <div>
       {/* Карточка профиля пользователя — приветствие сверху */}
       <UserHeroCard user={currentUser} db={db} />
+
+      {/* Виджет доставок — только для курьера */}
+      {has('delivery_courier') && <CourierDeliveryWidget ctx={ctx} />}
 
       {/* Кнопка открытия в браузере — только в Telegram */}
       <OpenInBrowserButton ctx={ctx} />
@@ -10432,21 +10407,22 @@ function GrindListScreen({ ctx }) {
   const canFulfill = hasPermission(db, currentUser, 'grind_fulfill');
   const canViewAll = hasPermission(db, currentUser, 'grind_view_all') || canFulfill;
 
+  const isArchived = s => ['completed', 'cancelled', 'ready', 'awaiting_pickup'].includes(s);
+
   const myGrinds = useMemo(() => {
     let list = db.grindRequests || [];
     if (!canViewAll) list = list.filter(g => g.created_by === currentUser.id);
-    if (filter === 'active') list = list.filter(g => !['completed', 'cancelled'].includes(g.status));
-    else if (filter === 'completed') list = list.filter(g => g.status === 'completed');
+    if (filter === 'active')    list = list.filter(g => !isArchived(g.status));
+    else if (filter === 'completed') list = list.filter(g => ['completed', 'ready', 'awaiting_pickup'].includes(g.status));
     else if (filter === 'cancelled') list = list.filter(g => g.status === 'cancelled');
-    // в работе у склада — сверху новые, потом in_progress, потом ready/awaiting
     return list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [db.grindRequests, currentUser.id, canViewAll, filter]);
 
   const counts = useMemo(() => {
     const list = canViewAll ? (db.grindRequests || []) : (db.grindRequests || []).filter(g => g.created_by === currentUser.id);
     return {
-      active: list.filter(g => !['completed', 'cancelled'].includes(g.status)).length,
-      completed: list.filter(g => g.status === 'completed').length,
+      active:    list.filter(g => !isArchived(g.status)).length,
+      completed: list.filter(g => ['completed', 'ready', 'awaiting_pickup'].includes(g.status)).length,
       cancelled: list.filter(g => g.status === 'cancelled').length,
     };
   }, [db.grindRequests, currentUser.id, canViewAll]);
@@ -10469,53 +10445,43 @@ function GrindListScreen({ ctx }) {
         }
       />
 
-      {/* Фильтр */}
       <div className="flex gap-1.5 mb-4 overflow-x-auto">
         {[
-          { id: 'active',    label: 'Активные',  count: counts.active },
-          { id: 'completed', label: 'Выданные',  count: counts.completed },
-          { id: 'cancelled', label: 'Отменённые', count: counts.cancelled },
+          { id: 'active',    label: 'Активные', count: counts.active },
+          { id: 'completed', label: 'Готово',   count: counts.completed },
+          { id: 'cancelled', label: 'Отменены', count: counts.cancelled },
         ].map(t => (
-          <button
-            key={t.id}
-            onClick={() => setFilter(t.id)}
+          <button key={t.id} onClick={() => setFilter(t.id)}
             className="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold"
-            style={{ background: filter === t.id ? '#1A1814' : '#F5F7F8', color: filter === t.id ? 'white' : '#64748B' }}
-          >
+            style={{ background: filter === t.id ? '#1A1814' : '#F5F7F8', color: filter === t.id ? 'white' : '#64748B' }}>
             {t.label} · {t.count}
           </button>
         ))}
       </div>
 
-      {/* Список */}
       {myGrinds.length === 0 ? (
-        <Empty icon={Coffee} title="Заявок нет" subtitle={canFulfill ? 'Когда менеджеры будут подавать заявки на помол — они появятся здесь' : 'Нажми «Заявка», чтобы создать первую'} />
+        <Empty icon={Coffee} title="Заявок нет"
+          subtitle={canFulfill ? 'Когда менеджеры подадут заявки — они появятся здесь' : 'Нажми «Заявка», чтобы создать первую'} />
       ) : (
         <div className="space-y-2">
           {myGrinds.map(g => (
-            <button
-              key={g.id}
-              onClick={() => navigate({ name: 'grind_detail', grindId: g.id })}
+            <button key={g.id} onClick={() => navigate({ name: 'grind_detail', grindId: g.id })}
               className="w-full text-left bg-white rounded-xl p-3.5 hover:bg-gray-50 transition-colors"
-              style={{ border: '1px solid #E5E7EB' }}
-            >
+              style={{ border: '1px solid #E5E7EB' }}>
               <div className="flex items-start justify-between gap-2 mb-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="mono-font text-xs font-bold" style={{ color: '#1A1814' }}>{g.number}</span>
                   <GrindStatusBadge status={g.status} />
-                  {g.pickup_code && g.status === 'awaiting_pickup' && (
-                    <span className="mono-font font-bold text-sm" style={{ color: '#22C55E' }}>код {g.pickup_code}</span>
-                  )}
+                  {g.order_1c && <span className="text-xs" style={{ color: '#94a3b8' }}>{g.order_1c}</span>}
                 </div>
                 <ChevronRight size={16} style={{ color: '#A8A8AE', flexShrink: 0, marginTop: 2 }} />
               </div>
+              {g.client_name && <div className="text-xs font-semibold mb-0.5" style={{ color: '#297b8a' }}>{g.client_name}</div>}
               <div className="font-semibold text-sm mb-1" style={{ color: '#1A1814' }}>{g.product_name}</div>
               <div className="flex items-center gap-2 text-xs flex-wrap" style={{ color: '#64748B' }}>
                 <span>{g.quantity} {g.unit}</span>
                 <span>·</span>
                 <span>{g.grind_type === 'custom' ? (g.grind_custom || 'свой помол') : (GRIND_TYPES[g.grind_type]?.label || g.grind_type)}</span>
-                <span>·</span>
-                <span>{g.delivery_method === 'pickup' ? 'самовывоз' : 'доставка'}</span>
                 <span>·</span>
                 <span>{fmtDate(g.created_at)}</span>
               </div>
@@ -10531,162 +10497,184 @@ function GrindListScreen({ ctx }) {
 }
 
 function CreateGrindScreen({ ctx }) {
-  const { db, currentUser, goBack, createGrindRequest, showToast, navigate } = ctx;
-  const products = db.products || [];
+  const { db, goBack, createGrindRequest, showToast } = ctx;
+  const coffeeProducts = (db.products || []).filter(p => p.active && p.cat === 'Кофе зерно');
 
-  const [form, setForm] = useState({
-    client_type: 'individual',
+  const emptyForm = () => ({
     client_name: '',
-    product_mode: 'from_list', // from_list | manual
+    product_mode: 'from_list',
     product_id: '',
     product_name: '',
     quantity: '',
     unit: 'кг',
     grind_type: 'espresso',
     grind_custom: '',
-    machine_model: '',
-    delivery_method: 'pickup',
-    address: '',
-    phone: '',
+    order_1c: '',
     comment: '',
   });
-  const update = (patch) => setForm(f => ({ ...f, ...patch }));
+  const [rawText, setRawText]   = useState('');
+  const [form, setForm]         = useState(emptyForm());
+  const [detected, setDetected] = useState(new Set());
+  const update = patch => setForm(f => ({ ...f, ...patch }));
 
-  const selectedProduct = products.find(p => p.id === form.product_id);
+  // ── Парсер текста из чата ──────────────────────────────────────────────
+  const parseText = (text) => {
+    if (!text.trim()) { setForm(emptyForm()); setDetected(new Set()); return; }
+    const det = new Set();
+    const upd = {};
+
+    // Номер заказа 1С: РЗ-XXXXX / РН-XXXXX
+    const m1c = text.match(/[РрPp][ЗзHhНн]-\d+/i);
+    if (m1c) { upd.order_1c = m1c[0].toUpperCase(); det.add('order_1c'); }
+
+    // Количество + единица
+    const mQty = text.match(/(\d+[.,]?\d*)\s*(кг|г\b|kg\b|g\b)/i);
+    if (mQty) {
+      upd.quantity = mQty[1].replace(',', '.');
+      upd.unit     = /кг|kg/i.test(mQty[2]) ? 'кг' : 'г';
+      det.add('quantity');
+    }
+
+    // Степень помола
+    if      (/турк/i.test(text))                   { upd.grind_type = 'turka';   det.add('grind_type'); }
+    else if (/v.?60/i.test(text))                  { upd.grind_type = 'v60';     det.add('grind_type'); }
+    else if (/фильтр|filter|пуров/i.test(text))    { upd.grind_type = 'filter';  det.add('grind_type'); }
+    else if (/френч|french|press/i.test(text))     { upd.grind_type = 'french';  det.add('grind_type'); }
+    else if (/эспрессо|espresso/i.test(text))      { upd.grind_type = 'espresso';det.add('grind_type'); }
+
+    // Контрагент: строка с ТОО/ИП/АО, или метка "Клиент:"
+    const mClient = text.match(/(?:Клиент|Контрагент|Организация)\s*:\s*([^\n,]+)/i)
+      || text.match(/(?:^|\n)([^\n]*(?:ТОО|ИП|АО|ООО)[^\n,]*)/i);
+    if (mClient) {
+      upd.client_name = mClient[1].trim().replace(/^[-–:]\s*/, '');
+      det.add('client_name');
+    }
+
+    // Кофе: fuzzy-match по каталогу
+    const lower = text.toLowerCase();
+    let best = null, bestScore = 0;
+    for (const p of coffeeProducts) {
+      const words = p.name.toLowerCase().split(/[\s,/]+/).filter(w => w.length > 3);
+      const score = words.filter(w => lower.includes(w)).length;
+      if (score > bestScore) { bestScore = score; best = p; }
+    }
+    if (best && bestScore >= 1) {
+      upd.product_id   = best.id;
+      upd.product_mode = 'from_list';
+      det.add('product');
+    }
+
+    setForm(f => ({ ...f, ...upd }));
+    setDetected(det);
+  };
+
+  const handleTextChange = (text) => {
+    setRawText(text);
+    parseText(text);
+  };
 
   const handleSubmit = () => {
     const productName = form.product_mode === 'from_list'
-      ? (selectedProduct?.name || '')
+      ? (coffeeProducts.find(p => p.id === form.product_id)?.name || '')
       : form.product_name;
-
-    if (form.product_mode === 'from_list' && !selectedProduct) return showToast('Выберите кофе из прайса');
-    if (form.product_mode === 'manual' && !productName.trim()) return showToast('Укажите название кофе');
-
+    if (form.product_mode === 'from_list' && !form.product_id) return showToast('Выберите кофе из прайса');
+    if (form.product_mode === 'manual'    && !productName.trim()) return showToast('Укажите название кофе');
     const result = createGrindRequest({
-      client_type: form.client_type,
       client_name: form.client_name,
-      product_id: form.product_mode === 'from_list' ? form.product_id : null,
+      product_id:  form.product_mode === 'from_list' ? form.product_id : null,
       product_name: productName,
-      quantity: Number(form.quantity),
-      unit: form.unit,
-      grind_type: form.grind_type,
+      quantity:    form.quantity,
+      unit:        form.unit,
+      grind_type:  form.grind_type,
       grind_custom: form.grind_custom,
-      machine_model: form.machine_model,
-      delivery_method: form.delivery_method,
-      address: form.address,
-      phone: form.phone,
-      comment: form.comment,
+      order_1c:    form.order_1c,
+      comment:     form.comment,
     });
     if (result.error) return showToast(result.error);
-    showToast(`Заявка ${result.grind.number} создана`);
+    showToast(`☕ ${result.grind.number} отправлена складу`);
     goBack();
   };
 
-  // Кофе показываем только из категории "Кофе зерно"
-  const coffeeProducts = products.filter(p => p.active && p.cat === 'Кофе зерно');
+  const det = (field) => detected.has(field);
+  const fieldStyle = (field) => ({
+    border: `1px solid ${det(field) ? '#297b8a' : '#E5E7EB'}`,
+    background: det(field) ? '#F0F9FB' : 'white',
+  });
 
   return (
     <div>
-      <PageHeader title="Заявка на помол" subtitle="Менеджер → склад мелет → выдача" onBack={goBack} />
+      <PageHeader title="Заявка на помол" subtitle="Быстрая разборка" onBack={goBack} />
+      <div className="space-y-3">
 
-      <div className="space-y-4">
-        {/* Клиент (опционально) */}
-        <Card title="Клиент (необязательно)">
+        {/* Текст из чата */}
+        <Card title="Вставьте текст из чата (WhatsApp / TG)">
+          <div className="relative">
+            <textarea
+              rows={4}
+              placeholder={'ТОО Альфа-Трейд, Престиж 10кг эспрессо, РЗ-00045\nили просто вставь сообщение клиента — разберём сами'}
+              value={rawText}
+              onChange={e => handleTextChange(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg outline-none text-sm resize-none"
+              style={{ border: '1px solid #E5E7EB' }}
+              autoFocus
+            />
+            {rawText && (
+              <button onClick={() => { setRawText(''); setForm(emptyForm()); setDetected(new Set()); }}
+                className="absolute top-2 right-2 text-xs px-2 py-1 rounded"
+                style={{ background: '#F5F7F8', color: '#64748B' }}>× Очистить</button>
+            )}
+          </div>
+          {detected.size > 0 && (
+            <div className="mt-2 text-xs" style={{ color: '#297b8a' }}>
+              ✓ Определено: {[det('client_name')&&'контрагент', det('product')&&'кофе', det('quantity')&&'кол-во', det('grind_type')&&'помол', det('order_1c')&&'1С'].filter(Boolean).join(', ')}
+            </div>
+          )}
+        </Card>
+
+        {/* Контрагент */}
+        <Card title="Контрагент">
+          <input type="text" placeholder="ТОО / ИП / имя клиента"
+            value={form.client_name} onChange={e => update({ client_name: e.target.value })}
+            className="w-full px-3 py-2.5 rounded-lg outline-none"
+            style={fieldStyle('client_name')} />
+        </Card>
+
+        {/* Кофе */}
+        <Card title="Вид кофе">
           <div className="flex gap-2 mb-2">
-            {[
-              { v: 'individual', label: 'Физлицо' },
-              { v: 'legal',      label: 'Юрлицо' },
-            ].map(opt => (
-              <button
-                key={opt.v}
-                onClick={() => update({ client_type: opt.v })}
-                className="flex-1 py-2 rounded-lg text-sm font-semibold"
-                style={{
-                  background: form.client_type === opt.v ? '#297b8a' : '#F5F7F8',
-                  color: form.client_type === opt.v ? 'white' : '#64748B',
-                }}
-              >
-                {opt.label}
+            {['from_list','manual'].map(m => (
+              <button key={m} onClick={() => update({ product_mode: m, product_id: '', product_name: '' })}
+                className="flex-1 py-1.5 rounded-lg text-sm font-semibold"
+                style={{ background: form.product_mode === m ? '#297b8a' : '#F5F7F8', color: form.product_mode === m ? 'white' : '#64748B' }}>
+                {m === 'from_list' ? 'Из прайса' : 'Вручную'}
               </button>
             ))}
           </div>
-          <input
-            type="text"
-            placeholder={form.client_type === 'individual' ? 'ФИО клиента' : 'Название компании'}
-            value={form.client_name}
-            onChange={e => update({ client_name: e.target.value })}
-            className="w-full px-3 py-2.5 rounded-lg outline-none"
-            style={{ border: '1px solid #E5E7EB' }}
-          />
-        </Card>
-
-        {/* Товар */}
-        <Card title="Какой кофе молоть">
-          <div className="flex gap-2 mb-3">
-            <button
-              onClick={() => update({ product_mode: 'from_list' })}
-              className="flex-1 py-2 rounded-lg text-sm font-semibold"
-              style={{
-                background: form.product_mode === 'from_list' ? '#297b8a' : '#F5F7F8',
-                color: form.product_mode === 'from_list' ? 'white' : '#64748B',
-              }}
-            >
-              Из прайса
-            </button>
-            <button
-              onClick={() => update({ product_mode: 'manual' })}
-              className="flex-1 py-2 rounded-lg text-sm font-semibold"
-              style={{
-                background: form.product_mode === 'manual' ? '#297b8a' : '#F5F7F8',
-                color: form.product_mode === 'manual' ? 'white' : '#64748B',
-              }}
-            >
-              Вручную
-            </button>
-          </div>
-
           {form.product_mode === 'from_list' ? (
-            <select
-              value={form.product_id}
-              onChange={e => update({ product_id: e.target.value })}
+            <select value={form.product_id} onChange={e => { update({ product_id: e.target.value }); setDetected(d => { const n = new Set(d); n.add('product'); return n; }); }}
               className="w-full px-3 py-2.5 rounded-lg outline-none bg-white"
-              style={{ border: '1px solid #E5E7EB' }}
-            >
+              style={fieldStyle('product')}>
               <option value="">— выберите кофе —</option>
-              {coffeeProducts.map(p => (
-                <option key={p.id} value={p.id}>{p.id} · {p.name}</option>
-              ))}
+              {coffeeProducts.map(p => <option key={p.id} value={p.id}>{p.id} · {p.name}</option>)}
             </select>
           ) : (
-            <input
-              type="text"
-              placeholder="Название кофе"
-              value={form.product_name}
-              onChange={e => update({ product_name: e.target.value })}
+            <input type="text" placeholder="Название кофе"
+              value={form.product_name} onChange={e => update({ product_name: e.target.value })}
               className="w-full px-3 py-2.5 rounded-lg outline-none"
-              style={{ border: '1px solid #E5E7EB' }}
-            />
+              style={{ border: '1px solid #E5E7EB' }} />
           )}
         </Card>
 
         {/* Количество */}
-        <Card title="Количество">
+        <Card title="Количество / вес">
           <div className="flex gap-2">
-            <input
-              type="number"
-              inputMode="decimal"
-              placeholder="Сколько"
-              value={form.quantity}
-              onChange={e => update({ quantity: e.target.value })}
+            <input type="number" inputMode="decimal" placeholder="Сколько"
+              value={form.quantity} onChange={e => update({ quantity: e.target.value })}
               className="flex-1 px-3 py-2.5 rounded-lg outline-none"
-              style={{ border: '1px solid #E5E7EB' }}
-            />
-            <select
-              value={form.unit}
-              onChange={e => update({ unit: e.target.value })}
+              style={fieldStyle('quantity')} />
+            <select value={form.unit} onChange={e => update({ unit: e.target.value })}
               className="px-3 py-2.5 rounded-lg outline-none bg-white"
-              style={{ border: '1px solid #E5E7EB' }}
-            >
+              style={{ border: '1px solid #E5E7EB' }}>
               <option value="кг">кг</option>
               <option value="г">г</option>
               <option value="шт">шт</option>
@@ -10696,111 +10684,48 @@ function CreateGrindScreen({ ctx }) {
         </Card>
 
         {/* Степень помола */}
-        <Card title="Степень помола">
-          <div className="grid grid-cols-2 gap-2">
+        <Card title="Вид помола">
+          <div className="grid grid-cols-3 gap-1.5">
             {Object.entries(GRIND_TYPES).map(([key, val]) => (
-              <button
-                key={key}
-                onClick={() => update({ grind_type: key })}
-                className="text-left p-2.5 rounded-lg text-sm"
+              <button key={key} onClick={() => update({ grind_type: key })}
+                className="py-2 px-1 rounded-lg text-xs font-semibold text-center"
                 style={{
-                  background: form.grind_type === key ? '#297b8a' : '#F5F7F8',
-                  color: form.grind_type === key ? 'white' : '#1A1814',
-                  border: form.grind_type === key ? '1px solid #297b8a' : '1px solid #E5E7EB',
-                }}
-              >
-                <div className="font-semibold">{val.label}</div>
-                <div className="text-xs mt-0.5" style={{ opacity: 0.8 }}>{val.hint}</div>
+                  background: form.grind_type === key ? (det('grind_type') ? '#297b8a' : '#297b8a') : '#F5F7F8',
+                  color:      form.grind_type === key ? 'white' : '#1A1814',
+                  border:     form.grind_type === key ? '1px solid #297b8a' : '1px solid #E5E7EB',
+                }}>
+                {val.label}
               </button>
             ))}
           </div>
           {form.grind_type === 'custom' && (
-            <input
-              type="text"
-              placeholder="Опишите свой вариант помола"
-              value={form.grind_custom}
-              onChange={e => update({ grind_custom: e.target.value })}
-              className="w-full mt-3 px-3 py-2.5 rounded-lg outline-none"
-              style={{ border: '1px solid #E5E7EB' }}
-            />
+            <input type="text" placeholder="Опишите свой вариант"
+              value={form.grind_custom} onChange={e => update({ grind_custom: e.target.value })}
+              className="w-full mt-2 px-3 py-2.5 rounded-lg outline-none"
+              style={{ border: '1px solid #E5E7EB' }} />
           )}
         </Card>
 
-        {/* Машина */}
-        <Card title="Под какую машину (необязательно)">
-          <input
-            type="text"
-            placeholder="Например: Astoria Tanya SAE/2 или просто «турка»"
-            value={form.machine_model}
-            onChange={e => update({ machine_model: e.target.value })}
-            className="w-full px-3 py-2.5 rounded-lg outline-none"
-            style={{ border: '1px solid #E5E7EB' }}
-          />
-        </Card>
-
-        {/* Получение */}
-        <Card title="Способ получения">
-          <div className="space-y-2 mb-3">
-            {[
-              { v: 'pickup',   label: 'Самовывоз (будет код)', icon: Package },
-              { v: 'delivery', label: 'Доставка по адресу',     icon: Truck },
-            ].map(opt => {
-              const Icon = opt.icon;
-              const active = form.delivery_method === opt.v;
-              return (
-                <button
-                  key={opt.v}
-                  onClick={() => update({ delivery_method: opt.v })}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg text-left"
-                  style={{
-                    background: active ? '#E7F3FE' : '#F5F7F8',
-                    border: active ? '1px solid #297b8a' : '1px solid transparent',
-                  }}
-                >
-                  <Icon size={18} style={{ color: active ? '#297b8a' : '#64748B' }} />
-                  <span className="font-semibold text-sm" style={{ color: active ? '#297b8a' : '#1A1814' }}>{opt.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          {form.delivery_method === 'delivery' && (
-            <input
-              type="text"
-              placeholder="Адрес доставки"
-              value={form.address}
-              onChange={e => update({ address: e.target.value })}
-              className="w-full px-3 py-2.5 rounded-lg outline-none mb-2"
-              style={{ border: '1px solid #E5E7EB' }}
-            />
-          )}
-          <input
-            type="tel"
-            placeholder="Телефон клиента (необязательно)"
-            value={form.phone}
-            onChange={e => update({ phone: e.target.value })}
-            className="w-full px-3 py-2.5 rounded-lg outline-none"
-            style={{ border: '1px solid #E5E7EB' }}
-          />
+        {/* Номер 1С */}
+        <Card title="Номер заказа в 1С (необязательно)">
+          <input type="text" placeholder="РЗ-00045"
+            value={form.order_1c} onChange={e => update({ order_1c: e.target.value })}
+            className="w-full px-3 py-2.5 rounded-lg outline-none mono-font"
+            style={fieldStyle('order_1c')} />
         </Card>
 
         {/* Комментарий */}
-        <Card title="Комментарий">
-          <textarea
-            rows={3}
-            placeholder="Особые пожелания, срочность, что-то ещё"
-            value={form.comment}
-            onChange={e => update({ comment: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg outline-none"
-            style={{ border: '1px solid #E5E7EB' }}
-          />
+        <Card title="Комментарий (необязательно)">
+          <textarea rows={2} placeholder="Особые пожелания, срочность..."
+            value={form.comment} onChange={e => update({ comment: e.target.value })}
+            className="w-full px-3 py-2 rounded-lg outline-none text-sm resize-none"
+            style={{ border: '1px solid #E5E7EB' }} />
         </Card>
 
-        <button
-          onClick={handleSubmit}
+        <button onClick={handleSubmit}
           className="w-full py-3 rounded-lg font-semibold text-white"
-          style={{ background: '#297b8a' }}
-        >
-          Отправить складу
+          style={{ background: '#297b8a' }}>
+          ☕ Отправить складу
         </button>
       </div>
     </div>
@@ -10808,24 +10733,17 @@ function CreateGrindScreen({ ctx }) {
 }
 
 function GrindDetailScreen({ ctx, grindId }) {
-  const { db, currentUser, goBack, takeGrindRequest, markGrindReady, completeGrindRequest, closeGrindPickup, cancelGrindRequest, showToast } = ctx;
+  const { db, currentUser, goBack, takeGrindRequest, markGrindReady, cancelGrindRequest, showToast } = ctx;
   const g = (db.grindRequests || []).find(x => x.id === grindId);
-  const [pickupModal, setPickupModal] = useState(false);
-  const [enteredCode, setEnteredCode] = useState('');
   const [cancelModal, setCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
 
-  if (!g) {
-    return (
-      <div>
-        <PageHeader title="Заявка не найдена" onBack={goBack} />
-      </div>
-    );
-  }
+  if (!g) return <div><PageHeader title="Заявка не найдена" onBack={goBack} /></div>;
 
   const canFulfill = hasPermission(db, currentUser, 'grind_fulfill');
-  const isAuthor = g.created_by === currentUser.id;
-  const canCancel = (isAuthor || canFulfill || currentUser.role === 'admin') && !['completed', 'cancelled'].includes(g.status);
+  const isAuthor   = g.created_by === currentUser.id;
+  const isArchived = ['completed', 'cancelled', 'ready', 'awaiting_pickup'].includes(g.status);
+  const canCancel  = (isAuthor || canFulfill || currentUser.role === 'admin') && !isArchived;
 
   const handleTake = () => {
     const r = takeGrindRequest(g.id);
@@ -10835,19 +10753,7 @@ function GrindDetailScreen({ ctx, grindId }) {
   const handleReady = () => {
     const r = markGrindReady(g.id);
     if (r.error) return showToast(r.error);
-    showToast(g.delivery_method === 'pickup' ? 'Готово! Присвоен код самовывоза' : 'Готово к отгрузке');
-  };
-  const handleShipDelivery = () => {
-    const r = completeGrindRequest(g.id);
-    if (r.error) return showToast(r.error);
-    showToast('Отгружено курьеру, заявка в архиве');
-  };
-  const handlePickupCode = () => {
-    const r = closeGrindPickup(g.id, enteredCode);
-    if (r.error) return showToast(r.error);
-    showToast('Выдано клиенту');
-    setPickupModal(false);
-    setEnteredCode('');
+    showToast('☕ Готово! Помол ушёл в архив');
   };
   const handleCancel = () => {
     const r = cancelGrindRequest(g.id, cancelReason);
@@ -10861,21 +10767,11 @@ function GrindDetailScreen({ ctx, grindId }) {
     <div>
       <PageHeader title={g.number} onBack={goBack} action={<GrindStatusBadge status={g.status} />} />
 
-      {/* Код самовывоза — большой и заметный */}
-      {g.pickup_code && g.status === 'awaiting_pickup' && (
-        <div className="rounded-2xl p-5 mb-4 text-center" style={{ background: '#DCFCE7', border: '1px solid #22C55E' }}>
-          <div className="text-xs font-semibold uppercase mb-1" style={{ color: '#166534' }}>Код самовывоза</div>
-          <div className="mono-font text-4xl font-bold tracking-widest" style={{ color: '#15803D' }}>{g.pickup_code}</div>
-          <div className="text-xs mt-2" style={{ color: '#166534' }}>Клиент назовёт этот код при получении</div>
-        </div>
-      )}
-
       <div className="space-y-3">
         <Card title="Кофе">
           <div className="font-semibold text-base mb-1" style={{ color: '#1A1814' }}>{g.product_name}</div>
           <div className="text-sm" style={{ color: '#64748B' }}>
-            {g.quantity} {g.unit}
-            {g.product_id ? ` · ID ${g.product_id}` : ' · ручной ввод'}
+            {g.quantity} {g.unit}{g.product_id ? ` · ID ${g.product_id}` : ''}
           </div>
         </Card>
 
@@ -10883,23 +10779,14 @@ function GrindDetailScreen({ ctx, grindId }) {
           <div className="font-semibold" style={{ color: '#1A1814' }}>
             {g.grind_type === 'custom' ? g.grind_custom : (GRIND_TYPES[g.grind_type]?.label || g.grind_type)}
           </div>
-          {g.machine_model && (
-            <div className="text-sm mt-1" style={{ color: '#64748B' }}>Машина: {g.machine_model}</div>
-          )}
         </Card>
 
-        <Card title="Получение">
-          <div className="flex items-center gap-2 mb-2">
-            {g.delivery_method === 'pickup' ? (
-              <><Package size={16} style={{ color: '#297b8a' }} /><span className="font-semibold" style={{ color: '#1A1814' }}>Самовывоз</span></>
-            ) : (
-              <><Truck size={16} style={{ color: '#297b8a' }} /><span className="font-semibold" style={{ color: '#1A1814' }}>Доставка</span></>
-            )}
-          </div>
-          {g.address && <div className="text-sm" style={{ color: '#64748B' }}>Адрес: {g.address}</div>}
-          {g.phone && <div className="text-sm" style={{ color: '#64748B' }}>Телефон: {g.phone}</div>}
-          {g.client_name && <div className="text-sm" style={{ color: '#64748B' }}>Клиент: {g.client_name}</div>}
-        </Card>
+        {(g.client_name || g.order_1c) && (
+          <Card title="Клиент / заказ">
+            {g.client_name && <div className="font-semibold text-sm mb-1" style={{ color: '#1A1814' }}>{g.client_name}</div>}
+            {g.order_1c    && <div className="text-sm mono-font" style={{ color: '#64748B' }}>1С: {g.order_1c}</div>}
+          </Card>
+        )}
 
         {g.comment && (
           <Card title="Комментарий">
@@ -10911,13 +10798,11 @@ function GrindDetailScreen({ ctx, grindId }) {
           <div className="text-sm space-y-1" style={{ color: '#64748B' }}>
             <div>Создал: <strong style={{ color: '#1A1814' }}>{getUserName(db, g.created_by)}</strong> · {fmtDateTime(g.created_at)}</div>
             {g.warehouse_user_id && <div>Мелет: <strong style={{ color: '#1A1814' }}>{getUserName(db, g.warehouse_user_id)}</strong></div>}
-            {g.ready_at && <div>Готово: {fmtDateTime(g.ready_at)}</div>}
-            {g.shipped_at && <div>Отгружено: {fmtDateTime(g.shipped_at)}</div>}
+            {g.ready_at    && <div>Готово: {fmtDateTime(g.ready_at)}</div>}
             {g.completed_at && <div>Завершено: {fmtDateTime(g.completed_at)}</div>}
           </div>
         </Card>
 
-        {/* Действия */}
         <div className="space-y-2 pt-2">
           {canFulfill && g.status === 'new' && (
             <button onClick={handleTake} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#F59E0B' }}>
@@ -10925,18 +10810,8 @@ function GrindDetailScreen({ ctx, grindId }) {
             </button>
           )}
           {canFulfill && g.status === 'in_progress' && (
-            <button onClick={handleReady} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#8B5CF6' }}>
-              Готово! Помол завершён
-            </button>
-          )}
-          {canFulfill && g.status === 'ready' && g.delivery_method === 'delivery' && (
-            <button onClick={handleShipDelivery} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#10B981' }}>
-              Отгружено курьеру → закрыть заявку
-            </button>
-          )}
-          {canFulfill && g.status === 'awaiting_pickup' && (
-            <button onClick={() => setPickupModal(true)} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#22C55E' }}>
-              Клиент пришёл, ввести код
+            <button onClick={handleReady} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#10B981' }}>
+              ☕ Готово → в архив
             </button>
           )}
           {canCancel && (
@@ -10947,48 +10822,13 @@ function GrindDetailScreen({ ctx, grindId }) {
         </div>
       </div>
 
-      {/* Модал ввода кода самовывоза */}
-      {pickupModal && (
-        <Modal onClose={() => { setPickupModal(false); setEnteredCode(''); }} title="Введите код от клиента">
-          <div className="space-y-3">
-            <input
-              type="tel"
-              inputMode="numeric"
-              maxLength={4}
-              placeholder="—— —— —— ——"
-              value={enteredCode}
-              onChange={e => setEnteredCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              className="w-full px-3 py-3 rounded-lg outline-none text-center mono-font text-2xl tracking-widest"
-              style={{ border: '1px solid #E5E7EB' }}
-              autoFocus
-            />
-            {enteredCode.length === 4 && enteredCode !== g.pickup_code && (
-              <div className="text-sm text-center" style={{ color: '#EB5757' }}>Неверный код</div>
-            )}
-            <button
-              onClick={handlePickupCode}
-              disabled={enteredCode !== g.pickup_code}
-              className="w-full py-3 rounded-lg font-semibold text-white"
-              style={{ background: enteredCode === g.pickup_code ? '#22C55E' : '#CBD5E1', opacity: enteredCode === g.pickup_code ? 1 : 0.6 }}
-            >
-              Подтвердить выдачу
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {/* Модал отмены */}
       {cancelModal && (
         <Modal onClose={() => setCancelModal(false)} title="Отмена заявки">
           <div className="space-y-3">
-            <textarea
-              rows={3}
-              placeholder="Причина отмены (необязательно)"
-              value={cancelReason}
-              onChange={e => setCancelReason(e.target.value)}
+            <textarea rows={3} placeholder="Причина отмены (необязательно)"
+              value={cancelReason} onChange={e => setCancelReason(e.target.value)}
               className="w-full px-3 py-2 rounded-lg outline-none"
-              style={{ border: '1px solid #E5E7EB' }}
-            />
+              style={{ border: '1px solid #E5E7EB' }} />
             <div className="flex gap-2">
               <button onClick={() => setCancelModal(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#64748B' }}>
                 Не отменять

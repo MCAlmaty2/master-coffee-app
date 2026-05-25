@@ -14,8 +14,10 @@ export const SYNC_TABLES = {
   writeOffs:          { table: 'write_offs',        pk: 'id' },
   contractRequests:   { table: 'contract_requests', pk: 'id' },
   notifications:      { table: 'notifications',     pk: 'id' },
-  roleDefinitions:    { table: 'role_definitions',  pk: 'key' },
-  telegramLog:        { table: 'telegram_log',      pk: 'id' },
+  roleDefinitions:      { table: 'role_definitions',    pk: 'key' },
+  telegramLog:          { table: 'telegram_log',        pk: 'id'  },
+  deliveryRegistries:   { table: 'delivery_registries', pk: 'id'  },
+  deliveryOrders:       { table: 'delivery_orders',     pk: 'id'  },
   // feedback_messages и error_reports пишутся напрямую через supabase.from(),
   // поэтому их не включаем в автосинхронизацию.
 };
