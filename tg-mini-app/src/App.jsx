@@ -150,10 +150,11 @@ function makeTgLogEntry(db, eventKey, vars) {
     ? `chat ${chatId}${topicId ? ` (тема ${topicId})` : ''}`
     : 'не настроено';
 
-  // Fire-and-forget: отправляем через Edge Function send-telegram
+  // Fire-and-forget: отправляем через Edge Function send-telegram.
+  // bot_token НЕ передаём — edge function читает TELEGRAM_BOT_TOKEN из Supabase Secrets.
   if (chatId && tg.bot_token) {
     try {
-      const reqBody = { chat_id: chatId, text: message, bot_token: tg.bot_token };
+      const reqBody = { chat_id: chatId, text: message };
       if (topicId) reqBody.message_thread_id = topicId;
       supabase.functions.invoke('send-telegram', { body: reqBody })
         .then(({ data, error }) => {
@@ -200,11 +201,13 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id }) {
   };
   const tgs       = db?.telegramSettings;
   const recipient = db?.users?.find(u => u.id === recipient_id);
+  // Отправляем личный TG: нужен telegram_id получателя и настроенный бот.
+  // bot_token НЕ передаём в теле — edge function читает TELEGRAM_BOT_TOKEN из Supabase Secrets.
   if (recipient?.telegram_id && recipient.tg_notif_enabled !== false && tgs?.bot_token) {
-    const tgText = `🔔 *${title}*${body ? `\n${body}` : ''}`;
+    const tgText = `🔔 <b>${title}</b>${body ? `\n${body}` : ''}`;
     try {
       supabase.functions.invoke('send-telegram', {
-        body: { chat_id: recipient.telegram_id, text: tgText, bot_token: tgs.bot_token },
+        body: { chat_id: recipient.telegram_id, text: tgText },
       })
         .then(({ error }) => { if (error) console.warn('[tg:notif] send failed:', error); })
         .catch(e => console.warn('[tg:notif] invoke failed:', e));
