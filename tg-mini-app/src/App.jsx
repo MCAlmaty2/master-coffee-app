@@ -922,9 +922,11 @@ function App() {
         await seedProductsIfEmpty(PRICE_LIST);
         // users + products у нас отдельные модули, остальное — через универсальный sync
         const syncKeys = Object.keys(SYNC_TABLES);
-        const [users, products, ...rest] = await Promise.all([
+        const [users, products, tgSettingsRes, ...rest] = await Promise.all([
           fetchAllUsers(),
           fetchAllProducts(),
+          supabase.from('telegram_settings').select('*').eq('id', 1).single()
+            .catch(() => ({ data: null })),
           ...syncKeys.map(k => fetchAllOfTable(k).catch(e => {
             // eslint-disable-next-line no-console
             console.warn(`[sync] fetch ${k} failed (продолжаем без неё):`, e);
@@ -940,6 +942,20 @@ function App() {
           // Если roleDefinitions из БД пустые — оставляем локальные (SYSTEM_ROLES seed из loadDB)
           if (!update.roleDefinitions || update.roleDefinitions.length === 0) {
             merged.roleDefinitions = d.roleDefinitions;
+          }
+          // Мерджим telegram_settings из Supabase поверх локального стейта.
+          // bot_token: приоритет у Supabase, фоллбэк — localStorage (старое поведение).
+          const tgRow = tgSettingsRes?.data;
+          if (tgRow) {
+            merged.telegramSettings = {
+              ...d.telegramSettings,
+              bot_token:      tgRow.bot_token      || d.telegramSettings?.bot_token      || '',
+              bot_username:   tgRow.bot_username   || d.telegramSettings?.bot_username   || '',
+              group_chat_id:  tgRow.group_chat_id  || d.telegramSettings?.group_chat_id  || '',
+              topics:         tgRow.topics         || d.telegramSettings?.topics         || {},
+              topics_enabled: tgRow.topics_enabled || d.telegramSettings?.topics_enabled || {},
+              templates:      tgRow.templates      || d.telegramSettings?.templates      || {},
+            };
           }
           return merged;
         });
@@ -978,6 +994,30 @@ function App() {
       })
       .subscribe();
     channels.push(productsCh);
+
+    // telegram_settings — одна строка (id=1), подписываемся отдельно
+    const tgSettingsCh = supabase
+      .channel('rt-telegram-settings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'telegram_settings' }, async () => {
+        const { data } = await supabase.from('telegram_settings').select('*').eq('id', 1).single()
+          .catch(() => ({ data: null }));
+        if (data) {
+          setDb(d => ({
+            ...d,
+            telegramSettings: {
+              ...d.telegramSettings,
+              bot_token:      data.bot_token      || d.telegramSettings?.bot_token      || '',
+              bot_username:   data.bot_username   || d.telegramSettings?.bot_username   || '',
+              group_chat_id:  data.group_chat_id  || d.telegramSettings?.group_chat_id  || '',
+              topics:         data.topics         || d.telegramSettings?.topics         || {},
+              topics_enabled: data.topics_enabled || d.telegramSettings?.topics_enabled || {},
+              templates:      data.templates      || d.telegramSettings?.templates      || {},
+            },
+          }));
+        }
+      })
+      .subscribe();
+    channels.push(tgSettingsCh);
 
     // Остальные таблицы — через универсальный subscribe
     for (const stateKey of Object.keys(SYNC_TABLES)) {
@@ -1352,6 +1392,41 @@ function App() {
           recipient_id: order.created_by,
           title: 'Заказ выдан клиенту',
           body: `${order.order_number}: клиент забрал самовывоз`,
+          link_kind: 'order', link_id: order.id,
+        }),
+        ...d.notifications,
+      ],
+    }));
+    return { ok: true };
+  };
+
+  // Подтвердить доставку: перевести shipped+delivery заказ в архив.
+  // Вызывается складом или администратором после того как курьер доставил товар.
+  const archiveDeliveredOrder = (orderId) => {
+    const order = (db.orders || []).find(o => o.id === orderId);
+    if (!order) return { error: 'Заявка не найдена' };
+    if (order.status !== 'shipped' || order.delivery_method !== 'delivery') {
+      return { error: 'Только отгруженные заявки на доставку можно завершить' };
+    }
+    if (currentUser.role !== 'warehouse' && currentUser.role !== 'admin') {
+      return { error: 'Подтвердить доставку может только склад или администратор' };
+    }
+    setDb(d => ({
+      ...d,
+      orders: d.orders.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          status: 'archived',
+          delivered_at: new Date().toISOString(),
+          log: [...o.log, { event: 'delivered', actor: currentUser.id, at: new Date().toISOString() }],
+        };
+      }),
+      notifications: [
+        makeNotif(d, {
+          recipient_id: order.created_by,
+          title: '✅ Доставка подтверждена',
+          body: `${order.order_number}: заказ доставлен клиенту`,
           link_kind: 'order', link_id: order.id,
         }),
         ...d.notifications,
@@ -2230,8 +2305,21 @@ function App() {
 
   /* ═══════════ Telegram-настройки ═══════════ */
 
-  const updateTelegramSettings = (settings) => {
+  const updateTelegramSettings = async (settings) => {
+    // 1. Мгновенно обновляем локальный стейт (оптимистично)
     setDb(d => ({ ...d, telegramSettings: { ...d.telegramSettings, ...settings } }));
+    // 2. Сохраняем в Supabase чтобы все устройства получили настройки
+    const merged = { ...(db.telegramSettings || {}), ...settings };
+    await supabase.from('telegram_settings').upsert({
+      id:             1,
+      bot_token:      merged.bot_token      || '',
+      bot_username:   merged.bot_username   || '',
+      group_chat_id:  merged.group_chat_id  || '',
+      topics:         merged.topics         || {},
+      topics_enabled: merged.topics_enabled || {},
+      templates:      merged.templates      || {},
+      updated_at:     new Date().toISOString(),
+    }).catch(e => console.warn('[tg settings] save failed:', e));
   };
 
   /* ═══════════ Роли (RBAC) ═══════════ */
@@ -2698,7 +2786,7 @@ function App() {
     route, navigate, goBack, showToast,
     bootStatus,
     loginViaTelegram, logout,
-    createOrder, changeStatus, closePickupOrder, cancelOrder,
+    createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, cancelOrder,
     approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, transferAdmin,
     createTask, startTask, completeTask, rescheduleTask, deleteTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
@@ -4331,9 +4419,10 @@ function SalesHome({ ctx }) {
 }
 
 function WarehouseHome({ ctx }) {
-  const { db, changeStatus, closePickupOrder, showToast, navigate } = ctx;
-  const pickupShipped = db.orders.filter(o => o.status === 'shipped' && o.delivery_method === 'pickup');
-  const readyToPickup = db.orders.filter(o => o.status === 'ready');
+  const { db, changeStatus, closePickupOrder, archiveDeliveredOrder, showToast, navigate } = ctx;
+  const pickupShipped    = db.orders.filter(o => o.status === 'shipped' && o.delivery_method === 'pickup');
+  const deliveryShipped  = db.orders.filter(o => o.status === 'shipped' && o.delivery_method === 'delivery');
+  const readyToPickup    = db.orders.filter(o => o.status === 'ready');
   const [pickupModal, setPickupModal] = useState(null);
   const [enteredCode, setEnteredCode] = useState('');
 
@@ -4346,7 +4435,7 @@ function WarehouseHome({ ctx }) {
     <div>
       <PageHeader
         title="Склад"
-        subtitle={`Заказы: готовых ${readyToPickup.length} · к подготовке ${pickupShipped.length}${totalWriteoffs > 0 ? ` · списаний к сборке: ${totalWriteoffs}` : ''}`}
+        subtitle={`Готовых: ${readyToPickup.length} · самовывоз: ${pickupShipped.length} · доставка: ${deliveryShipped.length}${totalWriteoffs > 0 ? ` · списаний: ${totalWriteoffs}` : ''}`}
       />
 
       {/* Списания к сборке / выдаче */}
@@ -4382,7 +4471,7 @@ function WarehouseHome({ ctx }) {
         </div>
       )}
 
-      {readyToPickup.length === 0 && pickupShipped.length === 0 && totalWriteoffs === 0 && (
+      {readyToPickup.length === 0 && pickupShipped.length === 0 && deliveryShipped.length === 0 && totalWriteoffs === 0 && (
         <Empty icon={Package} title="Сейчас нечего выдавать" subtitle="Когда появятся заказы или списания к сборке — они отобразятся здесь" />
       )}
 
@@ -4439,6 +4528,58 @@ function WarehouseHome({ ctx }) {
                   style={{ background: '#297b8a' }}
                 >
                   Подтвердить готовность
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Заказы на доставку — отгружены, ожидают подтверждения доставки */}
+      {deliveryShipped.length > 0 && (
+        <>
+          <h2 className="display-font text-xl mb-3" style={{ color: '#1A1814' }}>
+            В доставке
+            <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: '#E0F2FE', color: '#0284C7' }}>
+              {deliveryShipped.length}
+            </span>
+          </h2>
+          <div className="space-y-3 mb-6">
+            {deliveryShipped.map(o => (
+              <div key={o.id} className="rounded-xl p-4 bg-white" style={{ border: '1px solid #BAE6FD' }}>
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold mono-font text-sm mb-1" style={{ color: '#0284C7' }}>№{o.order_number}</div>
+                    <div className="font-semibold truncate" style={{ color: '#1A1814' }}>
+                      {o.client_type === 'individual' ? o.full_name : o.company_name}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate({ name: 'order_detail', orderId: o.id })}
+                    className="text-xs px-3 py-1.5 rounded-lg font-semibold flex-shrink-0"
+                    style={{ background: '#F1F5F9', color: '#64748B' }}
+                  >
+                    Детали
+                  </button>
+                </div>
+                <div className="text-sm mb-3" style={{ color: '#64748B' }}>
+                  {o.items.map(it => `${it.name} — ${it.quantity} ${it.unit}`).join(' · ')}
+                </div>
+                {o.address && (
+                  <div className="text-xs mb-3 flex items-center gap-1" style={{ color: '#64748B' }}>
+                    <Truck size={12} /> {o.address}
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    const res = archiveDeliveredOrder(o.id);
+                    if (res.error) showToast(res.error);
+                    else showToast('Доставка подтверждена · заказ в архиве');
+                  }}
+                  className="w-full py-2.5 rounded-lg font-semibold text-white text-sm"
+                  style={{ background: '#0284C7' }}
+                >
+                  ✓ Подтвердить доставку
                 </button>
               </div>
             ))}
@@ -4790,7 +4931,7 @@ function AdminDeleteButton({ ctx, kind, id, label, onDeleted }) {
 }
 
 function OrderDetailScreen({ ctx, orderId }) {
-  const { db, currentUser, effectiveRole, goBack, changeStatus, closePickupOrder, showToast } = ctx;
+  const { db, currentUser, effectiveRole, goBack, changeStatus, closePickupOrder, archiveDeliveredOrder, showToast } = ctx;
   const order = db.orders.find(o => o.id === orderId);
   if (!order) return <div className="p-6">Заявка не найдена</div>;
 
@@ -4973,6 +5114,29 @@ function OrderDetailScreen({ ctx, orderId }) {
           {/* Блок выдачи самовывоза по коду — для склада/админа когда статус 'ready' */}
           {(currentUser.role === 'warehouse' || currentUser.role === 'admin') && order.status === 'ready' && order.delivery_method === 'pickup' && order.pickup_code && (
             <PickupDeliverBlock order={order} closePickupOrder={closePickupOrder} showToast={showToast} />
+          )}
+
+          {/* Подтверждение доставки — для склада/админа когда статус 'shipped' + delivery */}
+          {(currentUser.role === 'warehouse' || currentUser.role === 'admin') && order.status === 'shipped' && order.delivery_method === 'delivery' && (
+            <div className="rounded-xl p-4" style={{ background: '#F0F9FF', border: '1.5px solid #BAE6FD' }}>
+              <div className="text-xs font-bold uppercase mb-2" style={{ color: '#0284C7', letterSpacing: '0.08em' }}>
+                Подтверждение доставки
+              </div>
+              <div className="text-sm mb-3" style={{ color: '#0369A1' }}>
+                Нажми когда курьер подтвердил доставку. Заказ перейдёт в архив, менеджеру придёт уведомление.
+              </div>
+              <button
+                onClick={() => {
+                  const r = archiveDeliveredOrder(order.id);
+                  if (r?.error) showToast(r.error);
+                  else { showToast('Доставка подтверждена · заказ в архиве'); goBack(); }
+                }}
+                className="w-full py-2.5 rounded-lg font-semibold text-white text-sm"
+                style={{ background: '#0284C7' }}
+              >
+                <Truck size={15} className="inline mr-1.5" /> Подтвердить доставку
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -9791,9 +9955,13 @@ function AdminTelegramScreen({ ctx }) {
     }
   };
 
-  const handleSave = () => {
-    updateTelegramSettings(form);
-    showToast('Настройки сохранены');
+  const handleSave = async () => {
+    try {
+      await updateTelegramSettings(form);
+      showToast('Настройки сохранены');
+    } catch (e) {
+      showToast('Ошибка сохранения: ' + (e?.message || e));
+    }
   };
 
   const handleTest = async () => {
