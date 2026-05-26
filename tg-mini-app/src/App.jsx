@@ -925,7 +925,7 @@ function App() {
         const [users, products, tgSettingsRes, ...rest] = await Promise.all([
           fetchAllUsers(),
           fetchAllProducts(),
-          supabase.from('telegram_settings').select('*').eq('id', 1).single()
+          Promise.resolve(supabase.from('telegram_settings').select('*').eq('id', 1).single())
             .catch(() => ({ data: null })),
           ...syncKeys.map(k => fetchAllOfTable(k).catch(e => {
             // eslint-disable-next-line no-console
@@ -999,7 +999,7 @@ function App() {
     const tgSettingsCh = supabase
       .channel('rt-telegram-settings')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'telegram_settings' }, async () => {
-        const { data } = await supabase.from('telegram_settings').select('*').eq('id', 1).single()
+        const { data } = await Promise.resolve(supabase.from('telegram_settings').select('*').eq('id', 1).single())
           .catch(() => ({ data: null }));
         if (data) {
           setDb(d => ({
