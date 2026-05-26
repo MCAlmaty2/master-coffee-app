@@ -187,8 +187,8 @@ async function sendPrivateTelegram(user, text) {
 }
 
 // Создать in-app уведомление + fire-and-forget личный Telegram получателю.
-// Используй вместо inline-объекта { id: uid(), recipient_id, title, body, at, read: false }.
-function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id }) {
+// button_url / button_text — опционально: добавляет inline-кнопку под сообщением (web_app).
+function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, button_url, button_text }) {
   const notif = {
     id: uid(),
     recipient_id,
@@ -205,10 +205,15 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id }) {
   // bot_token НЕ передаём в теле — edge function читает TELEGRAM_BOT_TOKEN из Supabase Secrets.
   if (recipient?.telegram_id && recipient.tg_notif_enabled !== false && tgs?.bot_token) {
     const tgText = `🔔 <b>${title}</b>${body ? `\n${body}` : ''}`;
+    const invokeBody = { chat_id: recipient.telegram_id, text: tgText };
+    // Inline-кнопка "Открыть заявку" — только если передан button_url
+    if (button_url && button_text) {
+      invokeBody.reply_markup = {
+        inline_keyboard: [[{ text: button_text, web_app: { url: button_url } }]],
+      };
+    }
     try {
-      supabase.functions.invoke('send-telegram', {
-        body: { chat_id: recipient.telegram_id, text: tgText },
-      })
+      supabase.functions.invoke('send-telegram', { body: invokeBody })
         .then(({ error }) => { if (error) console.warn('[tg:notif] send failed:', error); })
         .catch(e => console.warn('[tg:notif] invoke failed:', e));
     } catch (e) {
@@ -803,6 +808,7 @@ function seedDB() {
       },
       topics_enabled: {}, // по умолчанию всё включено (true = отсутствие ключа)
       templates: {},      // по умолчанию используются DEFAULT_TG_TEMPLATES
+      app_url: 'https://master-coffee-app.vercel.app',
     },
     telegramLog: [],
     seeded: true,
@@ -955,6 +961,7 @@ function App() {
               topics:         tgRow.topics         || d.telegramSettings?.topics         || {},
               topics_enabled: tgRow.topics_enabled || d.telegramSettings?.topics_enabled || {},
               templates:      tgRow.templates      || d.telegramSettings?.templates      || {},
+              app_url:        tgRow.app_url        || d.telegramSettings?.app_url        || 'https://master-coffee-app.vercel.app',
             };
           }
           return merged;
@@ -969,6 +976,22 @@ function App() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // ─── Deep link: открыть нужный экран по startapp-параметру ───
+  // Поддерживает: Telegram MiniApp initData (start_param) и обычный URL (?startapp=...)
+  useEffect(() => {
+    if (bootStatus.phase !== 'ready') return;
+    const startParam =
+      window.Telegram?.WebApp?.initDataUnsafe?.start_param ||
+      new URLSearchParams(window.location.search).get('startapp');
+    if (!startParam) return;
+    const idx = startParam.indexOf('_');
+    if (idx < 0) return;
+    const type = startParam.slice(0, idx);
+    const id   = startParam.slice(idx + 1);
+    if (type === 'writeoff') navigate({ name: 'writeoff_detail', writeOffId: id });
+    else if (type === 'contract') navigate({ name: 'contract_detail', contractId: id });
+  }, [bootStatus.phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Realtime: подписываемся на изменения всех таблиц ───
   useEffect(() => {
@@ -1012,6 +1035,7 @@ function App() {
               topics:         data.topics         || d.telegramSettings?.topics         || {},
               topics_enabled: data.topics_enabled || d.telegramSettings?.topics_enabled || {},
               templates:      data.templates      || d.telegramSettings?.templates      || {},
+              app_url:        data.app_url        || d.telegramSettings?.app_url        || 'https://master-coffee-app.vercel.app',
             },
           }));
         }
@@ -1846,12 +1870,15 @@ function App() {
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
     };
     setDb(d => {
-      // Уведомить всех, кто может одобрять (директор/старший менеджер)
-      const approvers = d.users.filter(u => u.active && ['director', 'senior_manager'].includes(u.role) && u.id !== currentUser.id);
+      // Уведомить admin + director + senior_manager
+      const appUrl = d.telegramSettings?.app_url || 'https://master-coffee-app.vercel.app';
+      const approvers = d.users.filter(u => u.active && ['admin', 'director', 'senior_manager'].includes(u.role) && u.id !== currentUser.id);
       const newNotifs = approvers.map(a => makeNotif(d, {
         recipient_id: a.id,
-        title: 'Заявка на списание',
-        body: `${number}: ${items.length} поз. от ${getUserName(d, currentUser.id)}`,
+        title: '🗑 Заявка на списание',
+        body: `${number}: ${items.length} поз. от ${getUserName(d, currentUser.id)}\n${writeOff.reason.slice(0, 60)}`,
+        button_url:  `${appUrl}?startapp=writeoff_${writeOff.id}`,
+        button_text: '📋 Открыть заявку',
       }));
       const tgEntry = makeTgLogEntry(d, 'writeoff_new', {
         wo_number: number,
@@ -1861,11 +1888,6 @@ function App() {
       });
       return { ...d, writeOffs: [writeOff, ...d.writeOffs], notifications: [...newNotifs, ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
     });
-    // Личные TG для admin — у них нет in-app уведомления, но стоит знать (fire-and-forget)
-    const personalText = `🗑 Новое списание ${number}\nОт: ${getUserName(db, currentUser.id)}\nПозиций: ${items.length}\nПричина: ${writeOff.reason.slice(0, 80)}`;
-    db.users
-      .filter(u => u.active && u.role === 'admin' && u.tg_notif_enabled !== false && u.telegram_id && u.id !== currentUser.id)
-      .forEach(u => sendPrivateTelegram(u, personalText));
     return { writeOff };
   };
 
@@ -2134,13 +2156,16 @@ function App() {
     };
 
     setDb(d => {
-      // Уведомить ст.менеджера и директора
-      const approvers = d.users.filter(u => u.active && ['director', 'senior_manager'].includes(u.role) && u.id !== currentUser.id);
+      // Уведомить admin + director + senior_manager
+      const appUrl = d.telegramSettings?.app_url || 'https://master-coffee-app.vercel.app';
+      const approvers = d.users.filter(u => u.active && ['admin', 'director', 'senior_manager'].includes(u.role) && u.id !== currentUser.id);
       const newNotifs = approvers.map(a => makeNotif(d, {
         recipient_id: a.id,
         link_kind: 'contract', link_id: cr.id,
-        title: 'Новая заявка на договор',
-        body: `${number}: ${CONTRACT_TYPE[cr.contract_type].short} от ${getUserName(d, currentUser.id)}`,
+        title: '📑 Новая заявка на договор',
+        body: `${number}: ${CONTRACT_TYPE[cr.contract_type].short}\nОт: ${getUserName(d, currentUser.id)}`,
+        button_url:  `${appUrl}?startapp=contract_${cr.id}`,
+        button_text: '📋 Открыть заявку',
       }));
       const tgMsg = { cr_number: number, contract_type: CONTRACT_TYPE[cr.contract_type].label, manager: getUserName(d, currentUser.id), items_count: spec.length };
       return {
@@ -2318,6 +2343,7 @@ function App() {
       topics:         merged.topics         || {},
       topics_enabled: merged.topics_enabled || {},
       templates:      merged.templates      || {},
+      app_url:        merged.app_url        || 'https://master-coffee-app.vercel.app',
       updated_at:     new Date().toISOString(),
     })).catch(e => { throw e; });
   };
@@ -9920,6 +9946,7 @@ function AdminTelegramScreen({ ctx }) {
     bot_token: settings.bot_token || '',
     bot_username: settings.bot_username || '',
     group_chat_id: settings.group_chat_id || '',
+    app_url: settings.app_url || 'https://master-coffee-app.vercel.app',
     topics: { ...settings.topics },
     topics_enabled: { ...settings.topics_enabled },
     templates: { ...settings.templates },
@@ -10103,6 +10130,12 @@ function AdminTelegramScreen({ ctx }) {
             <SiteInput label="ID группы (chat_id)" value={form.group_chat_id} onChange={v => update({ group_chat_id: v })} placeholder="-1001234567890" />
             <div className="text-xs mt-1" style={{ color: '#64748B' }}>
               Для группы — отрицательное число. Узнать: добавить в группу @userinfobot и попросить /start, он покажет ID.
+            </div>
+          </div>
+          <div>
+            <SiteInput label="URL приложения" value={form.app_url || ''} onChange={v => update({ app_url: v.trim() })} placeholder="https://master-coffee-app.vercel.app" />
+            <div className="text-xs mt-1" style={{ color: '#64748B' }}>
+              Используется для кнопок «Открыть заявку» в личных уведомлениях бота.
             </div>
           </div>
         </div>
