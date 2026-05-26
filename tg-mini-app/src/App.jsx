@@ -20,6 +20,7 @@ import {
   deleteUserInDb,
   findUserByWebToken,
   setWebTokenInDb,
+  setPinHashInDb,
 } from './supabase/users';
 import {
   fetchAllProducts,
@@ -120,6 +121,13 @@ function gen4DigitCode(existing = []) {
     if (!existing.includes(code)) return code;
   }
   return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+/** Хеш PIN: SHA-256(userId + ':' + pin). Async, Web Crypto API. */
+async function hashPin(userId, pin) {
+  const data = new TextEncoder().encode(`${userId}:${pin}`);
+  const buf  = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // Хелпер: сформировать запись о том, что Telegram-бот "отправил бы"
@@ -2807,6 +2815,50 @@ function App() {
     }
   };
 
+  /** Вход по 4-значному PIN в браузере (без Telegram).
+   *  Перебирает активных пользователей с pin_hash и сравнивает хеш. */
+  const loginViaPin = async (pin) => {
+    if (!pin || pin.length !== 4) return { error: 'Введите 4 цифры' };
+    const candidates = (db.users || []).filter(u => u.active && u.pin_hash);
+    for (const user of candidates) {
+      const hash = await hashPin(user.id, pin);
+      if (hash === user.pin_hash) {
+        setSession({ user_id: user.id });
+        setRoute({ name: 'home' });
+        setRouteStack([]);
+        showToast(`С возвращением, ${user.first_name}`);
+        return { ok: true };
+      }
+    }
+    return { error: 'Неверный PIN' };
+  };
+
+  /** Установить PIN для пользователя. Только admin или сам пользователь. */
+  const setPinForUser = async (userId, pin) => {
+    if (!pin || !/^\d{4}$/.test(pin)) return { error: 'PIN — 4 цифры (0–9)' };
+    if (currentUser?.role !== 'admin' && currentUser?.id !== userId) return { error: 'Нет прав' };
+    try {
+      const hash = await hashPin(userId, pin);
+      await setPinHashInDb(userId, hash);
+      setDb(d => ({ ...d, users: d.users.map(u => u.id === userId ? { ...u, pin_hash: hash } : u) }));
+      return { ok: true };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+
+  /** Сбросить (удалить) PIN пользователя. */
+  const resetPinForUser = async (userId) => {
+    if (currentUser?.role !== 'admin' && currentUser?.id !== userId) return { error: 'Нет прав' };
+    try {
+      await setPinHashInDb(userId, null);
+      setDb(d => ({ ...d, users: d.users.map(u => u.id === userId ? { ...u, pin_hash: null } : u) }));
+      return { ok: true };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+
   const ctx = {
     db, setDb, currentUser, effectiveRole, actAs, setActAs,
     route, navigate, goBack, showToast,
@@ -2829,6 +2881,7 @@ function App() {
     quickDraft, setQuickDraft, resetQuickDraft,
     taskDraft, setTaskDraft, resetTaskDraft,
     generateWebToken,
+    loginViaPin, setPinForUser, resetPinForUser,
   };
 
   // ─── Интеграция с Telegram Mini App ───
@@ -3279,7 +3332,7 @@ function BootSplash({ title, subtitle, isError }) {
 }
 
 function TelegramAuthScreen({ ctx }) {
-  const { isInTelegram, pendingTgUser, db, isCheckingToken } = ctx;
+  const { isInTelegram, pendingTgUser, db, isCheckingToken, loginViaPin } = ctx;
   // Сколько админов в системе сейчас? Если ноль — показываем подсказку как поставить первого.
   const adminsCount = db.users.filter(u => u.role === 'admin' && u.active).length;
 
@@ -3310,7 +3363,7 @@ function TelegramAuthScreen({ ctx }) {
     );
   }
 
-  // Состояние 2: открыто в браузере (не Telegram) — нужна личная ссылка
+  // Состояние 2: открыто в браузере (не Telegram) — PIN или личная ссылка
   if (!isInTelegram) {
     const hasUrlToken = !!new URLSearchParams(window.location.search).get('wt');
 
@@ -3328,68 +3381,7 @@ function TelegramAuthScreen({ ctx }) {
       );
     }
 
-    return (
-      <div className="min-h-screen w-full flex items-center justify-center px-4" style={{ background: '#F5F7F8' }}>
-        <div className="w-full max-w-sm">
-          <div className="text-center mb-8">
-            <img src="/logo-symbol.png" alt="Master Coffee Roasters"
-                 style={{ width: 72, height: 72, objectFit: 'contain', marginBottom: 16 }} />
-            <div className="font-black tracking-widest uppercase"
-                 style={{ fontSize: 22, color: '#297b8a', letterSpacing: '0.18em', lineHeight: 1 }}>
-              MASTER
-            </div>
-            <div className="font-medium tracking-widest uppercase"
-                 style={{ fontSize: 11, color: '#94a3b8', letterSpacing: '0.35em', marginTop: 2 }}>
-              COFFEE ROASTERS
-            </div>
-            <div className="text-sm mt-2" style={{ color: '#64748B' }}>Управление закупками и операциями</div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-sm" style={{ border: '1px solid #E5E7EB' }}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: hasUrlToken ? '#FEE2E2' : '#FEF3C7' }}>
-                {hasUrlToken
-                  ? <AlertCircle size={20} style={{ color: '#EB5757' }} />
-                  : <Monitor size={20} style={{ color: '#F59E0B' }} />
-                }
-              </div>
-              <div>
-                <div className="font-semibold text-sm" style={{ color: '#1A1814' }}>
-                  {hasUrlToken ? 'Ссылка недействительна' : 'Нужна личная ссылка'}
-                </div>
-                <div className="text-xs" style={{ color: '#64748B' }}>
-                  {hasUrlToken
-                    ? 'Токен отозван или устарел — получи новую ссылку'
-                    : 'Для входа через браузер'
-                  }
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl p-4 space-y-3" style={{ background: '#F8FAFC', border: '1px solid #E5E7EB' }}>
-              <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748B' }}>Как войти</div>
-              <div className="flex items-start gap-2 text-sm" style={{ color: '#1A1814' }}>
-                <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: '#297b8a' }}>1</span>
-                <span>Откройте <strong>Telegram</strong> на телефоне и запустите бот CRM</span>
-              </div>
-              <div className="flex items-start gap-2 text-sm" style={{ color: '#1A1814' }}>
-                <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: '#297b8a' }}>2</span>
-                <span>На главной нажмите <strong>«Открыть в браузере на ПК»</strong></span>
-              </div>
-              <div className="flex items-start gap-2 text-sm" style={{ color: '#1A1814' }}>
-                <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: '#297b8a' }}>3</span>
-                <span>Вставьте открывшуюся ссылку в этот браузер</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 text-center text-xs rounded-xl p-3" style={{ background: 'white', color: '#64748B', border: '1px solid #E5E7EB' }}>
-            <strong style={{ color: '#1A1814' }}>Разработчик:</strong> добавь{' '}
-            <span className="mono-font">VITE_DEV_TELEGRAM_ID=…</span> в <span className="mono-font">.env</span>
-          </div>
-        </div>
-      </div>
-    );
+    return <PinLoginScreen hasUrlToken={hasUrlToken} loginViaPin={loginViaPin} />;
   }
 
   // Состояние 3: открыт через Telegram, но initDataUnsafe.user пустой
@@ -3409,6 +3401,193 @@ function TelegramAuthScreen({ ctx }) {
   );
 }
 
+
+/* ═════════════════════════════════════════════════════════════════════════
+   PIN-ЛОГИН (браузер без Telegram)
+   ═════════════════════════════════════════════════════════════════════════ */
+
+function PinLoginScreen({ hasUrlToken, loginViaPin }) {
+  const [pin, setPin] = useState(['', '', '', '']);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showLinkHelp, setShowLinkHelp] = useState(false);
+  const inputRefs = React.useRef([]);
+
+  // Автофокус на первый инпут при монтировании
+  React.useEffect(() => { inputRefs.current[0]?.focus(); }, []);
+
+  const trySubmit = async (digits) => {
+    const code = digits.join('');
+    if (code.length !== 4) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await loginViaPin(code);
+      if (res?.error) {
+        setError(res.error);
+        setPin(['', '', '', '']);
+        setTimeout(() => inputRefs.current[0]?.focus(), 0);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDigit = (index, value) => {
+    const digit = value.replace(/\D/g, '').slice(-1);
+    const next = pin.map((d, i) => (i === index ? digit : d));
+    setPin(next);
+    setError('');
+    if (digit) {
+      if (index < 3) {
+        inputRefs.current[index + 1]?.focus();
+      } else {
+        trySubmit(next);
+      }
+    }
+  };
+
+  const handleKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !pin[index] && index > 0) {
+      const next = pin.map((d, i) => (i === index - 1 ? '' : d));
+      setPin(next);
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e) => {
+    const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
+    if (text.length > 0) {
+      const next = ['', '', '', ''].map((_, i) => text[i] || '');
+      setPin(next);
+      inputRefs.current[Math.min(text.length, 3)]?.focus();
+      if (text.length === 4) trySubmit(next);
+    }
+    e.preventDefault();
+  };
+
+  const filled = pin.join('').length === 4;
+
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center px-4" style={{ background: '#F5F7F8' }}>
+      <div className="w-full max-w-sm">
+        {/* Логотип */}
+        <div className="text-center mb-8">
+          <img src="/logo-symbol.png" alt="Master Coffee Roasters"
+               style={{ width: 72, height: 72, objectFit: 'contain', marginBottom: 16 }} />
+          <div className="font-black tracking-widest uppercase"
+               style={{ fontSize: 22, color: '#297b8a', letterSpacing: '0.18em', lineHeight: 1 }}>MASTER</div>
+          <div className="font-medium tracking-widest uppercase"
+               style={{ fontSize: 11, color: '#94a3b8', letterSpacing: '0.35em', marginTop: 2 }}>COFFEE ROASTERS</div>
+          <div className="text-sm mt-2" style={{ color: '#64748B' }}>Управление закупками и операциями</div>
+        </div>
+
+        {/* PIN форма */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm" style={{ border: '1px solid #E5E7EB' }}>
+          <div className="text-center mb-5">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-3"
+                 style={{ background: '#E7F3FE' }}>
+              <KeyRound size={22} style={{ color: '#297b8a' }} />
+            </div>
+            <div className="font-bold text-lg" style={{ color: '#1A1814' }}>Вход по PIN</div>
+            <div className="text-xs mt-1" style={{ color: '#64748B' }}>Введите 4-значный PIN-код</div>
+          </div>
+
+          {/* 4 поля ввода */}
+          <div className="flex gap-3 justify-center mb-5" onPaste={handlePaste}>
+            {pin.map((digit, i) => (
+              <input
+                key={i}
+                ref={el => { inputRefs.current[i] = el; }}
+                type="tel"
+                inputMode="numeric"
+                maxLength={1}
+                value={digit}
+                onChange={e => handleDigit(i, e.target.value)}
+                onKeyDown={e => handleKeyDown(i, e)}
+                disabled={loading}
+                className="w-14 h-14 text-center font-bold rounded-xl outline-none transition-all"
+                style={{
+                  fontSize: 28,
+                  border: `2px solid ${digit ? '#297b8a' : error ? '#EB5757' : '#E5E7EB'}`,
+                  background: digit ? '#F0F9FF' : '#F8FAFC',
+                  color: '#1A1814',
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Ошибка */}
+          {error && (
+            <div className="text-center text-sm mb-4 rounded-lg py-2 px-3"
+                 style={{ background: '#FEF2F2', color: '#EB5757' }}>
+              {error}
+            </div>
+          )}
+
+          {/* Ссылка устарела */}
+          {hasUrlToken && !error && (
+            <div className="text-center text-xs mb-4 rounded-lg py-2 px-3"
+                 style={{ background: '#FEF2F2', color: '#EB5757' }}>
+              Ссылка недействительна — войдите по PIN или получите новую в Telegram
+            </div>
+          )}
+
+          <button
+            onClick={() => trySubmit(pin)}
+            disabled={!filled || loading}
+            className="w-full py-3 rounded-xl font-semibold text-white transition"
+            style={{ background: filled && !loading ? '#297b8a' : '#A8A8AE' }}
+          >
+            {loading ? 'Проверяем…' : 'Войти'}
+          </button>
+        </div>
+
+        {/* Альтернатива: войти по ссылке */}
+        <div className="mt-3 bg-white rounded-2xl shadow-sm overflow-hidden"
+             style={{ border: '1px solid #E5E7EB' }}>
+          <button
+            onClick={() => setShowLinkHelp(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-sm"
+            style={{ color: '#64748B' }}
+          >
+            <span>Нет PIN? Войти по личной ссылке</span>
+            <ChevronDown size={16} style={{
+              transform: showLinkHelp ? 'rotate(180deg)' : 'none',
+              transition: 'transform 0.2s',
+            }} />
+          </button>
+          {showLinkHelp && (
+            <div className="px-4 pb-4 space-y-2" style={{ borderTop: '1px solid #F1F5F9' }}>
+              <div className="flex items-start gap-2 text-xs mt-3" style={{ color: '#1A1814' }}>
+                <span className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-white font-bold"
+                      style={{ background: '#297b8a', fontSize: 9 }}>1</span>
+                <span>Откройте <strong>Telegram</strong> и запустите бот CRM</span>
+              </div>
+              <div className="flex items-start gap-2 text-xs" style={{ color: '#1A1814' }}>
+                <span className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-white font-bold"
+                      style={{ background: '#297b8a', fontSize: 9 }}>2</span>
+                <span>На главной нажмите <strong>«Открыть в браузере на ПК»</strong></span>
+              </div>
+              <div className="flex items-start gap-2 text-xs" style={{ color: '#1A1814' }}>
+                <span className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-white font-bold"
+                      style={{ background: '#297b8a', fontSize: 9 }}>3</span>
+                <span>Вставьте открывшуюся ссылку в этот браузер</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Dev hint */}
+        <div className="mt-3 text-center text-xs rounded-xl p-3"
+             style={{ background: 'white', color: '#64748B', border: '1px solid #E5E7EB' }}>
+          <strong style={{ color: '#1A1814' }}>Разработчик:</strong> добавь{' '}
+          <span className="mono-font">VITE_DEV_TELEGRAM_ID=…</span> в <span className="mono-font">.env</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ═════════════════════════════════════════════════════════════════════════
    ОБОЛОЧКА ПРИЛОЖЕНИЯ
@@ -3992,6 +4171,93 @@ function OpenInBrowserButton({ ctx }) {
   );
 }
 
+/** Кнопка управления PIN — для всех вошедших пользователей (и в Telegram, и в браузере). */
+function MyPinButton({ ctx }) {
+  const { currentUser, setPinForUser, resetPinForUser, showToast } = ctx;
+  const [open, setOpen] = useState(false);
+  const [pin, setPin] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const hasPinSet = !!currentUser?.pin_hash;
+
+  const handleSave = async () => {
+    if (!/^\d{4}$/.test(pin)) { setError('PIN — 4 цифры (0–9)'); return; }
+    setLoading(true);
+    setError('');
+    const res = await setPinForUser(currentUser.id, pin);
+    setLoading(false);
+    if (res?.error) { setError(res.error); return; }
+    showToast('PIN установлен');
+    setOpen(false);
+    setPin('');
+  };
+
+  const handleReset = async () => {
+    setLoading(true);
+    const res = await resetPinForUser(currentUser.id);
+    setLoading(false);
+    if (res?.error) { showToast(res.error); return; }
+    showToast('PIN сброшен');
+    setOpen(false);
+  };
+
+  return (
+    <div className="rounded-xl mb-3 overflow-hidden transition"
+         style={{ background: hasPinSet ? '#F0FDF4' : 'white', border: `1px solid ${hasPinSet ? '#BBF7D0' : '#E5E7EB'}` }}>
+      <button onClick={() => { setOpen(v => !v); setError(''); setPin(''); }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left">
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+             style={{ background: hasPinSet ? '#10B981' : '#F5F7F8' }}>
+          <KeyRound size={16} style={{ color: hasPinSet ? 'white' : '#A8A8AE' }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold" style={{ color: '#1A1814' }}>
+            PIN для входа в браузере
+          </div>
+          <div className="text-[11px]" style={{ color: hasPinSet ? '#10B981' : '#64748B' }}>
+            {hasPinSet ? '✓ Установлен — можно войти без Telegram' : 'Не установлен'}
+          </div>
+        </div>
+        <ChevronDown size={16} style={{ color: '#64748B', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+      </button>
+      {open && (
+        <div className="px-4 pb-4 pt-1" style={{ borderTop: '1px solid #F1F5F9' }}>
+          <div className="text-xs mb-3" style={{ color: '#64748B' }}>
+            Введите новый 4-значный PIN. Он позволит входить на сайт без Telegram.
+          </div>
+          <div className="flex gap-2 mb-2">
+            <input
+              type="tel"
+              inputMode="numeric"
+              maxLength={4}
+              value={pin}
+              onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setError(''); }}
+              placeholder="••••"
+              disabled={loading}
+              className="flex-1 px-3 py-2 rounded-lg text-center font-bold outline-none"
+              style={{ fontSize: 22, letterSpacing: '0.35em', border: '2px solid #E5E7EB', background: '#F8FAFC' }}
+            />
+            <button onClick={handleSave} disabled={loading || pin.length !== 4}
+                    className="px-4 py-2 rounded-lg font-semibold text-white text-sm transition"
+                    style={{ background: pin.length === 4 && !loading ? '#297b8a' : '#A8A8AE' }}>
+              {loading ? '…' : 'Сохранить'}
+            </button>
+          </div>
+          {error && <div className="text-xs mb-2" style={{ color: '#EB5757' }}>{error}</div>}
+          {hasPinSet && (
+            <button onClick={handleReset} disabled={loading}
+                    className="text-xs font-medium"
+                    style={{ color: '#EB5757' }}>
+              Сбросить PIN
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DashboardHome({ ctx, title }) {
   const { db, currentUser, navigate } = ctx;
 
@@ -4173,6 +4439,9 @@ function DashboardHome({ ctx, title }) {
 
       {/* Кнопка открытия в браузере — только в Telegram */}
       <OpenInBrowserButton ctx={ctx} />
+
+      {/* PIN для входа в браузере — для всех пользователей */}
+      <MyPinButton ctx={ctx} />
 
       <PageHeader
         title={title || 'Главная'}
@@ -6860,7 +7129,7 @@ function ExportScreen({ ctx }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function AdminUsersScreen({ ctx }) {
-  const { db, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, showToast, resetDB } = ctx;
+  const { db, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, setPinForUser, resetPinForUser, showToast, resetDB } = ctx;
 
   const activeUsers = db.users.filter(u => u.active && u.role !== 'pending');
   const inactiveUsers = db.users.filter(u => !u.active && u.role !== 'pending');
@@ -6900,6 +7169,18 @@ function AdminUsersScreen({ ctx }) {
               if (res?.error) showToast(res.error);
               else showToast(enabled ? 'TG-уведомления включены' : 'TG-уведомления отключены');
             }}
+            onSetPin={async (userId, pin) => {
+              const res = await setPinForUser(userId, pin);
+              if (res?.error) showToast(res.error);
+              else showToast('PIN установлен');
+              return res;
+            }}
+            onResetPin={async (userId) => {
+              const res = await resetPinForUser(userId);
+              if (res?.error) showToast(res.error);
+              else showToast('PIN сброшен');
+              return res;
+            }}
           />
         ))}
       </div>
@@ -6907,8 +7188,12 @@ function AdminUsersScreen({ ctx }) {
   );
 }
 
-function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgNotif }) {
+function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgNotif, onSetPin, onResetPin }) {
   const [open, setOpen] = useState(false);
+  const [pinFormOpen, setPinFormOpen] = useState(false);
+  const [pinValue, setPinValue] = useState('');
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pinError, setPinError] = useState('');
   const r = roleOf(db, user.role);
   // Все роли, доступные для назначения (системные + кастомные), кроме admin и pending
   const assignableRoles = (db.roleDefinitions || []).filter(rd => rd.key !== 'admin' && rd.key !== 'pending');
@@ -6983,6 +7268,78 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgN
                   style={{ transform: user.tg_notif_enabled === false ? 'translateX(1px)' : 'translateX(19px)' }}
                 />
               </button>
+            </div>
+          )}
+
+          {/* PIN для входа в браузере */}
+          {onSetPin && (
+            <div className="rounded-lg overflow-hidden" style={{ background: '#F5F7F8' }}>
+              <div className="flex items-center justify-between px-3 py-2">
+                <div>
+                  <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>PIN для браузера</div>
+                  <div className="text-[10px]" style={{ color: user.pin_hash ? '#10B981' : '#64748B' }}>
+                    {user.pin_hash ? '✓ Установлен' : 'Не установлен'}
+                  </div>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => { setPinFormOpen(v => !v); setPinValue(''); setPinError(''); }}
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-lg"
+                    style={{ background: '#297b8a', color: 'white' }}
+                  >
+                    {user.pin_hash ? 'Сменить' : 'Установить'}
+                  </button>
+                  {user.pin_hash && (
+                    <button
+                      onClick={async () => {
+                        setPinLoading(true);
+                        await onResetPin(user.id);
+                        setPinLoading(false);
+                        setPinFormOpen(false);
+                      }}
+                      disabled={pinLoading}
+                      className="text-[11px] font-semibold px-2.5 py-1 rounded-lg"
+                      style={{ background: '#FEE2E2', color: '#EB5757' }}
+                    >
+                      Сбросить
+                    </button>
+                  )}
+                </div>
+              </div>
+              {pinFormOpen && (
+                <div className="px-3 pb-3 pt-1" style={{ borderTop: '1px solid #E5E7EB' }}>
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={pinValue}
+                      onChange={e => { setPinValue(e.target.value.replace(/\D/g, '').slice(0, 4)); setPinError(''); }}
+                      placeholder="0000"
+                      disabled={pinLoading}
+                      className="flex-1 px-3 py-1.5 rounded-lg text-center font-bold outline-none"
+                      style={{ fontSize: 18, letterSpacing: '0.3em', border: '2px solid #E5E7EB', background: 'white' }}
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!/^\d{4}$/.test(pinValue)) { setPinError('4 цифры'); return; }
+                        setPinLoading(true);
+                        const res = await onSetPin(user.id, pinValue);
+                        setPinLoading(false);
+                        if (res?.error) { setPinError(res.error); return; }
+                        setPinFormOpen(false);
+                        setPinValue('');
+                      }}
+                      disabled={pinLoading || pinValue.length !== 4}
+                      className="px-3 py-1.5 rounded-lg font-semibold text-white text-xs"
+                      style={{ background: pinValue.length === 4 && !pinLoading ? '#297b8a' : '#A8A8AE' }}
+                    >
+                      {pinLoading ? '…' : 'ОК'}
+                    </button>
+                  </div>
+                  {pinError && <div className="text-[10px] mt-1" style={{ color: '#EB5757' }}>{pinError}</div>}
+                </div>
+              )}
             </div>
           )}
         </div>

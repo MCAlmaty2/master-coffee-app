@@ -131,3 +131,15 @@ export async function setWebTokenInDb(userId, token) {
   if (error) throw error;
   return data;
 }
+
+/** Установить или сбросить PIN-хеш пользователя (null — удаляет PIN) */
+export async function setPinHashInDb(userId, pinHash) {
+  const { data, error } = await supabase
+    .from('users')
+    .update({ pin_hash: pinHash })
+    .eq('id', userId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
