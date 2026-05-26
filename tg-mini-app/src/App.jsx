@@ -2310,7 +2310,7 @@ function App() {
     setDb(d => ({ ...d, telegramSettings: { ...d.telegramSettings, ...settings } }));
     // 2. Сохраняем в Supabase чтобы все устройства получили настройки
     const merged = { ...(db.telegramSettings || {}), ...settings };
-    await supabase.from('telegram_settings').upsert({
+    await Promise.resolve(supabase.from('telegram_settings').upsert({
       id:             1,
       bot_token:      merged.bot_token      || '',
       bot_username:   merged.bot_username   || '',
@@ -2319,7 +2319,7 @@ function App() {
       topics_enabled: merged.topics_enabled || {},
       templates:      merged.templates      || {},
       updated_at:     new Date().toISOString(),
-    }).catch(e => console.warn('[tg settings] save failed:', e));
+    })).catch(e => { throw e; });
   };
 
   /* ═══════════ Роли (RBAC) ═══════════ */
