@@ -1222,7 +1222,7 @@ function App() {
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
     };
     setDb(d => {
-      const b2bUsers = d.users.filter(u => u.role === 'b2b' && u.active);
+      const b2bUsers = d.users.filter(u => u.role === 'b2b' && u.active && u.id !== currentUser.id);
       const newNotifs = b2bUsers.map(u => makeNotif(d, {
         recipient_id: u.id,
         title: 'Новая заявка',
@@ -1313,7 +1313,7 @@ function App() {
         }));
         // In-app: уведомить всех активных кладовщиков о новом самовывозе
         const clientName = updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name;
-        d.users.filter(u => u.active && u.role === 'warehouse').forEach(wu => {
+        d.users.filter(u => u.active && u.role === 'warehouse' && u.id !== currentUser.id).forEach(wu => {
           newNotifs.push(makeNotif(d, {
             recipient_id: wu.id,
             title: '📦 Новый самовывоз',
@@ -1772,7 +1772,7 @@ function App() {
     };
     setDb(d => {
       // Уведомить всех, кто может одобрять (директор/старший менеджер)
-      const approvers = d.users.filter(u => u.active && ['director', 'senior_manager'].includes(u.role));
+      const approvers = d.users.filter(u => u.active && ['director', 'senior_manager'].includes(u.role) && u.id !== currentUser.id);
       const newNotifs = approvers.map(a => makeNotif(d, {
         recipient_id: a.id,
         title: 'Заявка на списание',
@@ -1820,7 +1820,7 @@ function App() {
         body: `${wo.number}: одобрена ${getUserName(d, currentUser.id)}`,
       }));
       // Уведомить кассиров
-      const cashiers = d.users.filter(u => u.active && u.role === 'cashier');
+      const cashiers = d.users.filter(u => u.active && u.role === 'cashier' && u.id !== currentUser.id);
       cashiers.forEach(c => newNotifs.push(makeNotif(d, {
         recipient_id: c.id,
         title: 'К списанию в 1С',
@@ -1893,7 +1893,7 @@ function App() {
       });
       // Уведомления: автору + всем складским
       const author = d.users.find(u => u.id === wo.created_by);
-      const warehouseUsers = d.users.filter(u => u.active && u.role === 'warehouse');
+      const warehouseUsers = d.users.filter(u => u.active && u.role === 'warehouse' && u.id !== currentUser.id);
       const newNotifs = [
         makeNotif(d, { recipient_id: wo.created_by, title: 'Документ списания проведён',
           body: `${wo.number} → ${trimmed}. Ждите когда склад соберёт.`,
@@ -2060,7 +2060,7 @@ function App() {
 
     setDb(d => {
       // Уведомить ст.менеджера и директора
-      const approvers = d.users.filter(u => u.active && ['director', 'senior_manager'].includes(u.role));
+      const approvers = d.users.filter(u => u.active && ['director', 'senior_manager'].includes(u.role) && u.id !== currentUser.id);
       const newNotifs = approvers.map(a => makeNotif(d, {
         recipient_id: a.id,
         link_kind: 'contract', link_id: cr.id,
@@ -2328,7 +2328,7 @@ function App() {
     };
 
     setDb(d => {
-      const warehouseUsers = d.users.filter(u => u.active && hasPermission(d, u, 'grind_fulfill'));
+      const warehouseUsers = d.users.filter(u => u.active && hasPermission(d, u, 'grind_fulfill') && u.id !== currentUser.id);
       const newNotifs = warehouseUsers.map(w => makeNotif(d, {
         recipient_id: w.id,
         title: 'Новая заявка на помол',
