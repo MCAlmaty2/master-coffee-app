@@ -849,16 +849,22 @@ function validateOrderForm(form) {
     else if (name.length < 6) errors.full_name = 'Минимум 6 символов';
   } else {
     const company = (form.company_name || '').trim();
-    if (!company) errors.company_name = 'Укажите название компании';
+    if (!company) errors.company_name = 'Укажите наименование юр. лица';
     else if (company.length < 3) errors.company_name = 'Минимум 3 символа';
     const bin = (form.bin || '').trim();
-    if (!bin) errors.bin = 'Укажите БИН';
-    else if (!BIN_RE.test(bin)) errors.bin = 'БИН — ровно 12 цифр';
+    if (!bin) errors.bin = 'Укажите БИН/ИИН';
+    else if (!BIN_RE.test(bin)) errors.bin = 'БИН/ИИН — ровно 12 цифр';
     const cp = (form.contact_person || '').trim();
     if (!cp) errors.contact_person = 'Укажите контактное лицо';
     else if (cp.split(/\s+/).filter(Boolean).length < 2) errors.contact_person = 'Минимум 2 слова';
     const email = (form.email || '').trim();
     if (email && !EMAIL_RE.test(email)) errors.email = 'Некорректный email';
+    // Банковские реквизиты — обязательны для юр. лица
+    if (!(form.bank || '').trim()) errors.bank = 'Укажите банк';
+    if (!(form.kbe || '').trim()) errors.kbe = 'Укажите КБе';
+    else if (!/^\d{1,2}$/.test((form.kbe || '').trim())) errors.kbe = 'КБе — 1–2 цифры';
+    if (!(form.bik || '').trim()) errors.bik = 'Укажите БИК';
+    if (!(form.account_number || '').trim()) errors.account_number = 'Укажите номер счёта';
   }
   if (!form.phone || !form.phone.trim()) errors.phone = 'Укажите телефон';
   else if (!normalizePhone(form.phone)) errors.phone = 'Некорректный казахстанский номер';
@@ -900,7 +906,7 @@ function App() {
   const [bootStatus, setBootStatus] = useState({ phase: 'loading', error: null });
 
   // Черновики форм поднимаем в App, чтобы они переживали навигацию на ProductPicker и обратно
-  const emptyOrderDraft = { client_type: 'legal', items: [], delivery_method: '', comment: '', full_name: '', company_name: '', bin: '', contact_person: '', email: '', phone: '', address: '' };
+  const emptyOrderDraft = { client_type: 'legal', items: [], delivery_method: '', comment: '', full_name: '', company_name: '', bin: '', contact_person: '', email: '', phone: '', address: '', bank: '', kbe: '', bik: '', account_number: '' };
   const emptyQuickDraft = {
     client_type: 'individual',
     client_name: '',
@@ -5275,16 +5281,27 @@ function OrderDetailScreen({ ctx, orderId }) {
           <Card title={isLegal ? 'Юридическое лицо' : 'Физическое лицо'}>
             {isLegal ? (
               <>
-                <FieldRow label="Компания" value={<strong style={{ color: '#1A1814' }}>{order.company_name}</strong>} />
-                <FieldRow label="БИН" value={<span className="mono-font">{order.bin}</span>} />
+                <FieldRow label="Наименование" value={<strong style={{ color: '#1A1814' }}>{order.company_name}</strong>} />
+                <FieldRow label="БИН/ИИН" value={<span className="mono-font">{order.bin}</span>} />
                 <FieldRow label="Контакт" value={order.contact_person} />
-                <FieldRow label="Email" value={order.email} />
+                {order.email && <FieldRow label="Email" value={order.email} />}
               </>
             ) : (
               <FieldRow label="ФИО" value={<strong style={{ color: '#1A1814' }}>{order.full_name}</strong>} />
             )}
             <FieldRow label="Телефон" value={prettyPhone(order.phone)} />
-            <FieldRow label="Адрес" value={order.address} />
+            <FieldRow label={isLegal ? 'Юр. адрес' : 'Адрес'} value={order.address} />
+            {isLegal && (order.bank || order.kbe || order.bik || order.account_number) && (
+              <>
+                <div className="pt-2 mt-1" style={{ borderTop: '1px solid #F1F5F9' }}>
+                  <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#64748B' }}>Банковские реквизиты</div>
+                </div>
+                {order.bank           && <FieldRow label="Банк"        value={order.bank} />}
+                {order.kbe            && <FieldRow label="КБе"         value={<span className="mono-font">{order.kbe}</span>} />}
+                {order.bik            && <FieldRow label="БИК"         value={<span className="mono-font">{order.bik}</span>} />}
+                {order.account_number && <FieldRow label="Номер счёта" value={<span className="mono-font">{order.account_number}</span>} />}
+              </>
+            )}
           </Card>
 
           <Card title="Товары">
@@ -5699,7 +5716,16 @@ function CreateOrderScreen({ ctx }) {
       client_type: form.client_type,
       ...(form.client_type === 'individual'
         ? { full_name: form.full_name.trim() }
-        : { company_name: form.company_name.trim(), bin: form.bin.trim(), contact_person: form.contact_person.trim(), email: form.email.trim() }),
+        : {
+            company_name:   form.company_name.trim(),
+            bin:            form.bin.trim(),
+            contact_person: form.contact_person.trim(),
+            email:          form.email.trim(),
+            bank:           form.bank.trim(),
+            kbe:            form.kbe.trim(),
+            bik:            form.bik.trim(),
+            account_number: form.account_number.trim(),
+          }),
       phone: normalizePhone(form.phone),
       address: form.address.trim(),
       delivery_method: form.delivery_method,
@@ -5743,24 +5769,39 @@ function CreateOrderScreen({ ctx }) {
                 <SiteInput label="ФИО" value={form.full_name} onChange={v => update({ full_name: v })} error={errors.full_name} placeholder="Иванов Иван Иванович" />
               ) : (
                 <>
-                  <SiteInput label="Название компании" value={form.company_name} onChange={v => update({ company_name: v })} error={errors.company_name} placeholder='ТОО "Coffee Boom"' />
-                  <SiteInput label="БИН" value={form.bin} onChange={v => update({ bin: v.replace(/\D/g, '').slice(0, 12) })} error={errors.bin} placeholder="180440019877" />
+                  <SiteInput label="Наименование юр. лица" value={form.company_name} onChange={v => update({ company_name: v })} error={errors.company_name} placeholder='ТОО "Coffee Boom"' />
+                  <SiteInput label="БИН/ИИН" value={form.bin} onChange={v => update({ bin: v.replace(/\D/g, '').slice(0, 12) })} error={errors.bin} placeholder="180440019877" />
                   <SiteInput label="Контактное лицо" value={form.contact_person} onChange={v => update({ contact_person: v })} error={errors.contact_person} placeholder="Касымов Ержан" />
                   <SiteInput label="Email (необязательно)" value={form.email} onChange={v => update({ email: v })} error={errors.email} type="email" placeholder="info@company.kz" />
                 </>
               )}
-              <SiteInput label="Телефон" value={form.phone} onChange={v => update({ phone: v })} error={errors.phone} placeholder="+7 777 123 45 67" />
+              <SiteInput label="Номер телефона" value={form.phone} onChange={v => update({ phone: v })} error={errors.phone} placeholder="+7 777 123 45 67" />
               <div>
-                <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Адрес</label>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>
+                  {form.client_type === 'legal' ? 'Юр. адрес' : 'Адрес'}
+                </label>
                 <textarea
                   value={form.address || ''} onChange={e => update({ address: e.target.value })}
                   rows={2}
                   className="w-full px-3 py-2.5 rounded-lg outline-none"
                   style={{ border: `1px solid ${errors.address ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }}
-                  placeholder="г. Алматы, ул. Абая 150, оф. 405"
+                  placeholder={form.client_type === 'legal' ? 'г. Алматы, ул. Абая 150, оф. 405' : 'г. Алматы, ул. Абая 150'}
                 />
                 {errors.address && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.address}</div>}
               </div>
+              {form.client_type === 'legal' && (
+                <>
+                  <div className="pt-1" style={{ borderTop: '1px solid #F1F5F9' }}>
+                    <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#64748B' }}>Банковские реквизиты</div>
+                  </div>
+                  <SiteInput label="Банк" value={form.bank} onChange={v => update({ bank: v })} error={errors.bank} placeholder='АО "Kaspi Bank"' />
+                  <div className="grid grid-cols-2 gap-3">
+                    <SiteInput label="КБе" value={form.kbe} onChange={v => update({ kbe: v.replace(/\D/g, '').slice(0, 2) })} error={errors.kbe} placeholder="16" />
+                    <SiteInput label="БИК" value={form.bik} onChange={v => update({ bik: v })} error={errors.bik} placeholder="CASPKZKA" />
+                  </div>
+                  <SiteInput label="Номер счёта" value={form.account_number} onChange={v => update({ account_number: v })} error={errors.account_number} placeholder="KZ24722S000044591862" />
+                </>
+              )}
             </div>
           </Card>
 
