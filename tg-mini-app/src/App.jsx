@@ -2906,6 +2906,14 @@ function App() {
   useEffect(() => {
     if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
       const tg = window.Telegram.WebApp;
+      // tg.initData непустой ТОЛЬКО при запуске из Telegram-клиента.
+      // В обычном браузере telegram-web-app.js создаёт объект, но initData = ''.
+      // Без этой проверки браузерные пользователи попадали на экран «Не удалось
+      // получить данные Telegram» вместо PIN-логина.
+      const isRealTelegram = !!tg.initData;
+      const isDevMode      = !!import.meta.env.VITE_DEV_TELEGRAM_ID;
+      if (!isRealTelegram && !isDevMode) return;
+
       try {
         tg.ready?.();
         tg.expand?.();
