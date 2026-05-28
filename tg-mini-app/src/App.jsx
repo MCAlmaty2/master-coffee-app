@@ -1647,13 +1647,29 @@ function App() {
 
   /* ═══════════ Задачи (Бариста / Техник) ═══════════ */
 
-  const createTask = (data) => {
+  const createTask = async (data) => {
     const year = new Date().getFullYear();
-    const lastNum = db.tasks
+
+    // Берём максимальный номер из Supabase чтобы избежать гонки при конкурентном создании.
+    // Fallback — локальный db.tasks (на случай офлайн / ошибки).
+    let dbLastNum = 0;
+    try {
+      const { data: rows } = await supabase
+        .from('tasks')
+        .select('task_number')
+        .like('task_number', `T${year}-%`)
+        .order('task_number', { ascending: false })
+        .limit(1);
+      if (rows?.[0]?.task_number) {
+        dbLastNum = parseInt(rows[0].task_number.split('-')[1], 10) || 0;
+      }
+    } catch { /* игнорируем — используем локальный счётчик */ }
+
+    const localLastNum = db.tasks
       .filter(t => t.task_number?.startsWith(`T${year}-`))
       .map(t => parseInt(t.task_number.split('-')[1], 10))
       .reduce((m, n) => Math.max(m, n), 0);
-    const taskNumber = `T${year}-${String(lastNum + 1).padStart(3, '0')}`;
+    const taskNumber = `T${year}-${String(Math.max(dbLastNum, localLastNum) + 1).padStart(3, '0')}`;
     // Если задача создана с временем сразу — сразу in_work
     const hasTime = !!(data.visit_date && data.visit_time);
     const task = {
@@ -7651,17 +7667,19 @@ function CreateTaskScreen({ ctx }) {
   const isSelfAssign = isFieldWorker && form.assignee_id === currentUser.id;
   const isInternal = form.kind === 'internal' && isSelfAssign;
 
-  // Инициализация формы для выездника — сразу свой департамент и я как исполнитель
+  // Инициализация формы для выездника — сразу свой департамент и я как исполнитель.
+  // НЕ проверяем !form.department: default-значение 'barista' из emptyTaskDraft
+  // не должно подавлять технику (у которой effectiveRole = 'technician').
   useEffect(() => {
-    if (isFieldWorker && !form.department) {
+    if (isFieldWorker) {
       update({ department: effectiveRole, assignee_id: currentUser.id });
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Кандидаты на исполнителя — пользователи активные с ролью соответствующего отдела
   const assignees = db.users.filter(u => u.active && u.role === form.department);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = {};
     if (!form.department) e.department = 'Выберите отдел';
     if (!form.assignee_id) e.assignee_id = 'Выберите исполнителя';
@@ -7688,7 +7706,7 @@ function CreateTaskScreen({ ctx }) {
     const payload = isInternal
       ? { ...form, kind: 'internal', client_name: 'Внутренняя задача', address: '—', phone: '—' }
       : { ...form, kind: 'visit' };
-    const t = createTask(payload);
+    const t = await createTask(payload);
     showToast(`Задача ${t.task_number} ${form.visit_date ? 'запланирована' : 'создана'}`);
     resetTaskDraft();
     goBack();
