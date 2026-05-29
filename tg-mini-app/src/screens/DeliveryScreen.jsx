@@ -477,11 +477,37 @@ export function DeliveryNewRegistryScreen({ ctx }) {
 
 export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
   const { db, navigate, currentUser, showToast, setDb } = ctx;
-  const [closingId,      setClosingId]      = useState(null);   // id заказа, который закрываем
+  const [closingId,      setClosingId]      = useState(null);
   const [closeComment,   setCloseComment]   = useState('');
   const [closingSaving,  setClosingSaving]  = useState(false);
+  const [confirmDelete,  setConfirmDelete]  = useState(false);
+  const [deleting,       setDeleting]       = useState(false);
 
   const isAdmin = currentUser?.role === 'admin';
+
+  const handleDeleteRegistry = async () => {
+    setDeleting(true);
+    // 1. Удаляем все заказы реестра
+    const { error: ordErr } = await supabase
+      .from('delivery_orders')
+      .delete()
+      .eq('registry_id', registryId);
+    if (ordErr) { showToast('Ошибка удаления заказов: ' + ordErr.message); setDeleting(false); return; }
+    // 2. Удаляем сам реестр
+    const { error: regErr } = await supabase
+      .from('delivery_registries')
+      .delete()
+      .eq('id', registryId);
+    if (regErr) { showToast('Ошибка удаления реестра: ' + regErr.message); setDeleting(false); return; }
+    // 3. Обновляем локальный стейт
+    setDb(d => ({
+      ...d,
+      deliveryRegistries: d.deliveryRegistries.filter(r => r.id !== registryId),
+      deliveryOrders:     d.deliveryOrders.filter(o => o.registry_id !== registryId),
+    }));
+    showToast('Реестр удалён');
+    navigate({ name: 'delivery_registries' });
+  };
 
   const handleClose = async (orderId) => {
     if (!closeComment.trim()) { showToast('Укажите причину закрытия'); return; }
@@ -553,6 +579,39 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
         )}
 
         <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Все заказы ({orders.length})</div>
+        {/* ── Удалить реестр (только admin) ── */}
+        {isAdmin && (
+          <div style={{ marginBottom: 10 }}>
+            {!confirmDelete ? (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                style={{ width: '100%', padding: 11, background: '#FEF2F2', color: '#dc2626', border: '1px solid #FECACA', borderRadius: 12, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                🗑 Удалить реестр
+              </button>
+            ) : (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '12px 14px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', marginBottom: 4 }}>Удалить реестр {reg.number}?</div>
+                <div style={{ fontSize: 11, color: '#991B1B', marginBottom: 12 }}>
+                  Будут удалены реестр и все {orders.length} заказов. Действие необратимо.
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    style={{ flex: 1, padding: 9, background: '#fff', color: '#64748b', border: '1px solid #E5E7EB', borderRadius: 9, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                    Отмена
+                  </button>
+                  <button
+                    onClick={handleDeleteRegistry}
+                    disabled={deleting}
+                    style={{ flex: 1, padding: 9, background: deleting ? '#CBD5E1' : '#dc2626', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: deleting ? 'not-allowed' : 'pointer' }}>
+                    {deleting ? '⏳ Удаление...' : '🗑 Да, удалить'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {orders.sort((a, b) => (a.seq_number || 0) - (b.seq_number || 0)).map(order => {
           const courier      = db.users?.find(u => u.id === order.courier_id);
           const isAdminClosed = order.manager_decision === 'admin_closed';
