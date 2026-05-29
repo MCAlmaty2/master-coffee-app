@@ -532,7 +532,12 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                 <StatusBadge status={order.status} />
               </div>
               <div style={{ fontSize: 9, color: '#94a3b8' }}>📍 {order.city}</div>
-              <div style={{ fontSize: 10, color: '#475569', marginBottom: 4 }}>{order.address}</div>
+              <div style={{ fontSize: 10, color: '#475569', marginBottom: order.payment_info ? 3 : 4 }}>{order.address}</div>
+              {order.payment_info && (
+                <div style={{ fontSize: 9, color: '#C2410C', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginBottom: 4 }}>
+                  💳 {order.payment_info}
+                </div>
+              )}
               {order.status === 'failed' && order.fail_reason && (
                 <div style={{ fontSize: 9, color: '#dc2626', background: '#FEF2F2', padding: '3px 6px', borderRadius: 6, marginBottom: 4 }}>{order.fail_reason}</div>
               )}
@@ -762,6 +767,12 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
       <div style={{ padding: 12 }}>
 
         <Card>
+          {order.payment_info && (
+            <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8, padding: '6px 10px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 13 }}>💳</span>
+              <span style={{ fontWeight: 700, fontSize: 12, color: '#C2410C' }}>{order.payment_info}</span>
+            </div>
+          )}
           {[['Документ', order.document], ['Сумма', fmtNum(order.amount) + ' тг']].map(([l, v]) => v && (
             <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #F5F7F8', fontSize: 10 }}>
               <span style={{ color: '#64748b' }}>{l}</span>
