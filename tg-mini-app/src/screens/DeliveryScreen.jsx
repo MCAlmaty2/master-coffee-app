@@ -61,6 +61,7 @@ const COL_MAP_LOWER = Object.fromEntries(
   Object.entries(COL_MAP).map(([k, v]) => [normKey(k), v])
 );
 
+// parseFile возвращает { rows, detectedHeaders, headerIdx }
 async function parseFile(file) {
   const XLSX  = await import('xlsx');
   const isCsv = /\.csv$/i.test(file.name);
@@ -75,27 +76,27 @@ async function parseFile(file) {
   const ws = wb.Sheets[wb.SheetNames[0]];
 
   // Читаем всё как массивы, чтобы самостоятельно найти строку заголовков
-  // (1С-отчёты часто начинаются с 1–3 строк названия отчёта)
   const allRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-  if (!allRows.length) return [];
+  if (!allRows.length) return { rows: [], detectedHeaders: [], headerIdx: -1 };
 
   // Ищем строку заголовков: первая из первых 15 строк, где ≥ 2 совпадения с COL_MAP
   let headerIdx = 0;
+  let bestScore = 0;
   for (let i = 0; i < Math.min(allRows.length, 15); i++) {
-    const matches = allRows[i].filter(c => COL_MAP_LOWER[normKey(c)] !== undefined).length;
-    if (matches >= 2) { headerIdx = i; break; }
+    const score = allRows[i].filter(c => COL_MAP_LOWER[normKey(c)] !== undefined).length;
+    if (score > bestScore) { bestScore = score; headerIdx = i; }
+    if (score >= 2) break;
   }
 
-  // Строим массив заголовков (нормализованных)
+  // Строим массив заголовков
   const headers = allRows[headerIdx].map(c => String(c).replace(/^﻿/, '').replace(/\s+/g, ' ').trim());
   const headersLower = headers.map(normKey);
 
   // Данные — все строки после заголовка
-  return allRows.slice(headerIdx + 1)
+  const rows = allRows.slice(headerIdx + 1)
     .map(rowArr => {
       const out = {};
       for (const [col, field] of Object.entries(COL_MAP)) {
-        // Ищем колонку сначала точно, затем без учёта регистра
         let idx = headers.indexOf(col);
         if (idx === -1) idx = headersLower.indexOf(normKey(col));
         out[field] = idx >= 0 ? (rowArr[idx] ?? '') : '';
@@ -105,6 +106,8 @@ async function parseFile(file) {
       return out;
     })
     .filter(r => r.client || r.address);
+
+  return { rows, detectedHeaders: headers.filter(Boolean), headerIdx };
 }
 
 async function getNextRegNumber() {
@@ -277,21 +280,25 @@ function RegistryCard({ reg, db, onClick }) {
 
 export function DeliveryNewRegistryScreen({ ctx }) {
   const { navigate, showToast, setDb, currentUser } = ctx;
-  const [shift, setShift]       = useState('morning');
-  const [rows, setRows]         = useState(null);
-  const [fileName, setFileName] = useState('');
-  const [duplicates, setDupes]  = useState([]);
-  const [skipDupes, setSkip]    = useState(false);
-  const [loading, setLoading]   = useState(false);
+  const [shift, setShift]               = useState('morning');
+  const [rows, setRows]                 = useState(null);
+  const [fileName, setFileName]         = useState('');
+  const [duplicates, setDupes]          = useState([]);
+  const [skipDupes, setSkip]            = useState(false);
+  const [loading, setLoading]           = useState(false);
+  const [detectedHeaders, setDetected]  = useState([]);
   const inputRef = useRef();
 
   const handleFile = async (file) => {
     if (!file) return;
     setFileName(file.name);
     setLoading(true);
+    setRows(null);
+    setDetected([]);
     try {
-      const parsed = await parseFile(file);
+      const { rows: parsed, detectedHeaders: hdrs } = await parseFile(file);
       setRows(parsed);
+      setDetected(hdrs);
       const codes = parsed.map(r => r.request_code).filter(Boolean);
       if (codes.length > 0) {
         const { data } = await supabase.from('delivery_orders')
@@ -367,6 +374,29 @@ export function DeliveryNewRegistryScreen({ ctx }) {
           <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
             onChange={e => handleFile(e.target.files[0])} />
         </Card>
+
+        {/* ── Диагностика: показываем что нашли в файле, если 0 заказов ── */}
+        {rows !== null && rows.length === 0 && detectedHeaders.length > 0 && (
+          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 11, color: '#991B1B', marginBottom: 4 }}>
+              ⚠ Колонки в файле не совпали с ожидаемыми
+            </div>
+            <div style={{ fontSize: 9, color: '#991B1B', marginBottom: 6 }}>
+              Найденные колонки в строке заголовка:
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+              {detectedHeaders.map((h, i) => (
+                <span key={i} style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 6, padding: '2px 6px', fontSize: 8, color: '#7F1D1D', fontWeight: 600 }}>{h}</span>
+              ))}
+            </div>
+            <div style={{ fontSize: 9, color: '#6B7280', marginBottom: 4 }}>Ожидаются колонки:</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {Object.keys(COL_MAP).map(k => (
+                <span key={k} style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 6, padding: '2px 6px', fontSize: 8, color: '#075985', fontWeight: 600 }}>{k}</span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {duplicates.length > 0 && (
           <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
