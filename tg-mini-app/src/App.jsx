@@ -1197,15 +1197,17 @@ function App() {
         at:            entry.at,
       }).then(({ error }) => {
         if (!error) {
-          // 3. Уведомление в Telegram (fire-and-forget)
-          setDb(d => {
-            const tgEntry = makeTgLogEntry(d, 'error_report', {
-              reporter: currentUser ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim() : 'Гость',
-              route:    entry.route || '—',
-              message:  entry.message,
-            });
-            return { ...d, telegramLog: [tgEntry, ...d.telegramLog] };
-          });
+          // 3. Личный Telegram только для админа (не в группу)
+          const adminUser = db.users.find(u => u.role === 'admin');
+          if (adminUser) {
+            const reporter = currentUser
+              ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim()
+              : 'Гость';
+            sendPrivateTelegram(
+              adminUser,
+              `🚨 <b>Ошибка в приложении</b>\nПользователь: ${reporter}\nМаршрут: ${entry.route || '—'}\n\n${entry.message}`,
+            );
+          }
         }
         if (error) {
           // eslint-disable-next-line no-console
@@ -2831,17 +2833,26 @@ function App() {
       // Сохраняем в Supabase, чтобы Admin видел в любом сеансе
       const { error: dbErr } = await supabase.from('feedback_messages').insert(feedback);
       if (dbErr) throw dbErr;
-      // Уведомление Admin-у в приложении
-      const adminId = db.users.find(u => u.role === 'admin')?.id;
-      if (adminId) {
+      // Уведомление Admin-у: in-app + полное сообщение в личный Telegram
+      const adminUser = db.users.find(u => u.role === 'admin');
+      if (adminUser) {
+        // In-app notification (без makeNotif — он автоматически обрезает body в TG-DM)
         setDb(d => ({
           ...d,
-          notifications: [...(d.notifications || []), makeNotif(d, {
-            recipient_id: adminId,
+          notifications: [...(d.notifications || []), {
+            id: uid(),
+            recipient_id: adminUser.id,
             title: 'Новая обратная связь',
-            body: `От ${currentUser.first_name}: ${message.slice(0, 60)}`,
-          })],
+            body: `От ${currentUser.first_name}: ${message.slice(0, 80)}${message.length > 80 ? '…' : ''}`,
+            at: new Date().toISOString(),
+            read: false,
+          }],
         }));
+        // Полное сообщение в личный Telegram (не огрызок)
+        sendPrivateTelegram(
+          adminUser,
+          `💬 <b>Обратная связь</b>\nОт: ${currentUser.first_name} ${currentUser.last_name || ''}\n\n${message}`,
+        );
       }
       return { ok: true };
     } catch (e) {
@@ -12001,10 +12012,11 @@ function AdminFeedbackScreen({ ctx }) {
 
   React.useEffect(() => {
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('feedback_messages')
         .select('*')
         .order('at', { ascending: false });
+      if (error) console.warn('[feedback] load error:', error.message, error.code);
       setFeedbacks(data || []);
       setLoading(false);
     })();
