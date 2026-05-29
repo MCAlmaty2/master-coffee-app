@@ -18,6 +18,7 @@ export const SYNC_TABLES = {
   telegramLog:          { table: 'telegram_log',        pk: 'id'  },
   deliveryRegistries:   { table: 'delivery_registries', pk: 'id'  },
   deliveryOrders:       { table: 'delivery_orders',     pk: 'id'  },
+  clients:              { table: 'clients',             pk: 'id'  },
   // feedback_messages и error_reports пишутся напрямую через supabase.from(),
   // поэтому их не включаем в автосинхронизацию.
 };

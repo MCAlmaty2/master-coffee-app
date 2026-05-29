@@ -541,6 +541,11 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
               {order.status === 'failed' && order.fail_reason && (
                 <div style={{ fontSize: 9, color: '#dc2626', background: '#FEF2F2', padding: '3px 6px', borderRadius: 6, marginBottom: 4 }}>{order.fail_reason}</div>
               )}
+              {order.status === 'delivered' && order.delivered_at && (
+                <div style={{ fontSize: 9, color: '#065F46', background: '#D1FAE5', padding: '2px 6px', borderRadius: 6, marginBottom: 4, display: 'inline-block' }}>
+                  ✓ Доставлен {new Date(order.delivered_at).toLocaleTimeString('ru-KZ', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Almaty' })}
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: '#1A1814' }}>{fmtNum(order.amount)} тг</span>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

@@ -192,7 +192,7 @@ function EventCard({ task: t, db, currentUser, mode, navigate, compact }) {
       {show ? (
         <>
           <div style={{ fontSize: compact ? 10 : 11, fontWeight: 600, color: '#1A1814', lineHeight: 1.2, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-            {t.kind === 'internal' ? 'Внутренняя' : t.client_name}
+            {t.kind === 'internal' ? 'Внутренняя' : t.kind === 'install' ? `⚙️ ${t.client_name}` : t.client_name}
           </div>
           {!compact && height > 50 && assignee && (
             <div style={{ fontSize: 9, color: '#64748B', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
@@ -342,7 +342,7 @@ function MonthCalendarView({ tasks, monthISO, ctx, onDayClick }) {
                       background: color, color: 'white', overflow: 'hidden',
                       whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontWeight: 500,
                     }}>
-                    {t.visit_time}{t.visit_time_end ? `–${t.visit_time_end}` : ''} {t.kind === 'internal' ? 'Внутр.' : (t.client_name || '').split(' ')[0] || '—'}
+                    {t.visit_time}{t.visit_time_end ? `–${t.visit_time_end}` : ''} {t.kind === 'internal' ? 'Внутр.' : t.kind === 'install' ? `⚙️${(t.client_name||'').split(' ')[0]}` : (t.client_name || '').split(' ')[0] || '—'}
                   </div>
                 );
               })}
@@ -410,7 +410,7 @@ function DayCalendarView({ tasks, date, ctx, mode, onSlotClick }) {
                 {show ? (
                   <>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1814', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                      {t.kind === 'internal' ? 'Внутренняя' : t.client_name}
+                      {t.kind === 'internal' ? 'Внутренняя' : t.kind === 'install' ? `⚙️ ${t.client_name}` : t.client_name}
                     </div>
                     {height > 60 && (
                       <div style={{ fontSize: 11, color: '#64748B', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
@@ -603,7 +603,7 @@ export function FieldHome({ ctx }) {
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="font-bold text-sm" style={{ color: '#3390EC' }}>{t.task_number}</span>
                   <span className="font-semibold text-sm truncate" style={{ color: '#1A1814' }}>
-                    {t.kind === 'internal' ? 'Внутренняя задача' : t.client_name}
+                    {t.kind === 'internal' ? 'Внутренняя задача' : t.kind === 'install' ? `⚙️ Установка — ${t.client_name}` : t.client_name}
                   </span>
                 </div>
                 {t.problem && (

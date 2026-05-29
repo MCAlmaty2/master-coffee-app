@@ -45,6 +45,12 @@ import {
   CourierOrderDetailScreen,
   CourierDeliveryWidget,
 } from './screens/DeliveryScreen';
+import {
+  ClientsScreen,
+  ClientDetailScreen,
+  ClientEditScreen,
+  ClientPickerModal,
+} from './screens/ClientsScreen';
 
 /* ═════════════════════════════════════════════════════════════════════════
    ГИБРИДНАЯ ВЕРСИЯ: users + products → Supabase, остальное → localStorage.
@@ -661,6 +667,9 @@ const DEFAULT_TG_TEMPLATES = {
 
   grind_ready:
     '✅ Помол {{gr_number}} готов → архив\n{{product}} · {{quantity}} {{unit}}\nМенеджер: {{manager}}',
+
+  error_report:
+    '🚨 Ошибка в приложении\nПользователь: {{reporter}}\nМаршрут: {{route}}\n{{message}}',
 };
 
 // Переменные доступные в каждом шаблоне (для подсказок в UI)
@@ -680,6 +689,7 @@ const TG_TEMPLATE_VARS = {
   contract_signed:        ['cr_number', 'contract_number', 'client', 'contract_type'],
   grind_new:              ['gr_number', 'client', 'product', 'quantity', 'unit', 'grind_type', 'order_1c', 'manager'],
   grind_ready:            ['gr_number', 'product', 'quantity', 'unit', 'manager'],
+  error_report:           ['reporter', 'route', 'message'],
 };
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 МБ на файл (ограничение localStorage)
@@ -713,6 +723,7 @@ function loadDB() {
       db.writeOffs = [];
       db.contractRequests = [];
       db.notifications = [];
+      db.clients = [];
       if (!db.telegramSettings) db.telegramSettings = { bot_token: '', bot_username: '', group_chat_id: '', topics: {}, topics_enabled: {}, templates: {} };
       if (!db.telegramSettings.topics_enabled) db.telegramSettings.topics_enabled = {};
       if (!db.telegramSettings.templates) db.telegramSettings.templates = {};
@@ -728,6 +739,7 @@ function loadDB() {
         'contract_new', 'contract_signed',
         'task_done', 'access_request',
         'grind_new', 'grind_ready',
+        'error_report',
       ];
       db.telegramSettings.topics = db.telegramSettings.topics || {};
       requiredTopics.forEach(key => {
@@ -773,7 +785,7 @@ function saveDB(db) {
     const {
       users: _u, products: _p, orders: _o, grindRequests: _g, tasks: _t,
       writeOffs: _w, contractRequests: _c, notifications: _n, roleDefinitions: _r,
-      deliveryRegistries: _dr, deliveryOrders: _do,
+      deliveryRegistries: _dr, deliveryOrders: _do, clients: _cl,
       ...rest
     } = db;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
@@ -794,6 +806,7 @@ function seedDB() {
     notifications: [],
     deliveryRegistries: [],
     deliveryOrders: [],
+    clients: [],
     roleDefinitions: SYSTEM_ROLES.map(key => ({
       key,
       label: ROLES[key].label,
@@ -813,6 +826,7 @@ function seedDB() {
         contract_new: '', contract_signed: '',
         task_done: '', access_request: '',
         grind_new: '', grind_ready: '',
+        error_report: '',
       },
       topics_enabled: {}, // по умолчанию всё включено (true = отсутствие ключа)
       templates: {},      // по умолчанию используются DEFAULT_TG_TEMPLATES
@@ -857,8 +871,6 @@ function validateOrderForm(form) {
     const cp = (form.contact_person || '').trim();
     if (!cp) errors.contact_person = 'Укажите контактное лицо';
     else if (cp.split(/\s+/).filter(Boolean).length < 2) errors.contact_person = 'Минимум 2 слова';
-    const email = (form.email || '').trim();
-    if (email && !EMAIL_RE.test(email)) errors.email = 'Некорректный email';
     // Банковские реквизиты — обязательны для юр. лица
     if (!(form.bank || '').trim()) errors.bank = 'Укажите банк';
     if (!(form.kbe || '').trim()) errors.kbe = 'Укажите КБе';
@@ -906,7 +918,7 @@ function App() {
   const [bootStatus, setBootStatus] = useState({ phase: 'loading', error: null });
 
   // Черновики форм поднимаем в App, чтобы они переживали навигацию на ProductPicker и обратно
-  const emptyOrderDraft = { client_type: 'legal', items: [], delivery_method: '', comment: '', full_name: '', company_name: '', bin: '', contact_person: '', email: '', phone: '', address: '', bank: '', kbe: '', bik: '', account_number: '' };
+  const emptyOrderDraft = { client_type: 'legal', items: [], delivery_method: '', comment: '', full_name: '', company_name: '', bin: '', contact_person: '', phone: '', address: '', bank: '', kbe: '', bik: '', account_number: '' };
   const emptyQuickDraft = {
     client_type: 'individual',
     client_name: '',
@@ -1184,6 +1196,17 @@ function App() {
         route_name:    entry.route,
         at:            entry.at,
       }).then(({ error }) => {
+        if (!error) {
+          // 3. Уведомление в Telegram (fire-and-forget)
+          setDb(d => {
+            const tgEntry = makeTgLogEntry(d, 'error_report', {
+              reporter: currentUser ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim() : 'Гость',
+              route:    entry.route || '—',
+              message:  entry.message,
+            });
+            return { ...d, telegramLog: [tgEntry, ...d.telegramLog] };
+          });
+        }
         if (error) {
           // eslint-disable-next-line no-console
           console.error('[reportError] не удалось записать в БД:', error);
@@ -1681,7 +1704,7 @@ function App() {
     const task = {
       id: uid(),
       task_number: taskNumber,
-      kind: data.kind || 'visit',        // 'visit' (выезд к клиенту) | 'internal' (внутренняя — блок слота)
+      kind: data.kind || 'visit',        // 'visit' | 'install' (установка оборудования) | 'internal' (внутренняя — блок слота)
       department: data.department, // 'barista' | 'technician'
       assignee_id: data.assignee_id, // обязательно — конкретный исполнитель
       client_name: data.client_name.trim(),
@@ -2805,8 +2828,10 @@ function App() {
         at: new Date().toISOString(),
         read: false,
       };
-      setDb(d => ({ ...d, feedbackMessages: [...(d.feedbackMessages || []), feedback] }));
-      // Админу уведомление
+      // Сохраняем в Supabase, чтобы Admin видел в любом сеансе
+      const { error: dbErr } = await supabase.from('feedback_messages').insert(feedback);
+      if (dbErr) throw dbErr;
+      // Уведомление Admin-у в приложении
       const adminId = db.users.find(u => u.role === 'admin')?.id;
       if (adminId) {
         setDb(d => ({
@@ -2814,7 +2839,7 @@ function App() {
           notifications: [...(d.notifications || []), makeNotif(d, {
             recipient_id: adminId,
             title: 'Новая обратная связь',
-            body: `От ${currentUser.first_name}: ${message.slice(0, 50)}...`,
+            body: `От ${currentUser.first_name}: ${message.slice(0, 60)}`,
           })],
         }));
       }
@@ -3677,6 +3702,10 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     if (hasPermission(db, currentUser, 'delivery_courier')) {
       ops.push({ id: 'courier_registry', label: 'Мои доставки', icon: Truck });
     }
+    // Клиенты
+    if (isManager || role === 'director' || role === 'senior_manager') {
+      ops.push({ id: 'clients', label: 'Клиенты', icon: Users });
+    }
     // Архив
     if (role === 'admin' || role === 'b2b' || hasPermission(db, currentUser, 'orders_archive_view')) {
       ops.push({ id: 'archive', label: 'Архив', icon: Inbox });
@@ -4056,6 +4085,10 @@ function Screen({ ctx }) {
     // ─── Доставка (курьер) ───
     case 'courier_registry': return <CourierRegistryScreen ctx={ctx} />;
     case 'courier_order':    return <CourierOrderDetailScreen ctx={ctx} orderId={route.orderId} />;
+    // ─── Клиенты ───
+    case 'clients':       return <ClientsScreen ctx={ctx} />;
+    case 'client_detail': return <ClientDetailScreen ctx={ctx} clientId={route.clientId} />;
+    case 'client_edit':   return <ClientEditScreen ctx={ctx} clientId={route.clientId ?? null} />;
     default: return <div className="p-6">Не найдено</div>;
   }
 }
@@ -5287,7 +5320,6 @@ function OrderDetailScreen({ ctx, orderId }) {
                 <FieldRow label="Наименование" value={<strong style={{ color: '#1A1814' }}>{order.company_name}</strong>} />
                 <FieldRow label="БИН/ИИН" value={<span className="mono-font">{order.bin}</span>} />
                 <FieldRow label="Контакт" value={order.contact_person} />
-                {order.email && <FieldRow label="Email" value={order.email} />}
               </>
             ) : (
               <FieldRow label="ФИО" value={<strong style={{ color: '#1A1814' }}>{order.full_name}</strong>} />
@@ -5698,8 +5730,31 @@ function CreateOrderScreen({ ctx }) {
   const form = orderDraft;
   const setForm = setOrderDraft;
   const [errors, setErrors] = useState({});
+  const [showClientPicker, setShowClientPicker] = useState(false);
 
   const update = patch => setForm(f => ({ ...f, ...patch }));
+
+  const handleClientSelect = (client) => {
+    const preferredAsItems = (client.preferred_items || []).map(pi => ({
+      ...pi, quantity: pi.quantity || 1, product_id: pi.product_id || '',
+    }));
+    update({
+      client_type:    client.type,
+      company_name:   client.type === 'legal'      ? client.name : '',
+      full_name:      client.type === 'individual' ? client.name : '',
+      bin:            client.bin            || '',
+      contact_person: client.contact_person || '',
+      phone:          client.phone          || '',
+      address:        client.address        || '',
+      bank:           client.bank           || '',
+      kbe:            client.kbe            || '',
+      bik:            client.bik            || '',
+      account_number: client.account_number || '',
+      ...(preferredAsItems.length > 0 ? { items: preferredAsItems } : {}),
+    });
+    setShowClientPicker(false);
+    showToast('Данные клиента подставлены');
+  };
   const addItem = () => navigate({
     name: 'product_picker',
     pickerTarget: 'order',
@@ -5723,7 +5778,6 @@ function CreateOrderScreen({ ctx }) {
             company_name:   form.company_name.trim(),
             bin:            form.bin.trim(),
             contact_person: form.contact_person.trim(),
-            email:          form.email.trim(),
             bank:           form.bank.trim(),
             kbe:            form.kbe.trim(),
             bik:            form.bik.trim(),
@@ -5768,6 +5822,13 @@ function CreateOrderScreen({ ctx }) {
 
           <Card title="Клиент">
             <div className="space-y-3">
+              {/* Выбрать из базы клиентов */}
+              <button
+                onClick={() => setShowClientPicker(true)}
+                className="w-full flex items-center gap-2 py-2 px-3 rounded-lg text-sm font-semibold"
+                style={{ background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', cursor: 'pointer' }}>
+                <Users size={14} /> Выбрать из базы клиентов
+              </button>
               {form.client_type === 'individual' ? (
                 <SiteInput label="ФИО" value={form.full_name} onChange={v => update({ full_name: v })} error={errors.full_name} placeholder="Иванов Иван Иванович" />
               ) : (
@@ -5775,7 +5836,6 @@ function CreateOrderScreen({ ctx }) {
                   <SiteInput label="Наименование юр. лица" value={form.company_name} onChange={v => update({ company_name: v })} error={errors.company_name} placeholder='ТОО "Coffee Boom"' />
                   <SiteInput label="БИН/ИИН" value={form.bin} onChange={v => update({ bin: v.replace(/\D/g, '').slice(0, 12) })} error={errors.bin} placeholder="180440019877" />
                   <SiteInput label="Контактное лицо" value={form.contact_person} onChange={v => update({ contact_person: v })} error={errors.contact_person} placeholder="Касымов Ержан" />
-                  <SiteInput label="Email (необязательно)" value={form.email} onChange={v => update({ email: v })} error={errors.email} type="email" placeholder="info@company.kz" />
                 </>
               )}
               <SiteInput label="Номер телефона" value={form.phone} onChange={v => update({ phone: v })} error={errors.phone} placeholder="+7 777 123 45 67" />
@@ -5917,6 +5977,9 @@ function CreateOrderScreen({ ctx }) {
           </button>
         </div>
       </div>
+      {showClientPicker && (
+        <ClientPickerModal ctx={ctx} onSelect={handleClientSelect} onClose={() => setShowClientPicker(false)} />
+      )}
     </div>
   );
 }
@@ -7123,7 +7186,7 @@ function ExportScreen({ ctx }) {
 
   const handleExport = () => {
     if (filtered.length === 0) return showToast('Нет данных для экспорта');
-    const headers = ['Дата создания', 'Тип', 'Компания/ФИО', 'БИН', 'Контакт', 'Телефон', 'Email', 'Адрес', 'Товар', 'Кол-во', 'Ед.', 'Цена', 'Сумма', 'Получение', 'Статус', '№ реализации', 'Дата отгрузки', 'Менеджер', 'Комментарий'];
+    const headers = ['Дата создания', 'Тип', 'Компания/ФИО', 'БИН', 'Контакт', 'Телефон', 'Адрес', 'Товар', 'Кол-во', 'Ед.', 'Цена', 'Сумма', 'Получение', 'Статус', '№ реализации', 'Дата отгрузки', 'Менеджер', 'Комментарий'];
     const rows = [headers];
     for (const o of filtered) {
       const u = db.users.find(x => x.id === o.created_by);
@@ -7133,7 +7196,7 @@ function ExportScreen({ ctx }) {
           fmtDateTime(o.created_at),
           o.client_type === 'individual' ? 'Физ.' : 'Юр.',
           o.client_type === 'individual' ? (o.full_name || '') : (o.company_name || ''),
-          o.bin || '', o.contact_person || '', prettyPhone(o.phone), o.email || '', o.address || '',
+          o.bin || '', o.contact_person || '', prettyPhone(o.phone), o.address || '',
           it.name, it.quantity, it.unit, it.price, it.quantity * it.price,
           o.delivery_method === 'delivery' ? 'Доставка' : 'Самовывоз',
           STATUS[o.status]?.label || o.status,
@@ -7742,14 +7805,22 @@ function CreateTaskScreen({ ctx }) {
       if (!form.phone || !normalizePhone(form.phone)) e.phone = 'Некорректный номер';
     }
     if (!form.problem || form.problem.trim().length < 5) e.problem = 'Опишите задачу подробнее';
-    // Время визита: либо оба поля заданы, либо ни одного. Для внутренней — обязательно (это блок слота).
+    const isInstall = !isFieldWorker && form.kind === 'install';
+    // Время визита: правила зависят от типа задачи
     if (isInternal) {
       if (!form.visit_date || !form.visit_time) {
         e.visit_time = 'Для внутренней задачи укажите дату и время (это блокирует слот в календаре)';
       }
-    } else if ((form.visit_date && !form.visit_time) || (!form.visit_date && form.visit_time)) {
-      e.visit_time = 'Укажите и дату, и время (или оставьте оба пустыми)';
+    } else if (isInstall) {
+      if (!form.visit_date) e.visit_date = 'Для установки оборудования дата обязательна';
+      if (!form.visit_time) e.visit_time = 'Для установки оборудования время обязательно';
+    } else if (isFieldWorker) {
+      // Выездник сам себе: оба поля или ни одного
+      if ((form.visit_date && !form.visit_time) || (!form.visit_date && form.visit_time)) {
+        e.visit_time = 'Укажите и дату, и время (или оставьте оба пустыми)';
+      }
     }
+    // Для обычного визита, назначенного менеджером — время НЕ проверяется (исполнитель назначит сам)
     setErrors(e);
     if (Object.keys(e).length > 0) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -7757,23 +7828,51 @@ function CreateTaskScreen({ ctx }) {
     }
     const payload = isInternal
       ? { ...form, kind: 'internal', client_name: 'Внутренняя задача', address: '—', phone: '—' }
-      : { ...form, kind: 'visit' };
+      : { ...form, kind: isInstall ? 'install' : 'visit' };
     const t = await createTask(payload);
     showToast(`Задача ${t.task_number} ${form.visit_date ? 'запланирована' : 'создана'}`);
     resetTaskDraft();
     goBack();
   };
 
+  const isInstall = !isFieldWorker && form.kind === 'install';
+
   return (
     <div>
       <PageHeader
         title={isFieldWorker ? 'Запланировать в календарь' : 'Поставить задачу'}
-        subtitle={isFieldWorker ? 'Себе в календарь' : 'Бариста или техник едет к клиенту'}
+        subtitle={isFieldWorker ? 'Себе в календарь' : isInstall ? 'Установка оборудования у клиента' : 'Бариста или техник едет к клиенту'}
         onBack={goBack}
       />
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
+          {/* Тип задачи — только для менеджеров (не выездных специалистов) */}
+          {!isFieldWorker && !isSelfAssign && (
+            <Card title="Тип задачи">
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { v: 'visit',   label: 'Выезд к клиенту',       icon: Truck },
+                  { v: 'install', label: 'Установка оборудования', icon: Settings },
+                ].map(opt => {
+                  const Icon = opt.icon;
+                  const active = (form.kind || 'visit') === opt.v;
+                  return (
+                    <button key={opt.v} onClick={() => update({ kind: opt.v })}
+                      className="rounded-lg p-3 flex items-center justify-center gap-2 font-semibold text-sm"
+                      style={{ background: active ? '#297b8a' : '#F5F7F8', color: active ? 'white' : '#1A1814' }}>
+                      <Icon size={15} /> {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {isInstall && (
+                <div className="mt-2 text-xs p-2.5 rounded-lg" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                  ⚙️ Для установки оборудования дата и время обязательны — клиент ждёт в конкретный час.
+                </div>
+              )}
+            </Card>
+          )}
           {isSelfAssign ? (
             // Выездник ставит задачу СЕБЕ — показываем компактный блок + выбор типа задачи
             <Card title="Тип задачи">
@@ -7868,64 +7967,76 @@ function CreateTaskScreen({ ctx }) {
             </Card>
           )}
 
-          <Card title={isInternal ? 'Когда' : 'Дата и время визита'}>
+          <Card title={isInternal ? 'Когда' : isInstall ? 'Дата и время установки' : 'Дата визита'}>
             <div className="space-y-3">
               <div className="text-xs p-3 rounded-lg" style={{ background: '#EAF4F6', color: '#1A1814' }}>
                 {isInternal
                   ? 'Дата и время обязательны — это блокирует слот в календаре.'
-                  : 'Если время указано — задача сразу попадёт в календарь и в статус «В работе». Если нет — будет «Новой», время назначит исполнитель позже.'}
+                  : isInstall
+                    ? 'Для установки оборудования дата и время обязательны — это согласованный визит.'
+                    : 'Укажите дату если она известна. Точное время назначит исполнитель самостоятельно.'}
               </div>
               {/* Дата */}
               <div>
-                <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Дата</label>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>
+                  Дата{(isInternal || isInstall) ? ' *' : ' (необязательно)'}
+                </label>
                 <input type="date" value={form.visit_date || ''} onChange={e => update({ visit_date: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 15 }} />
+                  className="w-full px-3 py-2.5 rounded-lg outline-none"
+                  style={{ border: `1px solid ${errors.visit_date ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }} />
+                {errors.visit_date && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.visit_date}</div>}
               </div>
-              {/* Время С → По */}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>С</label>
-                  <input type="time" value={form.visit_time || ''}
-                    onChange={e => {
-                      const s = e.target.value;
-                      const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-                      const frM = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
-                      // Сдвигаем «По» на то же расстояние (сохраняем длительность)
-                      const end = s && form.duration_min ? frM(toM(s) + form.duration_min) : form.visit_time_end;
-                      update({ visit_time: s, visit_time_end: end });
-                    }}
-                    className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 15 }} />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>По</label>
-                  <input type="time" value={form.visit_time_end || ''}
-                    onChange={e => {
-                      const end = e.target.value;
-                      const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-                      const diff = form.visit_time && end ? toM(end) - toM(form.visit_time) : null;
-                      update({ visit_time_end: end, ...(diff > 0 ? { duration_min: diff } : {}) });
-                    }}
-                    className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 15 }} />
-                </div>
-              </div>
-              {/* Быстрый выбор длительности */}
-              <div>
-                <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Длительность</label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {[30, 60, 90, 120, 180].map(min => (
-                    <button key={min} onClick={() => {
-                      const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-                      const frM = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
-                      const end = form.visit_time ? frM(toM(form.visit_time) + min) : form.visit_time_end;
-                      update({ duration_min: min, visit_time_end: end });
-                    }}
-                      className="rounded-full px-3 py-1.5 text-xs font-semibold"
-                      style={{ background: form.duration_min === min ? '#297b8a' : '#F5F7F8', color: form.duration_min === min ? 'white' : '#64748B' }}>
-                      {min < 60 ? `${min} мин` : min === 60 ? '1 ч' : `${min / 60} ч`}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {/* Время С → По — только для internal/install/field worker */}
+              {(isInternal || isInstall || isFieldWorker) && (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>
+                        С{(isInternal || isInstall) ? ' *' : ''}
+                      </label>
+                      <input type="time" value={form.visit_time || ''}
+                        onChange={e => {
+                          const s = e.target.value;
+                          const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+                          const frM = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+                          const end = s && form.duration_min ? frM(toM(s) + form.duration_min) : form.visit_time_end;
+                          update({ visit_time: s, visit_time_end: end });
+                        }}
+                        className="w-full px-3 py-2.5 rounded-lg outline-none"
+                        style={{ border: `1px solid ${errors.visit_time ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>По</label>
+                      <input type="time" value={form.visit_time_end || ''}
+                        onChange={e => {
+                          const end = e.target.value;
+                          const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+                          const diff = form.visit_time && end ? toM(end) - toM(form.visit_time) : null;
+                          update({ visit_time_end: end, ...(diff > 0 ? { duration_min: diff } : {}) });
+                        }}
+                        className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 15 }} />
+                    </div>
+                  </div>
+                  {/* Быстрый выбор длительности */}
+                  <div>
+                    <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Длительность</label>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {[30, 60, 90, 120, 180].map(min => (
+                        <button key={min} onClick={() => {
+                          const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+                          const frM = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+                          const end = form.visit_time ? frM(toM(form.visit_time) + min) : form.visit_time_end;
+                          update({ duration_min: min, visit_time_end: end });
+                        }}
+                          className="rounded-full px-3 py-1.5 text-xs font-semibold"
+                          style={{ background: form.duration_min === min ? '#297b8a' : '#F5F7F8', color: form.duration_min === min ? 'white' : '#64748B' }}>
+                          {min < 60 ? `${min} мин` : min === 60 ? '1 ч' : `${min / 60} ч`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
               {errors.visit_time && <div className="text-xs" style={{ color: '#EB5757' }}>{errors.visit_time}</div>}
             </div>
           </Card>
@@ -8203,7 +8314,7 @@ function StartTaskModal({ task, onClose, onStart }) {
     <Modal onClose={onClose} title="Взять в работу">
       <div className="space-y-4">
         <div className="text-sm" style={{ color: '#64748B' }}>
-          Задача <strong style={{ color: '#1A1814' }}>{task.task_number}</strong> — {task.kind === 'internal' ? 'Внутренняя задача' : task.client_name}
+          Задача <strong style={{ color: '#1A1814' }}>{task.task_number}</strong> — {task.kind === 'internal' ? 'Внутренняя задача' : task.kind === 'install' ? `Установка у ${task.client_name}` : task.client_name}
         </div>
         <SiteInput label="Дата визита" type="date" value={date} onChange={setDate} />
         <div className="grid grid-cols-2 gap-2">
@@ -10569,6 +10680,7 @@ function AdminTelegramScreen({ ctx }) {
       items: [
         { key: 'task_done',      label: 'Задача выполнена' },
         { key: 'access_request', label: 'Запрос доступа в CRM' },
+        { key: 'error_report',   label: 'Ошибка в приложении' },
       ],
     },
   ];
@@ -11884,11 +11996,23 @@ function FeedbackScreen({ ctx }) {
 
 function AdminFeedbackScreen({ ctx }) {
   const { db, goBack } = ctx;
-  const feedbacks = db.feedbackMessages || [];
+  const [feedbacks, setFeedbacks] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('feedback_messages')
+        .select('*')
+        .order('at', { ascending: false });
+      setFeedbacks(data || []);
+      setLoading(false);
+    })();
+  }, []);
 
   return (
     <div>
-      <PageHeader title="Обратная связь" subtitle={`${feedbacks.length} сообщений`} onBack={goBack} />
+      <PageHeader title="Обратная связь" subtitle={loading ? 'Загрузка...' : `${feedbacks.length} сообщений`} onBack={goBack} />
       {feedbacks.length === 0 ? (
         <Empty icon={MessageSquare} title="Обратной связи пока нет" subtitle="Когда сотрудники пришлют мнение, оно появится здесь" />
       ) : (
