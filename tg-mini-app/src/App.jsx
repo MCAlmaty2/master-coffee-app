@@ -919,7 +919,7 @@ function App() {
     doc_no: '',
     raw_text: '',
   };
-  const emptyTaskDraft = { kind: 'visit', department: 'barista', assignee_id: '', client_name: '', address: '', phone: '', problem: '', visit_date: '', visit_time: '', duration_min: 60 };
+  const emptyTaskDraft = { kind: 'visit', department: 'barista', assignee_id: '', client_name: '', address: '', phone: '', problem: '', visit_date: '', visit_time: '', visit_time_end: '', duration_min: 60 };
   const [orderDraft, setOrderDraft] = useState(emptyOrderDraft);
   const [quickDraft, setQuickDraft] = useState(emptyQuickDraft);
   const [taskDraft, setTaskDraft] = useState(emptyTaskDraft);
@@ -1689,8 +1689,9 @@ function App() {
       phone: normalizePhone(data.phone) || data.phone,
       problem: data.problem.trim(),
       visit_date: data.visit_date || null,        // YYYY-MM-DD
-      visit_time: data.visit_time || null,        // HH:MM
-      duration_min: data.duration_min || 60,      // длительность в минутах
+      visit_time: data.visit_time || null,          // HH:MM начало
+      visit_time_end: data.visit_time_end || null, // HH:MM конец
+      duration_min: data.duration_min || 60,       // длительность в минутах
       done_summary: null,
       status: hasTime ? 'in_work' : 'new',
       created_at: new Date().toISOString(),
@@ -1731,7 +1732,7 @@ function App() {
     return task;
   };
 
-  const startTask = (taskId, visitDate, visitTime, durationMin) => {
+  const startTask = (taskId, visitDate, visitTime, durationMin, visitTimeEnd) => {
     if (!visitDate) return { error: 'Укажите дату посещения' };
     if (!visitTime) return { error: 'Укажите время посещения' };
     setDb(d => ({
@@ -1743,6 +1744,7 @@ function App() {
           status: 'in_work',
           visit_date: visitDate,
           visit_time: visitTime,
+          visit_time_end: visitTimeEnd || null,
           duration_min: durationMin || 60,
           log: [...t.log, { event: 'status', from: t.status, to: 'in_work', actor: currentUser.id, at: new Date().toISOString(), meta: { visit_date: visitDate, visit_time: visitTime } }],
         };
@@ -1757,7 +1759,7 @@ function App() {
    * Доступно исполнителю (assignee) и менеджерам.
    * Можно вызывать когда задача в любом статусе кроме 'done'.
    */
-  const rescheduleTask = (taskId, newDate, newTime, reason = '') => {
+  const rescheduleTask = (taskId, newDate, newTime, reason = '', newTimeEnd = null) => {
     const task = db.tasks.find(t => t.id === taskId);
     if (!task) return { error: 'Задача не найдена' };
     if (task.status === 'done') return { error: 'Выполненную задачу нельзя перенести' };
@@ -1779,6 +1781,7 @@ function App() {
           ...t,
           visit_date: newDate,
           visit_time: newTime || t.visit_time,
+          visit_time_end: newTimeEnd !== null ? (newTimeEnd || null) : t.visit_time_end,
           // если задача была "new" без даты, переход в in_work с новой датой
           status: t.status === 'new' ? 'in_work' : t.status,
           log: [...t.log, {
@@ -7872,23 +7875,50 @@ function CreateTaskScreen({ ctx }) {
                   ? 'Дата и время обязательны — это блокирует слот в календаре.'
                   : 'Если время указано — задача сразу попадёт в календарь и в статус «В работе». Если нет — будет «Новой», время назначит исполнитель позже.'}
               </div>
+              {/* Дата */}
+              <div>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Дата</label>
+                <input type="date" value={form.visit_date || ''} onChange={e => update({ visit_date: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 15 }} />
+              </div>
+              {/* Время С → По */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Дата</label>
-                  <input type="date" value={form.visit_date || ''} onChange={e => update({ visit_date: e.target.value })}
+                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>С</label>
+                  <input type="time" value={form.visit_time || ''}
+                    onChange={e => {
+                      const s = e.target.value;
+                      const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+                      const frM = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+                      // Сдвигаем «По» на то же расстояние (сохраняем длительность)
+                      const end = s && form.duration_min ? frM(toM(s) + form.duration_min) : form.visit_time_end;
+                      update({ visit_time: s, visit_time_end: end });
+                    }}
                     className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 15 }} />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Время</label>
-                  <input type="time" value={form.visit_time || ''} onChange={e => update({ visit_time: e.target.value })}
+                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>По</label>
+                  <input type="time" value={form.visit_time_end || ''}
+                    onChange={e => {
+                      const end = e.target.value;
+                      const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+                      const diff = form.visit_time && end ? toM(end) - toM(form.visit_time) : null;
+                      update({ visit_time_end: end, ...(diff > 0 ? { duration_min: diff } : {}) });
+                    }}
                     className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 15 }} />
                 </div>
               </div>
+              {/* Быстрый выбор длительности */}
               <div>
                 <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Длительность</label>
                 <div className="flex gap-1.5 flex-wrap">
                   {[30, 60, 90, 120, 180].map(min => (
-                    <button key={min} onClick={() => update({ duration_min: min })}
+                    <button key={min} onClick={() => {
+                      const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+                      const frM = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+                      const end = form.visit_time ? frM(toM(form.visit_time) + min) : form.visit_time_end;
+                      update({ duration_min: min, visit_time_end: end });
+                    }}
                       className="rounded-full px-3 py-1.5 text-xs font-semibold"
                       style={{ background: form.duration_min === min ? '#297b8a' : '#F5F7F8', color: form.duration_min === min ? 'white' : '#64748B' }}>
                       {min < 60 ? `${min} мин` : min === 60 ? '1 ч' : `${min / 60} ч`}
@@ -7926,7 +7956,9 @@ function CreateTaskScreen({ ctx }) {
             <FieldRow label="Отдел" value={ROLES[form.department]?.label} />
             {form.assignee_id && <FieldRow label="Исполнитель" value={getUserName(db, form.assignee_id) + (form.assignee_id === currentUser.id ? ' (я)' : '')} />}
             {form.visit_date && form.visit_time && (
-              <FieldRow label={isInternal ? 'Когда' : 'Визит'} value={`${fmtDate(form.visit_date)} в ${form.visit_time} · ${form.duration_min} мин`} />
+              <FieldRow label={isInternal ? 'Когда' : 'Визит'} value={
+                `${fmtDate(form.visit_date)} ${form.visit_time}${form.visit_time_end ? `–${form.visit_time_end}` : ` · ${form.duration_min} мин`}`
+              } />
             )}
             {!isInternal && form.client_name && <FieldRow label="Клиент" value={form.client_name} />}
             {!isInternal && form.address && <FieldRow label="Адрес" value={form.address} />}
@@ -8089,8 +8121,8 @@ function TaskDetailScreen({ ctx, taskId }) {
       </div>
 
       {startModalOpen && (
-        <StartTaskModal task={task} onClose={() => setStartModalOpen(false)} onStart={(date, time, duration) => {
-          const r = startTask(task.id, date, time, duration);
+        <StartTaskModal task={task} onClose={() => setStartModalOpen(false)} onStart={(date, time, duration, timeEnd) => {
+          const r = startTask(task.id, date, time, duration, timeEnd);
           if (r.error) return showToast(r.error);
           setStartModalOpen(false);
           showToast('Задача в работе');
@@ -8105,8 +8137,8 @@ function TaskDetailScreen({ ctx, taskId }) {
         }} />
       )}
       {rescheduleModalOpen && (
-        <RescheduleTaskModal task={task} onClose={() => setRescheduleModalOpen(false)} onReschedule={(date, time, reason) => {
-          const r = rescheduleTask(task.id, date, time, reason);
+        <RescheduleTaskModal task={task} onClose={() => setRescheduleModalOpen(false)} onReschedule={(date, time, reason, timeEnd) => {
+          const r = rescheduleTask(task.id, date, time, reason, timeEnd);
           if (r.error) return showToast(r.error);
           setRescheduleModalOpen(false);
           showToast('Визит перенесён');
@@ -8146,24 +8178,43 @@ function TaskTimeline({ status }) {
 }
 
 function StartTaskModal({ task, onClose, onStart }) {
-  const [date, setDate] = useState(task.visit_date || new Date().toISOString().slice(0, 10));
-  const [time, setTime] = useState(task.visit_time || '10:00');
-  const [duration, setDuration] = useState(task.duration_min || 60);
+  const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const frM = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+
+  const [date,     setDate]     = useState(task.visit_date    || new Date().toISOString().slice(0, 10));
+  const [timeFrom, setTimeFrom] = useState(task.visit_time    || '10:00');
+  const [timeTo,   setTimeTo]   = useState(task.visit_time_end || (task.visit_time ? frM(toM(task.visit_time) + (task.duration_min || 60)) : '11:00'));
+  const [duration, setDuration] = useState(task.duration_min  || 60);
+
+  const handleFrom = (val) => {
+    setTimeFrom(val);
+    if (val) setTimeTo(frM(toM(val) + duration));
+  };
+  const handleTo = (val) => {
+    setTimeTo(val);
+    if (timeFrom && val) { const d = toM(val) - toM(timeFrom); if (d > 0) setDuration(d); }
+  };
+  const handleDuration = (min) => {
+    setDuration(min);
+    if (timeFrom) setTimeTo(frM(toM(timeFrom) + min));
+  };
+
   return (
     <Modal onClose={onClose} title="Взять в работу">
       <div className="space-y-4">
         <div className="text-sm" style={{ color: '#64748B' }}>
           Задача <strong style={{ color: '#1A1814' }}>{task.task_number}</strong> — {task.kind === 'internal' ? 'Внутренняя задача' : task.client_name}
         </div>
+        <SiteInput label="Дата визита" type="date" value={date} onChange={setDate} />
         <div className="grid grid-cols-2 gap-2">
-          <SiteInput label="Дата визита" type="date" value={date} onChange={setDate} />
-          <SiteInput label="Время" type="time" value={time} onChange={setTime} />
+          <SiteInput label="С" type="time" value={timeFrom} onChange={handleFrom} />
+          <SiteInput label="По" type="time" value={timeTo}   onChange={handleTo} />
         </div>
         <div>
           <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Длительность</label>
           <div className="flex gap-1.5 flex-wrap">
             {[30, 60, 90, 120, 180].map(min => (
-              <button key={min} onClick={() => setDuration(min)}
+              <button key={min} onClick={() => handleDuration(min)}
                 className="rounded-full px-3 py-1.5 text-xs font-semibold"
                 style={{ background: duration === min ? '#297b8a' : '#F5F7F8', color: duration === min ? 'white' : '#64748B' }}>
                 {min < 60 ? `${min} мин` : min === 60 ? '1 ч' : `${min / 60} ч`}
@@ -8176,7 +8227,7 @@ function StartTaskModal({ task, onClose, onStart }) {
         </div>
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
-          <button onClick={() => onStart(date, time, duration)} className="flex-1 py-2.5 rounded-lg font-semibold text-white" style={{ background: '#F59E0B' }}>Взять</button>
+          <button onClick={() => onStart(date, timeFrom, duration, timeTo)} className="flex-1 py-2.5 rounded-lg font-semibold text-white" style={{ background: '#F59E0B' }}>Взять</button>
         </div>
       </div>
     </Modal>
@@ -8184,18 +8235,35 @@ function StartTaskModal({ task, onClose, onStart }) {
 }
 
 function RescheduleTaskModal({ task, onClose, onReschedule }) {
-  const [date, setDate] = useState(task.visit_date || '');
-  const [time, setTime] = useState(task.visit_time || '');
-  const [reason, setReason] = useState('');
+  const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const frM = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+
+  const [date,     setDate]     = useState(task.visit_date     || '');
+  const [timeFrom, setTimeFrom] = useState(task.visit_time     || '');
+  const [timeTo,   setTimeTo]   = useState(task.visit_time_end || '');
+  const [reason,   setReason]   = useState('');
+
+  const handleFrom = (val) => {
+    setTimeFrom(val);
+    if (val && timeTo) { const d = toM(timeTo) - toM(val); if (d > 0) { /* сохраняем диапазон */ } }
+    else if (val && task.duration_min) setTimeTo(frM(toM(val) + task.duration_min));
+  };
+  const handleTo = (val) => {
+    setTimeTo(val);
+  };
+
   return (
     <Modal onClose={onClose} title="Перенести визит">
       <div className="space-y-3">
         <div className="text-sm" style={{ color: '#64748B' }}>
           Текущая дата: <strong>{task.visit_date ? fmtDate(task.visit_date) : '—'}</strong>
-          {task.visit_time && <> · {task.visit_time}</>}
+          {task.visit_time && <> · {task.visit_time}{task.visit_time_end ? `–${task.visit_time_end}` : ''}</>}
         </div>
         <SiteInput label="Новая дата" type="date" value={date} onChange={setDate} />
-        <SiteInput label="Время" type="time" value={time} onChange={setTime} />
+        <div className="grid grid-cols-2 gap-2">
+          <SiteInput label="С" type="time" value={timeFrom} onChange={handleFrom} />
+          <SiteInput label="По" type="time" value={timeTo}   onChange={handleTo} />
+        </div>
         <div>
           <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Причина переноса (необязательно)</label>
           <textarea
@@ -8212,7 +8280,7 @@ function RescheduleTaskModal({ task, onClose, onReschedule }) {
             Отмена
           </button>
           <button
-            onClick={() => onReschedule(date, time, reason)}
+            onClick={() => onReschedule(date, timeFrom, reason, timeTo)}
             disabled={!date}
             className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50"
             style={{ background: '#297b8a' }}

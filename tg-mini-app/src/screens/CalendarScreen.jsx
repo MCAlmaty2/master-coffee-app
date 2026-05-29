@@ -187,7 +187,7 @@ function EventCard({ task: t, db, currentUser, mode, navigate, compact }) {
       }}
     >
       <div style={{ fontSize: 9, fontWeight: 700, color: show ? color : '#64748B', lineHeight: 1 }}>
-        {t.visit_time}
+        {t.visit_time}{t.visit_time_end ? `–${t.visit_time_end}` : ''}
       </div>
       {show ? (
         <>
@@ -342,7 +342,7 @@ function MonthCalendarView({ tasks, monthISO, ctx, onDayClick }) {
                       background: color, color: 'white', overflow: 'hidden',
                       whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontWeight: 500,
                     }}>
-                    {t.visit_time} {t.kind === 'internal' ? 'Внутр.' : (t.client_name || '').split(' ')[0] || '—'}
+                    {t.visit_time}{t.visit_time_end ? `–${t.visit_time_end}` : ''} {t.kind === 'internal' ? 'Внутр.' : (t.client_name || '').split(' ')[0] || '—'}
                   </div>
                 );
               })}
@@ -405,7 +405,7 @@ function DayCalendarView({ tasks, date, ctx, mode, onSlotClick }) {
                   cursor: show ? 'pointer' : 'default', zIndex: 2,
                 }}>
                 <div style={{ fontSize: 9, fontWeight: 700, color: show ? color : '#64748B' }}>
-                  {t.visit_time} · {t.duration_min || 60} мин
+                  {t.visit_time}{t.visit_time_end ? `–${t.visit_time_end}` : ` · ${t.duration_min || 60} мин`}
                 </div>
                 {show ? (
                   <>
