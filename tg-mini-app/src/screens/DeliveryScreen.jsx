@@ -53,33 +53,52 @@ const COL_MAP = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
+// Нормализация заголовка: убрать BOM, свернуть пробелы, нижний регистр
+const normKey = (v) => String(v).replace(/^﻿/, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+// COL_MAP с нормализованными ключами для поиска без учёта регистра
+const COL_MAP_LOWER = Object.fromEntries(
+  Object.entries(COL_MAP).map(([k, v]) => [normKey(k), v])
+);
+
 async function parseFile(file) {
   const XLSX  = await import('xlsx');
   const isCsv = /\.csv$/i.test(file.name);
   let wb;
   if (isCsv) {
-    // CSV: read as UTF-8 text to avoid codepage issues
     const text = await file.text();
     wb = XLSX.read(text, { type: 'string' });
   } else {
     const buf = await file.arrayBuffer();
     wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
   }
-  const ws   = wb.Sheets[wb.SheetNames[0]];
-  const raw  = XLSX.utils.sheet_to_json(ws, { defval: '' });
-  // Normalise row keys: strip BOM (U+FEFF) and trim whitespace
-  const rows = raw.map(row => {
-    const norm = {};
-    for (const k of Object.keys(row)) {
-      norm[k.replace(/^﻿/, '').trim()] = row[k];
-    }
-    return norm;
-  });
-  return rows
-    .map(row => {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+
+  // Читаем всё как массивы, чтобы самостоятельно найти строку заголовков
+  // (1С-отчёты часто начинаются с 1–3 строк названия отчёта)
+  const allRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  if (!allRows.length) return [];
+
+  // Ищем строку заголовков: первая из первых 15 строк, где ≥ 2 совпадения с COL_MAP
+  let headerIdx = 0;
+  for (let i = 0; i < Math.min(allRows.length, 15); i++) {
+    const matches = allRows[i].filter(c => COL_MAP_LOWER[normKey(c)] !== undefined).length;
+    if (matches >= 2) { headerIdx = i; break; }
+  }
+
+  // Строим массив заголовков (нормализованных)
+  const headers = allRows[headerIdx].map(c => String(c).replace(/^﻿/, '').replace(/\s+/g, ' ').trim());
+  const headersLower = headers.map(normKey);
+
+  // Данные — все строки после заголовка
+  return allRows.slice(headerIdx + 1)
+    .map(rowArr => {
       const out = {};
       for (const [col, field] of Object.entries(COL_MAP)) {
-        out[field] = row[col] ?? '';
+        // Ищем колонку сначала точно, затем без учёта регистра
+        let idx = headers.indexOf(col);
+        if (idx === -1) idx = headersLower.indexOf(normKey(col));
+        out[field] = idx >= 0 ? (rowArr[idx] ?? '') : '';
       }
       out.seq_number = Number(out.seq_number) || 0;
       out.amount = Number(String(out.amount).replace(/\s/g, '').replace(',', '.')) || 0;
