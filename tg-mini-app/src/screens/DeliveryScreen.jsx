@@ -157,7 +157,14 @@ function Card({ children, style, onClick }) {
   );
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ status, managerDecision }) {
+  if (managerDecision === 'admin_closed') {
+    return (
+      <span style={{ background: '#F3F4F6', color: '#6B7280', border: '1px solid #D1D5DB', borderRadius: 8, padding: '2px 7px', fontSize: 9, fontWeight: 700, whiteSpace: 'nowrap' }}>
+        🔒 Закрыто
+      </span>
+    );
+  }
   const s = STATUS_CFG[status] || STATUS_CFG.pending;
   return (
     <span style={{ background: s.bg, color: s.text, border: `1px solid ${s.border}`, borderRadius: 8, padding: '2px 7px', fontSize: 9, fontWeight: 700, whiteSpace: 'nowrap' }}>
@@ -469,7 +476,31 @@ export function DeliveryNewRegistryScreen({ ctx }) {
 // ─── Детали реестра ──────────────────────────────────────────────────────
 
 export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
-  const { db, navigate } = ctx;
+  const { db, navigate, currentUser, showToast, setDb } = ctx;
+  const [closingId,      setClosingId]      = useState(null);   // id заказа, который закрываем
+  const [closeComment,   setCloseComment]   = useState('');
+  const [closingSaving,  setClosingSaving]  = useState(false);
+
+  const isAdmin = currentUser?.role === 'admin';
+
+  const handleClose = async (orderId) => {
+    if (!closeComment.trim()) { showToast('Укажите причину закрытия'); return; }
+    setClosingSaving(true);
+    const upd = {
+      status:           'failed',
+      manager_decision: 'admin_closed',
+      fail_reason:      closeComment.trim(),
+      delivered_at:     new Date().toISOString(),
+    };
+    const { error } = await supabase.from('delivery_orders').update(upd).eq('id', orderId);
+    if (error) { showToast('Ошибка: ' + error.message); setClosingSaving(false); return; }
+    setDb(d => ({ ...d, deliveryOrders: d.deliveryOrders.map(o => o.id === orderId ? { ...o, ...upd } : o) }));
+    setClosingId(null);
+    setCloseComment('');
+    setClosingSaving(false);
+    showToast('Заказ закрыт');
+  };
+
   const reg    = (db.deliveryRegistries || []).find(r => r.id === registryId);
   const orders = (db.deliveryOrders || []).filter(o => o.registry_id === registryId);
 
@@ -523,13 +554,18 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
 
         <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Все заказы ({orders.length})</div>
         {orders.sort((a, b) => (a.seq_number || 0) - (b.seq_number || 0)).map(order => {
-          const courier = db.users?.find(u => u.id === order.courier_id);
+          const courier      = db.users?.find(u => u.id === order.courier_id);
+          const isAdminClosed = order.manager_decision === 'admin_closed';
+          const canClose      = isAdmin && ['pending', 'assigned'].includes(order.status) && !isAdminClosed;
+          const isClosingThis = closingId === order.id;
+
           return (
             <div key={order.id} style={{ background: '#fff', borderRadius: 12, padding: '10px 12px', marginBottom: 6,
-              borderLeft: order.status === 'failed' ? '3px solid #dc2626' : 'none', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
+              borderLeft: isAdminClosed ? '3px solid #9CA3AF' : order.status === 'failed' ? '3px solid #dc2626' : 'none',
+              boxShadow: '0 1px 3px rgba(0,0,0,.05)', opacity: isAdminClosed ? 0.75 : 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
                 <div style={{ fontWeight: 700, fontSize: 11, color: '#1A1814', flex: 1, marginRight: 6 }}>{order.client}</div>
-                <StatusBadge status={order.status} />
+                <StatusBadge status={order.status} managerDecision={order.manager_decision} />
               </div>
               <div style={{ fontSize: 9, color: '#94a3b8' }}>📍 {order.city}</div>
               <div style={{ fontSize: 10, color: '#475569', marginBottom: order.payment_info ? 3 : 4 }}>{order.address}</div>
@@ -538,7 +574,12 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                   💳 {order.payment_info}
                 </div>
               )}
-              {order.status === 'failed' && order.fail_reason && (
+              {isAdminClosed && order.fail_reason && (
+                <div style={{ fontSize: 9, color: '#6B7280', background: '#F3F4F6', padding: '3px 6px', borderRadius: 6, marginBottom: 4 }}>
+                  🔒 {order.fail_reason}
+                </div>
+              )}
+              {!isAdminClosed && order.status === 'failed' && order.fail_reason && (
                 <div style={{ fontSize: 9, color: '#dc2626', background: '#FEF2F2', padding: '3px 6px', borderRadius: 6, marginBottom: 4 }}>{order.fail_reason}</div>
               )}
               {order.status === 'delivered' && order.delivered_at && (
@@ -553,8 +594,42 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                     <span style={{ background: '#DCFCE7', color: '#16a34a', padding: '2px 7px', borderRadius: 8, fontSize: 9, fontWeight: 700 }}>💵 {fmtNum(order.cash_amount)} нал.</span>
                   )}
                   {courier && <span style={{ fontSize: 9, color: '#94a3b8' }}>{courier.first_name}</span>}
+                  {canClose && !isClosingThis && (
+                    <button
+                      onClick={() => { setClosingId(order.id); setCloseComment(''); }}
+                      style={{ padding: '3px 9px', background: '#FEF2F2', color: '#dc2626', border: '1px solid #FECACA', borderRadius: 7, fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>
+                      Закрыть
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {/* ── Inline-форма закрытия ── */}
+              {isClosingThis && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #F1F5F9' }}>
+                  <div style={{ fontSize: 9, color: '#64748b', marginBottom: 4, fontWeight: 600 }}>Причина закрытия *</div>
+                  <textarea
+                    value={closeComment}
+                    onChange={e => setCloseComment(e.target.value)}
+                    placeholder="Укажите причину (обязательно)..."
+                    rows={2}
+                    style={{ width: '100%', padding: '7px 10px', background: '#F5F7F8', border: '1px solid #E5E7EB', borderRadius: 9, fontSize: 11, resize: 'none', color: '#1A1814', marginBottom: 8 }}
+                  />
+                  <div style={{ display: 'flex', gap: 7 }}>
+                    <button
+                      onClick={() => { setClosingId(null); setCloseComment(''); }}
+                      style={{ flex: 1, padding: 8, background: '#F5F7F8', color: '#64748b', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                      Отмена
+                    </button>
+                    <button
+                      onClick={() => handleClose(order.id)}
+                      disabled={closingSaving || !closeComment.trim()}
+                      style={{ flex: 1, padding: 8, background: closingSaving || !closeComment.trim() ? '#CBD5E1' : '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: closingSaving || !closeComment.trim() ? 'not-allowed' : 'pointer' }}>
+                      {closingSaving ? '...' : '🔒 Закрыть заказ'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
