@@ -1325,17 +1325,20 @@ function App() {
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
     };
     setDb(d => {
-      const b2bUsers = d.users.filter(u => u.role === 'b2b' && u.active && u.id !== currentUser.id);
-      const newNotifs = b2bUsers.map(u => makeNotif(d, {
+      // In-app: уведомляем B2B-менеджеров и админа (кроме самого создателя)
+      const notifRecipients = d.users.filter(u =>
+        ['b2b', 'admin'].includes(u.role) && u.active && u.id !== currentUser.id
+      );
+      const newNotifs = notifRecipients.map(u => makeNotif(d, {
         recipient_id: u.id,
         title: 'Новая заявка',
         body: `${order.order_number}: ${order.client_type === 'individual' ? order.full_name : order.company_name}, ${fmtNum(order.total_amount)} тг`,
         link_kind: 'order', link_id: order.id,
       }));
       const clientName = order.client_type === 'individual' ? order.full_name : order.company_name;
-      // Telegram: новая B2B-заявка → тема «Sales Department»
-      // (если создатель не B2B и это не быстрая заявка — в Telegram не шлём, чтобы не засорять)
-      const sendToSales = kind === 'quick' || currentUser.role === 'b2b';
+      // Telegram: новая заявка → тема «Sales Department»
+      // Шлём для всех менеджерских ролей и быстрых заявок
+      const sendToSales = kind === 'quick' || ['b2b', 'sales', 'senior_manager', 'director', 'admin'].includes(currentUser.role);
       const tgEntries = sendToSales
         ? [makeTgLogEntry(d, 'sales_new_b2b', {
             order_number: order.order_number,
