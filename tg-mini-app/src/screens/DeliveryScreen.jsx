@@ -37,7 +37,7 @@ const STATUS_CFG = {
 
 // 1C column headers → DB field names
 const COL_MAP = {
-  '№п/п':                                        'seq_number',
+  '№ п/п':                                       'seq_number',
   'Организация':                                 'organization',
   'Контрагент':                                  'client',
   'Документ':                                    'document',
@@ -79,17 +79,27 @@ async function parseFile(file) {
   const allRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
   if (!allRows.length) return { rows: [], detectedHeaders: [], headerIdx: -1 };
 
-  // Ищем строку заголовков: первая из первых 15 строк, где ≥ 2 совпадения с COL_MAP
+  // Ищем строку с наибольшим числом совпадений из первых 15 строк
+  // (без раннего выхода — в 1С-отчётах строка заголовков не всегда первая)
   let headerIdx = 0;
   let bestScore = 0;
   for (let i = 0; i < Math.min(allRows.length, 15); i++) {
     const score = allRows[i].filter(c => COL_MAP_LOWER[normKey(c)] !== undefined).length;
     if (score > bestScore) { bestScore = score; headerIdx = i; }
-    if (score >= 2) break;
   }
 
-  // Строим массив заголовков
+  // Строим массив заголовков из найденной строки
   const headers = allRows[headerIdx].map(c => String(c).replace(/^﻿/, '').replace(/\s+/g, ' ').trim());
+
+  // Дополняем ПУСТЫЕ ячейки из строк выше (1С использует двухстрочные заголовки:
+  // напр. «Сумма взаиморасчетов» стоит строкой выше основного заголовка)
+  for (let prev = headerIdx - 1; prev >= Math.max(0, headerIdx - 3); prev--) {
+    allRows[prev].forEach((cell, idx) => {
+      const val = String(cell).replace(/^﻿/, '').replace(/\s+/g, ' ').trim();
+      if (val && !headers[idx]) headers[idx] = val;
+    });
+  }
+
   const headersLower = headers.map(normKey);
 
   // Данные — все строки после заголовка
