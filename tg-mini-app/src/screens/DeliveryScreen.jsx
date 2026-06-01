@@ -484,9 +484,11 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
   const [deleting,        setDeleting]        = useState(false);
   const [confirmArchive,  setConfirmArchive]  = useState(false);
   const [archiving,       setArchiving]       = useState(false);
+  const [showAddModal,    setShowAddModal]    = useState(false);
 
   const isAdmin    = currentUser?.role === 'admin';
   const canArchive = isAdmin || currentUser?.role === 'director';
+  const canAdd     = isAdmin || currentUser?.role === 'manager';
 
   const handleDeleteRegistry = async () => {
     setDeleting(true);
@@ -596,6 +598,22 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
             style={{ width: '100%', padding: 11, marginBottom: 10, background: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5', borderRadius: 12, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
             ⚠️ {failedPending.length} {failedPending.length === 1 ? 'заказ ждёт' : 'заказа ждут'} решения →
           </button>
+        )}
+
+        {/* ── Добавить заявку в реестр (admin / manager, только активный) ── */}
+        {canAdd && reg.status === 'active' && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            style={{ width: '100%', padding: 11, marginBottom: 10, background: '#297b8a', color: '#fff',
+              border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 12, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              boxShadow: '0 4px 12px rgba(41,123,138,.25)' }}>
+            <Plus size={15} /> Добавить заявку в реестр
+          </button>
+        )}
+
+        {showAddModal && (
+          <AddOrderModal ctx={ctx} registryId={registryId} onClose={() => setShowAddModal(false)} />
         )}
 
         <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Все заказы ({orders.length})</div>
@@ -746,6 +764,268 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Модал: добавить заявку в реестр (admin / manager) ──────────────────
+
+function AddOrderModal({ ctx, registryId, onClose }) {
+  const { db, showToast, setDb } = ctx;
+  const [tab,     setTab]     = useState('existing');
+  const [search,  setSearch]  = useState('');
+  const [selected, setSelected] = useState(new Set());
+  const [saving,  setSaving]  = useState(false);
+  const [qForm,   setQForm]   = useState({
+    client: '', phone: '', address: '', city: 'Алматы', amount: '', comment: '',
+  });
+
+  // Заявки, уже привязанные к любому реестру (по source_order_id)
+  const alreadyLinked = new Set(
+    (db.deliveryOrders || []).filter(o => o.source_order_id).map(o => o.source_order_id)
+  );
+
+  // Подходящие заявки: delivery + shipped + ещё не в реестре
+  const eligible = (db.orders || [])
+    .filter(o =>
+      o.delivery_method === 'delivery' &&
+      o.status === 'shipped' &&
+      !alreadyLinked.has(o.id)
+    )
+    .filter(o => {
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      const name = o.client_type === 'individual' ? (o.full_name || '') : (o.company_name || '');
+      return name.toLowerCase().includes(q) || (o.address || '').toLowerCase().includes(q);
+    });
+
+  const toggleSelect = (id) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const handleAddExisting = async () => {
+    if (selected.size === 0 || saving) return;
+    setSaving(true);
+    const now = new Date().toISOString();
+    const toAdd = (db.orders || []).filter(o => selected.has(o.id));
+    const rows = toAdd.map(o => ({
+      id:              uid(),
+      registry_id:     registryId,
+      source_order_id: o.id,
+      client:          o.client_type === 'individual' ? (o.full_name || '') : (o.company_name || ''),
+      phone:           o.phone || '',
+      address:         o.address || '',
+      city:            '',
+      amount:          Number(o.total_amount) || 0,
+      status:          'pending',
+      created_at:      now,
+    }));
+    const { error } = await supabase.from('delivery_orders').insert(rows);
+    if (error) { showToast('Ошибка: ' + error.message, 'error'); setSaving(false); return; }
+    setDb(d => ({ ...d, deliveryOrders: [...rows, ...d.deliveryOrders] }));
+    const n = rows.length;
+    showToast(`${n} ${n === 1 ? 'заявка добавлена' : n < 5 ? 'заявки добавлены' : 'заявок добавлено'} в реестр`, 'success');
+    onClose();
+  };
+
+  const handleAddQuick = async () => {
+    if (!qForm.client.trim() || !qForm.address.trim()) {
+      showToast('Заполните клиента и адрес', 'error');
+      return;
+    }
+    if (saving) return;
+    setSaving(true);
+    const now = new Date().toISOString();
+    const row = {
+      id:          uid(),
+      registry_id: registryId,
+      client:      qForm.client.trim(),
+      phone:       qForm.phone.trim(),
+      address:     qForm.address.trim(),
+      city:        qForm.city.trim(),
+      amount:      Number(qForm.amount) || 0,
+      extra_info:  qForm.comment.trim(),
+      status:      'pending',
+      created_at:  now,
+    };
+    const { error } = await supabase.from('delivery_orders').insert([row]);
+    if (error) { showToast('Ошибка: ' + error.message, 'error'); setSaving(false); return; }
+    setDb(d => ({ ...d, deliveryOrders: [row, ...d.deliveryOrders] }));
+    showToast('Заявка добавлена в реестр', 'success');
+    onClose();
+  };
+
+  const regNumber = (db.deliveryRegistries || []).find(r => r.id === registryId)?.number || '';
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,25,35,.5)',
+        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+      <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', maxHeight: '88vh',
+        display: 'flex', flexDirection: 'column' }}>
+
+        {/* Handle */}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
+          <div style={{ width: 36, height: 4, background: '#E2EAF0', borderRadius: 2 }} />
+        </div>
+
+        {/* Заголовок */}
+        <div style={{ padding: '0 16px 10px', borderBottom: '1px solid #F1F5F9' }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#0f1923' }}>Добавить заявку</div>
+          <div style={{ fontSize: 10, color: '#94a3b8' }}>в {regNumber}</div>
+        </div>
+
+        {/* Вкладки */}
+        <div style={{ display: 'flex', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
+          {[['existing', '📋 Из заявок'], ['quick', '✍️ Быстрая']].map(([k, l]) => (
+            <button key={k} onClick={() => setTab(k)}
+              style={{ flex: 1, padding: '10px 4px', fontSize: 12, fontWeight: 700,
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: tab === k ? '#297b8a' : '#94a3b8',
+                borderBottom: `2px solid ${tab === k ? '#297b8a' : 'transparent'}` }}>
+              {l}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'existing' ? (
+          <>
+            {/* Поиск */}
+            <div style={{ padding: '10px 12px 6px', flexShrink: 0 }}>
+              <div style={{ background: '#F5F7F8', borderRadius: 10, padding: '8px 12px',
+                display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 13 }}>🔍</span>
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Поиск по клиенту или адресу…"
+                  style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 11,
+                    color: '#1A1814', outline: 'none' }}
+                />
+              </div>
+            </div>
+
+            {/* Список заявок */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px' }}>
+              {eligible.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 20px', color: '#94a3b8', fontSize: 12 }}>
+                  {search.trim() ? 'Ничего не найдено' : 'Нет заявок готовых к доставке'}
+                </div>
+              ) : eligible.map(o => {
+                const name = o.client_type === 'individual' ? (o.full_name || '') : (o.company_name || '');
+                const isSel = selected.has(o.id);
+                return (
+                  <div key={o.id} onClick={() => toggleSelect(o.id)}
+                    style={{ padding: '9px 10px', marginBottom: 5, cursor: 'pointer', borderRadius: 10,
+                      background: isSel ? '#e8f4f6' : '#fff',
+                      border: `1.5px solid ${isSel ? '#297b8a' : '#E2EAF0'}`,
+                      display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 1,
+                      background: isSel ? '#297b8a' : '#fff',
+                      border: `1.5px solid ${isSel ? '#297b8a' : '#D1D5DB'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {isSel && <span style={{ color: '#fff', fontSize: 10, fontWeight: 900 }}>✓</span>}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#1A1814' }}>{name}</div>
+                      <div style={{ fontSize: 9, color: '#94a3b8' }}>📍 {o.address}</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#297b8a', marginTop: 2 }}>
+                        {fmtNum(o.total_amount)} тг
+                      </div>
+                    </div>
+                    <span style={{ background: '#D1FAE5', color: '#065F46', fontSize: 8,
+                      fontWeight: 700, padding: '2px 6px', borderRadius: 5, flexShrink: 0 }}>
+                      К отгрузке
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Кнопка */}
+            <div style={{ padding: '10px 12px 28px', borderTop: '1px solid #F1F5F9', flexShrink: 0 }}>
+              <button onClick={handleAddExisting}
+                disabled={selected.size === 0 || saving}
+                style={{ width: '100%', padding: 12, borderRadius: 12, border: 'none',
+                  fontSize: 13, fontWeight: 700, cursor: selected.size === 0 || saving ? 'not-allowed' : 'pointer',
+                  background: selected.size === 0 || saving ? '#CBD5E1' : '#297b8a', color: '#fff' }}>
+                {saving ? '⏳ Добавляем…'
+                  : selected.size === 0 ? 'Выберите заявки'
+                  : `✅ Добавить ${selected.size} ${selected.size === 1 ? 'заявку' : 'заявки'} в реестр`}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Быстрая форма */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px 0' }}>
+              {[
+                ['client',  'Клиент *',           'text', 'ТОО / ИП / ФИО'],
+                ['phone',   'Телефон',             'tel',  '+7 ___ ___ __ __'],
+                ['address', 'Адрес доставки *',    'text', 'ул. Абая 25, оф. 3'],
+              ].map(([field, label, type, ph]) => (
+                <div key={field} style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b',
+                    textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>{label}</div>
+                  <input
+                    type={type}
+                    value={qForm[field]}
+                    onChange={e => setQForm(f => ({ ...f, [field]: e.target.value }))}
+                    placeholder={ph}
+                    style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
+                      border: `1.5px solid ${qForm[field] ? '#297b8a' : '#E2EAF0'}`,
+                      fontSize: 12, color: '#1A1814', background: '#fff', outline: 'none' }}
+                  />
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                {[['city', 'Город'], ['amount', 'Сумма, тг']].map(([field, label]) => (
+                  <div key={field} style={{ flex: 1 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b',
+                      textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>{label}</div>
+                    <input
+                      type={field === 'amount' ? 'number' : 'text'}
+                      value={qForm[field]}
+                      onChange={e => setQForm(f => ({ ...f, [field]: e.target.value }))}
+                      placeholder={field === 'amount' ? '0' : ''}
+                      style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
+                        border: '1.5px solid #E2EAF0', fontSize: 12, color: '#1A1814',
+                        background: '#fff', outline: 'none' }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b',
+                  textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>Комментарий</div>
+                <textarea
+                  value={qForm.comment}
+                  onChange={e => setQForm(f => ({ ...f, comment: e.target.value }))}
+                  placeholder="Позвонить за 30 мин…"
+                  rows={2}
+                  style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
+                    border: '1.5px solid #E2EAF0', fontSize: 12, color: '#1A1814',
+                    background: '#fff', outline: 'none', resize: 'none' }}
+                />
+              </div>
+            </div>
+
+            {/* Кнопка */}
+            <div style={{ padding: '10px 12px 28px', borderTop: '1px solid #F1F5F9', flexShrink: 0 }}>
+              <button onClick={handleAddQuick}
+                disabled={saving}
+                style={{ width: '100%', padding: 12, borderRadius: 12, border: 'none',
+                  fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
+                  background: saving ? '#CBD5E1' : '#297b8a', color: '#fff' }}>
+                {saving ? '⏳ Создаём…' : '➕ Создать и добавить в реестр'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
