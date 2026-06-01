@@ -368,7 +368,7 @@ const STATUS = {
   paid:       { label: 'Оплата получена', short: 'Оплачен',   color: '#10B981', bg: '#D1FAE5', icon: Banknote },
   shipped:    { label: 'Отгружен',        short: 'Отгружен',  color: '#0EA5E9', bg: '#E0F2FE', icon: Truck },
   ready:      { label: 'Заказ готов',     short: 'Готов',     color: '#22C55E', bg: '#DCFCE7', icon: Package },
-  archived:   { label: 'Архив',           short: 'Архив',     color: '#64748B', bg: '#F1F5F9', icon: Inbox },
+  archived:   { label: 'Архив',           short: 'Архив',     color: 'var(--mc-muted)', bg: '#F1F5F9', icon: Inbox },
   cancelled:  { label: 'Отменено',        short: 'Отменено',  color: '#EF4444', bg: '#FEE2E2', icon: XCircle },
 };
 
@@ -3115,7 +3115,7 @@ function App() {
   return (
     <>
       <GlobalStyles />
-      <div className="site-font min-h-screen w-full" style={{ background: '#FFFFFF', color: '#1A1814' }}>
+      <div className="site-font min-h-screen w-full" style={{ background: '#FFFFFF', color: 'var(--mc-text)' }}>
         {renderBody()}
         {toast && <Toast toast={toast} />}
         {errors.length > 0 && (
@@ -3179,7 +3179,7 @@ function ErrorsPanel({ errors, onDismiss, onDismissAll, isAdmin, navigate }) {
             ))}
           </div>
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: '#FEE2E2', borderTop: '1px solid #FCA5A5' }}>
-            <button onClick={onDismissAll} className="text-xs font-semibold px-3 py-1 rounded" style={{ background: 'white', color: '#7F1D1D' }}>
+            <button onClick={onDismissAll} className="text-xs font-semibold px-3 py-1 rounded" style={{ background: 'var(--mc-surface)', color: '#7F1D1D' }}>
               Закрыть все
             </button>
             {isAdmin && (
@@ -3374,7 +3374,7 @@ function BootSplash({ title, subtitle, isError }) {
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-6" style={{ background: '#FEE2E2' }}>
             <XCircle size={36} style={{ color: '#EB5757' }} />
           </div>
-          <h1 className="display-font text-2xl mb-2" style={{ color: '#1A1814' }}>{title}</h1>
+          <h1 className="display-font text-2xl mb-2" style={{ color: 'var(--mc-text)' }}>{title}</h1>
           {subtitle && <div className="text-sm" style={{ color: '#EB5757' }}>{subtitle}</div>}
         </div>
       </div>
@@ -3481,17 +3481,7 @@ function BootSplash({ title, subtitle, isError }) {
       </div>
 
       <h1 style={{ color: 'white', fontWeight: 700, fontSize: 18, marginBottom: 4, textAlign: 'center', letterSpacing: '-0.02em' }}>{title}</h1>
-      <div style={{ color: '#64a8b4', fontSize: 13, marginBottom: 28, textAlign: 'center' }}>Готовим ваш кофе ☕</div>
-
-      {/* Логотип-пилюля */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 18px',
-                    background: 'rgba(255,255,255,0.06)', borderRadius: 999,
-                    border: '1px solid rgba(255,255,255,0.1)' }}>
-        <img src="/logo-symbol.png" alt="" style={{ width: 20, height: 20, objectFit: 'contain', filter: 'brightness(3)' }} />
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.5px', color: '#4a9eac', textTransform: 'uppercase' }}>
-          Master Coffee Roasters
-        </span>
-      </div>
+      <div style={{ color: '#64a8b4', fontSize: 13, textAlign: 'center' }}>Готовим ваш кофе ☕</div>
     </div>
   );
 }
@@ -3509,12 +3499,12 @@ function TelegramAuthScreen({ ctx }) {
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6" style={{ background: '#FEF3C7' }}>
             <CircleDot size={36} style={{ color: '#F59E0B' }} />
           </div>
-          <h1 className="display-font text-2xl mb-2" style={{ color: '#1A1814' }}>Ожидайте подтверждения</h1>
-          <div className="text-sm mb-4" style={{ color: '#64748B' }}>
+          <h1 className="display-font text-2xl mb-2" style={{ color: 'var(--mc-text)' }}>Ожидайте подтверждения</h1>
+          <div className="text-sm mb-4" style={{ color: 'var(--mc-muted)' }}>
             Привет, {pendingTgUser.first_name}! Запрос на доступ отправлен администратору.
             Когда он подтвердит — приложение откроется автоматически.
           </div>
-          <div className="rounded-lg p-3 text-xs" style={{ background: '#F5F7F8', color: '#64748B' }}>
+          <div className="rounded-lg p-3 text-xs" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
             Telegram ID: <span className="mono-font">{pendingTgUser.telegram_id}</span>
           </div>
           {adminsCount === 0 && (
@@ -3535,13 +3525,13 @@ function TelegramAuthScreen({ ctx }) {
     // Токен есть в URL и ещё идёт проверка — показываем спиннер
     if (isCheckingToken) {
       return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center px-4 gap-4" style={{ background: '#F5F7F8' }}>
+        <div className="min-h-screen w-full flex flex-col items-center justify-center px-4 gap-4" style={{ background: 'var(--mc-active-item)' }}>
           <img src="/logo-symbol.png" alt="" style={{ width: 52, height: 52, objectFit: 'contain' }} />
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl" style={{ background: '#E7F3FE' }}>
             <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#297b8a', borderTopColor: 'transparent' }} />
           </div>
-          <div className="font-semibold text-sm" style={{ color: '#1A1814' }}>Проверяем ссылку…</div>
-          <div className="text-xs" style={{ color: '#64748B' }}>Подождите секунду</div>
+          <div className="font-semibold text-sm" style={{ color: 'var(--mc-text)' }}>Проверяем ссылку…</div>
+          <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Подождите секунду</div>
         </div>
       );
     }
@@ -3557,8 +3547,8 @@ function TelegramAuthScreen({ ctx }) {
         <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6" style={{ background: '#FEE2E2' }}>
           <AlertCircle size={36} style={{ color: '#EB5757' }} />
         </div>
-        <h1 className="display-font text-2xl mb-2" style={{ color: '#1A1814' }}>Не удалось получить данные Telegram</h1>
-        <div className="text-sm" style={{ color: '#64748B' }}>
+        <h1 className="display-font text-2xl mb-2" style={{ color: 'var(--mc-text)' }}>Не удалось получить данные Telegram</h1>
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
           Откройте приложение через кнопку бота (а не через прямую ссылку).
         </div>
       </div>
@@ -3634,7 +3624,7 @@ function PinLoginScreen({ hasUrlToken, loginViaPin }) {
   const filled = pin.join('').length === 4;
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center px-4" style={{ background: '#F5F7F8' }}>
+    <div className="min-h-screen w-full flex items-center justify-center px-4" style={{ background: 'var(--mc-active-item)' }}>
       <div className="w-full max-w-sm">
         {/* Логотип */}
         <div className="text-center mb-8">
@@ -3644,18 +3634,18 @@ function PinLoginScreen({ hasUrlToken, loginViaPin }) {
                style={{ fontSize: 22, color: '#297b8a', letterSpacing: '0.18em', lineHeight: 1 }}>MASTER</div>
           <div className="font-medium tracking-widest uppercase"
                style={{ fontSize: 11, color: '#94a3b8', letterSpacing: '0.35em', marginTop: 2 }}>COFFEE ROASTERS</div>
-          <div className="text-sm mt-2" style={{ color: '#64748B' }}>Управление закупками и операциями</div>
+          <div className="text-sm mt-2" style={{ color: 'var(--mc-muted)' }}>Управление закупками и операциями</div>
         </div>
 
         {/* PIN форма */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm" style={{ border: '1px solid #E5E7EB' }}>
+        <div className="bg-white rounded-2xl p-6 shadow-sm" style={{ border: '1px solid var(--mc-border)' }}>
           <div className="text-center mb-5">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-3"
                  style={{ background: '#E7F3FE' }}>
               <KeyRound size={22} style={{ color: '#297b8a' }} />
             </div>
-            <div className="font-bold text-lg" style={{ color: '#1A1814' }}>Вход по PIN</div>
-            <div className="text-xs mt-1" style={{ color: '#64748B' }}>Введите 4-значный PIN-код</div>
+            <div className="font-bold text-lg" style={{ color: 'var(--mc-text)' }}>Вход по PIN</div>
+            <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>Введите 4-значный PIN-код</div>
           </div>
 
           {/* 4 поля ввода */}
@@ -3674,9 +3664,9 @@ function PinLoginScreen({ hasUrlToken, loginViaPin }) {
                 className="w-14 h-14 text-center font-bold rounded-xl outline-none transition-all"
                 style={{
                   fontSize: 28,
-                  border: `2px solid ${digit ? '#297b8a' : error ? '#EB5757' : '#E5E7EB'}`,
+                  border: `2px solid ${digit ? '#297b8a' : error ? '#EB5757' : 'var(--mc-border)'}`,
                   background: digit ? '#F0F9FF' : '#F8FAFC',
-                  color: '#1A1814',
+                  color: 'var(--mc-text)',
                 }}
               />
             ))}
@@ -3710,11 +3700,11 @@ function PinLoginScreen({ hasUrlToken, loginViaPin }) {
 
         {/* Альтернатива: войти по ссылке */}
         <div className="mt-3 bg-white rounded-2xl shadow-sm overflow-hidden"
-             style={{ border: '1px solid #E5E7EB' }}>
+             style={{ border: '1px solid var(--mc-border)' }}>
           <button
             onClick={() => setShowLinkHelp(v => !v)}
             className="w-full flex items-center justify-between px-4 py-3 text-sm"
-            style={{ color: '#64748B' }}
+            style={{ color: 'var(--mc-muted)' }}
           >
             <span>Нет PIN? Войти по личной ссылке</span>
             <ChevronDown size={16} style={{
@@ -3724,17 +3714,17 @@ function PinLoginScreen({ hasUrlToken, loginViaPin }) {
           </button>
           {showLinkHelp && (
             <div className="px-4 pb-4 space-y-2" style={{ borderTop: '1px solid #F1F5F9' }}>
-              <div className="flex items-start gap-2 text-xs mt-3" style={{ color: '#1A1814' }}>
+              <div className="flex items-start gap-2 text-xs mt-3" style={{ color: 'var(--mc-text)' }}>
                 <span className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-white font-bold"
                       style={{ background: '#297b8a', fontSize: 9 }}>1</span>
                 <span>Откройте <strong>Telegram</strong> и запустите бот CRM</span>
               </div>
-              <div className="flex items-start gap-2 text-xs" style={{ color: '#1A1814' }}>
+              <div className="flex items-start gap-2 text-xs" style={{ color: 'var(--mc-text)' }}>
                 <span className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-white font-bold"
                       style={{ background: '#297b8a', fontSize: 9 }}>2</span>
                 <span>На главной нажмите <strong>«Открыть в браузере на ПК»</strong></span>
               </div>
-              <div className="flex items-start gap-2 text-xs" style={{ color: '#1A1814' }}>
+              <div className="flex items-start gap-2 text-xs" style={{ color: 'var(--mc-text)' }}>
                 <span className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-white font-bold"
                       style={{ background: '#297b8a', fontSize: 9 }}>3</span>
                 <span>Вставьте открывшуюся ссылку в этот браузер</span>
@@ -3745,8 +3735,8 @@ function PinLoginScreen({ hasUrlToken, loginViaPin }) {
 
         {/* Dev hint */}
         <div className="mt-3 text-center text-xs rounded-xl p-3"
-             style={{ background: 'white', color: '#64748B', border: '1px solid #E5E7EB' }}>
-          <strong style={{ color: '#1A1814' }}>Разработчик:</strong> добавь{' '}
+             style={{ background: 'var(--mc-surface)', color: 'var(--mc-muted)', border: '1px solid var(--mc-border)' }}>
+          <strong style={{ color: 'var(--mc-text)' }}>Разработчик:</strong> добавь{' '}
           <span className="mono-font">VITE_DEV_TELEGRAM_ID=…</span> в <span className="mono-font">.env</span>
         </div>
       </div>
@@ -3864,9 +3854,13 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     <div className="flex min-h-screen">
       {/* Sidebar Desktop */}
       <aside className="hidden lg:flex flex-col w-64 flex-shrink-0 sticky top-0 h-screen" style={{ background: 'var(--mc-sidebar-bg)', borderRight: '1px solid var(--mc-border)' }}>
-        <div className="p-5">
+        <div className="px-5 pt-5 pb-3">
           <img src="/logo-hor.png" alt="Master Coffee Roasters"
-               style={{ height: 36, objectFit: 'contain', objectPosition: 'left' }} />
+               style={{ height: 32, objectFit: 'contain', objectPosition: 'left' }} />
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: '#297b8a',
+                        textTransform: 'uppercase', marginTop: 4 }}>
+            MC Workspace · Almaty
+          </div>
         </div>
 
         
@@ -3911,8 +3905,8 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
           title={`${currentUser.first_name} ${currentUser.last_name}`}
         >
           <div className="text-right hidden sm:block">
-            <div className="text-xs font-semibold truncate max-w-[120px]" style={{ color: '#1A1814' }}>{currentUser.first_name}</div>
-            <div className="text-[10px]" style={{ color: '#64748B' }}>{roleOf(db, currentUser.role).short}</div>
+            <div className="text-xs font-semibold truncate max-w-[120px]" style={{ color: 'var(--mc-text)' }}>{currentUser.first_name}</div>
+            <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>{roleOf(db, currentUser.role).short}</div>
           </div>
           <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: roleOf(db, currentUser.role).color }}>
             {currentUser.photo_url
@@ -3927,10 +3921,16 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       {mobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={() => setMobileMenuOpen(false)}>
           <aside className="w-72 max-w-[80%] h-full flex flex-col overflow-y-auto" style={{ background: 'var(--mc-sidebar-bg)' }} onClick={e => e.stopPropagation()}>
-            <div className="p-5 flex items-center justify-between flex-shrink-0">
-              <img src="/logo-hor.png" alt="Master Coffee Roasters"
-                   style={{ height: 30, objectFit: 'contain' }} />
-              <button onClick={() => setMobileMenuOpen(false)}><X size={20} /></button>
+            <div className="px-5 pt-5 pb-3 flex items-start justify-between flex-shrink-0">
+              <div>
+                <img src="/logo-hor.png" alt="Master Coffee Roasters"
+                     style={{ height: 28, objectFit: 'contain' }} />
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: '#297b8a',
+                              textTransform: 'uppercase', marginTop: 3 }}>
+                  MC Workspace · Almaty
+                </div>
+              </div>
+              <button onClick={() => setMobileMenuOpen(false)} style={{ color: 'var(--mc-muted)', marginTop: 2 }}><X size={20} /></button>
             </div>
             
             <nav className="px-3 flex-1 overflow-y-auto">
@@ -4000,20 +4000,20 @@ function ActAsSwitcher({ ctx }) {
       <button
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm"
-        style={{ background: actAsRole ? `${actAsRole.color}15` : '#F5F7F8', color: actAsRole ? actAsRole.color : '#64748B', border: `1px dashed ${actAsRole ? actAsRole.color : '#E5E7EB'}` }}
+        style={{ background: actAsRole ? `${actAsRole.color}15` : 'var(--mc-active-item)', color: actAsRole ? actAsRole.color : '#64748B', border: `1px dashed ${actAsRole ? actAsRole.color : 'var(--mc-border)'}` }}
       >
         <Eye size={14} />
         <span className="flex-1 truncate">Просмотр: <strong>{current?.label || actAs}</strong></span>
         <ChevronDown size={14} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
       </button>
       {open && (
-        <div className="mt-1 rounded-lg overflow-hidden" style={{ border: '1px solid #E5E7EB', background: 'white', maxHeight: 280, overflowY: 'auto' }}>
+        <div className="mt-1 rounded-lg overflow-hidden" style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)', maxHeight: 280, overflowY: 'auto' }}>
           {options.map(opt => (
             <button
               key={String(opt.v)}
               onClick={() => { setActAs(opt.v); setOpen(false); }}
               className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-              style={{ background: actAs === opt.v ? '#EAF4F6' : 'transparent', color: '#1A1814' }}
+              style={{ background: actAs === opt.v ? '#EAF4F6' : 'transparent', color: 'var(--mc-text)' }}
             >
               {opt.label}
             </button>
@@ -4045,7 +4045,7 @@ function ThemeToggle({ theme, toggleTheme }) {
           position: 'absolute', top: 3,
           left: isDark ? 18 : 3,
           width: 14, height: 14, borderRadius: '50%',
-          background: 'white', transition: 'left 0.2s',
+          background: 'var(--mc-surface)', transition: 'left 0.2s',
           boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
         }} />
       </div>
@@ -4091,7 +4091,7 @@ function UserChip({ user, onLogout, db, onClick }) {
           <div className="text-[11px] truncate" style={{ color: 'var(--mc-muted)' }}>{r.label}</div>
         </div>
       </button>
-      <button onClick={onLogout} className="p-2 rounded hover:bg-white" title="Выйти"><LogOut size={15} style={{ color: '#64748B' }} /></button>
+      <button onClick={onLogout} className="p-2 rounded hover:bg-white" title="Выйти"><LogOut size={15} style={{ color: 'var(--mc-muted)' }} /></button>
     </div>
   );
 }
@@ -4162,7 +4162,7 @@ class ScreenErrorBoundary extends React.Component {
               <button
                 onClick={() => this.setState({ error: null })}
                 className="px-4 py-2.5 rounded-lg font-semibold"
-                style={{ background: '#F5F7F8', color: '#1A1814' }}
+                style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}
               >
                 Повторить
               </button>
@@ -4257,13 +4257,13 @@ function PageHeader({ title, subtitle, action, onBack }) {
     <div className="flex items-start justify-between gap-3 mb-6 flex-wrap">
       <div className="flex items-start gap-2 min-w-0 flex-1">
         {onBack && (
-          <button onClick={onBack} className="p-1 -ml-1 mt-0.5" style={{ color: '#64748B' }}>
+          <button onClick={onBack} className="p-1 -ml-1 mt-0.5" style={{ color: 'var(--mc-muted)' }}>
             <ChevronLeft size={22} />
           </button>
         )}
         <div className="min-w-0">
-          <h1 className="display-font text-2xl sm:text-3xl leading-tight" style={{ color: '#1A1814' }}>{title}</h1>
-          {subtitle && <div className="text-sm mt-1" style={{ color: '#64748B' }}>{subtitle}</div>}
+          <h1 className="display-font text-2xl sm:text-3xl leading-tight" style={{ color: 'var(--mc-text)' }}>{title}</h1>
+          {subtitle && <div className="text-sm mt-1" style={{ color: 'var(--mc-muted)' }}>{subtitle}</div>}
         </div>
       </div>
       {action}
@@ -4304,8 +4304,8 @@ function CustomRoleHome({ ctx }) {
       {tiles.length === 0 ? (
         <Card>
           <div className="flex items-start gap-3 p-2">
-            <Lock size={20} style={{ color: '#64748B' }} className="flex-shrink-0 mt-0.5" />
-            <div className="text-sm" style={{ color: '#1A1814' }}>
+            <Lock size={20} style={{ color: 'var(--mc-muted)' }} className="flex-shrink-0 mt-0.5" />
+            <div className="text-sm" style={{ color: 'var(--mc-text)' }}>
               У вашей роли пока нет прав ни на один раздел. Попросите администратора назначить нужные права в разделе «Роли и права».
             </div>
           </div>
@@ -4317,12 +4317,12 @@ function CustomRoleHome({ ctx }) {
             return (
               <button key={t.id} onClick={() => navigate({ name: t.target })}
                 className="bg-white rounded-xl p-4 flex items-center gap-3 text-left transition hover:shadow-sm"
-                style={{ border: '1px solid #E5E7EB' }}
+                style={{ border: '1px solid var(--mc-border)' }}
               >
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white flex-shrink-0" style={{ background: t.color }}>
                   <Icon size={18} />
                 </div>
-                <div className="font-semibold" style={{ color: '#1A1814' }}>{t.label}</div>
+                <div className="font-semibold" style={{ color: 'var(--mc-text)' }}>{t.label}</div>
               </button>
             );
           })}
@@ -4425,26 +4425,26 @@ function MyPinButton({ ctx }) {
 
   return (
     <div className="rounded-xl mb-3 overflow-hidden transition"
-         style={{ background: hasPinSet ? '#F0FDF4' : 'white', border: `1px solid ${hasPinSet ? '#BBF7D0' : '#E5E7EB'}` }}>
+         style={{ background: hasPinSet ? '#F0FDF4' : 'white', border: `1px solid ${hasPinSet ? '#BBF7D0' : 'var(--mc-border)'}` }}>
       <button onClick={() => { setOpen(v => !v); setError(''); setPin(''); }}
               className="w-full flex items-center gap-3 px-4 py-3 text-left">
         <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-             style={{ background: hasPinSet ? '#10B981' : '#F5F7F8' }}>
+             style={{ background: hasPinSet ? '#10B981' : 'var(--mc-active-item)' }}>
           <KeyRound size={16} style={{ color: hasPinSet ? 'white' : '#A8A8AE' }} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold" style={{ color: '#1A1814' }}>
+          <div className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>
             PIN для входа в браузере
           </div>
           <div className="text-[11px]" style={{ color: hasPinSet ? '#10B981' : '#64748B' }}>
             {hasPinSet ? '✓ Установлен — можно войти без Telegram' : 'Не установлен'}
           </div>
         </div>
-        <ChevronDown size={16} style={{ color: '#64748B', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+        <ChevronDown size={16} style={{ color: 'var(--mc-muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
       </button>
       {open && (
         <div className="px-4 pb-4 pt-1" style={{ borderTop: '1px solid #F1F5F9' }}>
-          <div className="text-xs mb-3" style={{ color: '#64748B' }}>
+          <div className="text-xs mb-3" style={{ color: 'var(--mc-muted)' }}>
             Введите новый 4-значный PIN. Он позволит входить на сайт без Telegram.
           </div>
           <div className="flex gap-2 mb-2">
@@ -4457,7 +4457,7 @@ function MyPinButton({ ctx }) {
               placeholder="••••"
               disabled={loading}
               className="flex-1 px-3 py-2 rounded-lg text-center font-bold outline-none"
-              style={{ fontSize: 22, letterSpacing: '0.35em', border: '2px solid #E5E7EB', background: '#F8FAFC' }}
+              style={{ fontSize: 22, letterSpacing: '0.35em', border: '2px solid var(--mc-border)', background: '#F8FAFC' }}
             />
             <button onClick={handleSave} disabled={loading || pin.length !== 4}
                     className="px-4 py-2 rounded-lg font-semibold text-white text-sm transition"
@@ -4678,8 +4678,8 @@ function DashboardHome({ ctx, title }) {
             <Bell size={18} />
           </div>
           <div className="flex-1">
-            <div className="font-semibold" style={{ color: '#1A1814' }}>{stats.pendingUsers} {stats.pendingUsers === 1 ? 'запрос' : 'запросов'} на доступ</div>
-            <div className="text-xs" style={{ color: '#64748B' }}>Назначить роль</div>
+            <div className="font-semibold" style={{ color: 'var(--mc-text)' }}>{stats.pendingUsers} {stats.pendingUsers === 1 ? 'запрос' : 'запросов'} на доступ</div>
+            <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Назначить роль</div>
           </div>
           <ChevronRight size={18} style={{ color: '#A8A8AE' }} />
         </button>
@@ -4688,45 +4688,45 @@ function DashboardHome({ ctx, title }) {
       {/* СКЛАД — приоритетные плитки на сборку и выдачу */}
       {stats.isWarehouse && (stats.warehouse.toAssemble + stats.warehouse.toShip + stats.warehouse.awaitingPickup + stats.warehouse.readyPickup + stats.warehouse.writeOffsToAssemble + stats.warehouse.writeOffsToDeliver) > 0 && (
         <div className="mb-6">
-          <div className="text-xs uppercase font-bold mb-2" style={{ color: '#64748B', letterSpacing: '0.08em' }}>
+          <div className="text-xs uppercase font-bold mb-2" style={{ color: 'var(--mc-muted)', letterSpacing: '0.08em' }}>
             🏭 Работа склада — сегодня
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             <button
               onClick={() => navigate({ name: 'orders_list', filterStatus: 'paid' })}
               className="rounded-xl p-3 text-left transition hover:shadow-md"
-              style={{ background: stats.warehouse.toAssemble > 0 ? '#FEF3C7' : 'white', border: '1.5px solid ' + (stats.warehouse.toAssemble > 0 ? '#F59E0B' : '#E5E7EB') }}
+              style={{ background: stats.warehouse.toAssemble > 0 ? '#FEF3C7' : 'white', border: '1.5px solid ' + (stats.warehouse.toAssemble > 0 ? '#F59E0B' : 'var(--mc-border)') }}
             >
               <div className="text-2xl font-bold" style={{ color: '#F59E0B' }}>{stats.warehouse.toAssemble}</div>
-              <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>К сборке</div>
-              <div className="text-[10px]" style={{ color: '#64748B' }}>оплачены</div>
+              <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>К сборке</div>
+              <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>оплачены</div>
             </button>
             <button
               onClick={() => navigate({ name: 'orders_list', filterStatus: 'shipped' })}
               className="rounded-xl p-3 text-left transition hover:shadow-md"
-              style={{ background: stats.warehouse.toShip > 0 ? '#DBEAFE' : 'white', border: '1.5px solid ' + (stats.warehouse.toShip > 0 ? '#3390EC' : '#E5E7EB') }}
+              style={{ background: stats.warehouse.toShip > 0 ? '#DBEAFE' : 'white', border: '1.5px solid ' + (stats.warehouse.toShip > 0 ? '#3390EC' : 'var(--mc-border)') }}
             >
               <div className="text-2xl font-bold" style={{ color: '#3390EC' }}>{stats.warehouse.toShip}</div>
-              <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>К отгрузке</div>
-              <div className="text-[10px]" style={{ color: '#64748B' }}>доставка</div>
+              <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>К отгрузке</div>
+              <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>доставка</div>
             </button>
             <button
               onClick={() => navigate({ name: 'warehouse' })}
               className="rounded-xl p-3 text-left transition hover:shadow-md"
-              style={{ background: stats.warehouse.awaitingPickup > 0 ? '#E0E7FF' : 'white', border: '1.5px solid ' + (stats.warehouse.awaitingPickup > 0 ? '#6366F1' : '#E5E7EB') }}
+              style={{ background: stats.warehouse.awaitingPickup > 0 ? '#E0E7FF' : 'white', border: '1.5px solid ' + (stats.warehouse.awaitingPickup > 0 ? '#6366F1' : 'var(--mc-border)') }}
             >
               <div className="text-2xl font-bold" style={{ color: '#6366F1' }}>{stats.warehouse.awaitingPickup}</div>
-              <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>Самовывоз</div>
-              <div className="text-[10px]" style={{ color: '#64748B' }}>подготовить</div>
+              <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>Самовывоз</div>
+              <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>подготовить</div>
             </button>
             <button
               onClick={() => navigate({ name: 'warehouse' })}
               className="rounded-xl p-3 text-left transition hover:shadow-md"
-              style={{ background: stats.warehouse.readyPickup > 0 ? '#DCFCE7' : 'white', border: '1.5px solid ' + (stats.warehouse.readyPickup > 0 ? '#22C55E' : '#E5E7EB') }}
+              style={{ background: stats.warehouse.readyPickup > 0 ? '#DCFCE7' : 'white', border: '1.5px solid ' + (stats.warehouse.readyPickup > 0 ? '#22C55E' : 'var(--mc-border)') }}
             >
               <div className="text-2xl font-bold" style={{ color: '#22C55E' }}>{stats.warehouse.readyPickup}</div>
-              <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>Готовы</div>
-              <div className="text-[10px]" style={{ color: '#64748B' }}>ждут клиента</div>
+              <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>Готовы</div>
+              <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>ждут клиента</div>
             </button>
             {stats.warehouse.writeOffsToAssemble > 0 && (
               <button
@@ -4735,8 +4735,8 @@ function DashboardHome({ ctx, title }) {
                 style={{ background: '#EDE9FE', border: '1.5px solid #7C3AED' }}
               >
                 <div className="text-2xl font-bold" style={{ color: '#7C3AED' }}>{stats.warehouse.writeOffsToAssemble}</div>
-                <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>Списания</div>
-                <div className="text-[10px]" style={{ color: '#64748B' }}>к сборке</div>
+                <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>Списания</div>
+                <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>к сборке</div>
               </button>
             )}
             {stats.warehouse.writeOffsToDeliver > 0 && (
@@ -4746,8 +4746,8 @@ function DashboardHome({ ctx, title }) {
                 style={{ background: '#DCFCE7', border: '1.5px solid #16A34A' }}
               >
                 <div className="text-2xl font-bold" style={{ color: '#16A34A' }}>{stats.warehouse.writeOffsToDeliver}</div>
-                <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>Списания</div>
-                <div className="text-[10px]" style={{ color: '#64748B' }}>к выдаче</div>
+                <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>Списания</div>
+                <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>к выдаче</div>
               </button>
             )}
           </div>
@@ -4798,7 +4798,7 @@ function DashboardHome({ ctx, title }) {
       {/* Список последних заявок, если есть */}
       {stats.orders.active > 0 && (has('orders_view_all') || has('orders_view_own')) && (
         <>
-          <h2 className="display-font text-xl mb-3" style={{ color: '#1A1814' }}>Последние активные заявки</h2>
+          <h2 className="display-font text-xl mb-3" style={{ color: 'var(--mc-text)' }}>Последние активные заявки</h2>
           <OrdersList orders={db.orders.filter(o => o.status !== 'archived' && o.status !== 'cancelled').slice(0, 5)} ctx={ctx} />
         </>
       )}
@@ -4816,10 +4816,6 @@ function UserHeroCard({ user, db }) {
   return (
     <div className="rounded-2xl p-5 mb-5 flex items-center gap-4"
          style={{ background: 'linear-gradient(135deg, #297b8a 0%, #1f6573 100%)', position: 'relative', overflow: 'hidden' }}>
-      {/* Watermark — реальный логотип черепахи */}
-      <img src="/logo-symbol.png" alt=""
-           style={{ position: 'absolute', right: -10, bottom: -14, width: 88, height: 88,
-                    objectFit: 'contain', opacity: 0.12, filter: 'brightness(10)', pointerEvents: 'none' }} />
       <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center text-white font-bold text-xl"
            style={{ background: 'rgba(255,255,255,0.15)' }}>
         {user.photo_url
@@ -4852,9 +4848,9 @@ function UserHeroCard({ user, db }) {
 
 function StatTile({ label, value, color, onClick }) {
   return (
-    <button onClick={onClick} className="rounded-xl p-4 bg-white text-left transition hover:shadow-md" style={{ border: '1px solid #E5E7EB' }}>
+    <button onClick={onClick} className="rounded-xl p-4 bg-white text-left transition hover:shadow-md" style={{ border: '1px solid var(--mc-border)' }}>
       <div className="text-3xl font-bold mb-1" style={{ color }}>{value}</div>
-      <div className="text-xs flex items-center gap-1" style={{ color: '#64748B' }}>
+      <div className="text-xs flex items-center gap-1" style={{ color: 'var(--mc-muted)' }}>
         {label} <ChevronRight size={11} />
       </div>
     </button>
@@ -4900,9 +4896,9 @@ function B2BHome({ ctx }) {
           <button key={f.id} onClick={() => setFilter(f.id)}
             className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
             style={{
-              background: filter === f.id ? '#1A1814' : 'white',
+              background: filter === f.id ? '#297b8a' : 'var(--mc-surface)',
               color: filter === f.id ? 'white' : '#64748B',
-              border: filter === f.id ? '1px solid #1A1814' : '1px solid #E5E7EB',
+              border: filter === f.id ? '1px solid #297b8a' : '1px solid var(--mc-border)',
             }}>
             {f.label} <span style={{ opacity: 0.7, marginLeft: 3 }}>{counts[f.id]}</span>
           </button>
@@ -4958,7 +4954,7 @@ function WarehouseHome({ ctx }) {
       {/* Списания к сборке / выдаче */}
       {totalWriteoffs > 0 && (
         <div className="mb-6">
-          <h2 className="display-font text-xl mb-3" style={{ color: '#1A1814' }}>
+          <h2 className="display-font text-xl mb-3" style={{ color: 'var(--mc-text)' }}>
             Списания
             {writeoffsToAssemble.length > 0 && <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: '#EDE9FE', color: '#7C3AED' }}>к сборке: {writeoffsToAssemble.length}</span>}
             {writeoffsToDeliver.length > 0  && <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: '#DCFCE7', color: '#16A34A' }}>к выдаче: {writeoffsToDeliver.length}</span>}
@@ -4978,10 +4974,10 @@ function WarehouseHome({ ctx }) {
                     {wo.status === 'invoiced' ? '📦 Собрать' : `✅ Выдать · код ${wo.pickup_code}`}
                   </span>
                 </div>
-                <div className="text-sm font-semibold truncate" style={{ color: '#1A1814' }}>
+                <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>
                   {wo.items[0]?.name}{wo.items.length > 1 ? ` и ещё ${wo.items.length - 1}` : ''}
                 </div>
-                <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>{wo.reason.slice(0, 80)}</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>{wo.reason.slice(0, 80)}</div>
               </button>
             ))}
           </div>
@@ -4994,23 +4990,23 @@ function WarehouseHome({ ctx }) {
 
       {readyToPickup.length > 0 && (
         <>
-          <h2 className="display-font text-xl mb-3" style={{ color: '#1A1814' }}>Готовые к выдаче</h2>
+          <h2 className="display-font text-xl mb-3" style={{ color: 'var(--mc-text)' }}>Готовые к выдаче</h2>
           <div className="space-y-3 mb-6">
             {readyToPickup.map(o => (
               <div key={o.id} className="rounded-xl p-4" style={{ border: '1px solid #86EFAC', background: '#F0FDF4' }}>
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="flex-1 min-w-0">
                     <div className="font-bold mono-font text-sm mb-1" style={{ color: '#22C55E' }}>№{o.order_number}</div>
-                    <div className="font-semibold truncate" style={{ color: '#1A1814' }}>
+                    <div className="font-semibold truncate" style={{ color: 'var(--mc-text)' }}>
                       {o.client_type === 'individual' ? o.full_name : o.company_name}
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <div className="text-xs" style={{ color: '#64748B' }}>Код выдачи</div>
+                    <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Код выдачи</div>
                     <div className="mono-font text-2xl font-bold tracking-widest" style={{ color: '#22C55E' }}>{o.pickup_code}</div>
                   </div>
                 </div>
-                <div className="text-sm mb-3" style={{ color: '#64748B' }}>
+                <div className="text-sm mb-3" style={{ color: 'var(--mc-muted)' }}>
                   {o.items.map(it => `${it.name} · ${it.quantity} ${it.unit}`).join(' · ')}
                 </div>
                 <button
@@ -5028,15 +5024,15 @@ function WarehouseHome({ ctx }) {
 
       {pickupShipped.length > 0 && (
         <>
-          <h2 className="display-font text-xl mb-3" style={{ color: '#1A1814' }}>Ожидают подготовки</h2>
+          <h2 className="display-font text-xl mb-3" style={{ color: 'var(--mc-text)' }}>Ожидают подготовки</h2>
           <div className="space-y-3">
             {pickupShipped.map(o => (
-              <div key={o.id} className="rounded-xl p-4 bg-white" style={{ border: '1px solid #E5E7EB' }}>
+              <div key={o.id} className="rounded-xl p-4 bg-white" style={{ border: '1px solid var(--mc-border)' }}>
                 <div className="font-bold mono-font text-sm mb-1" style={{ color: '#3390EC' }}>№{o.order_number}</div>
-                <div className="font-semibold mb-1" style={{ color: '#1A1814' }}>
+                <div className="font-semibold mb-1" style={{ color: 'var(--mc-text)' }}>
                   {o.client_type === 'individual' ? o.full_name : o.company_name}
                 </div>
-                <div className="text-sm mb-3" style={{ color: '#64748B' }}>
+                <div className="text-sm mb-3" style={{ color: 'var(--mc-muted)' }}>
                   {o.items.map(it => `${it.name} — ${it.quantity} ${it.unit}`).join(' · ')}
                 </div>
                 <button
@@ -5055,7 +5051,7 @@ function WarehouseHome({ ctx }) {
       {/* Заказы на доставку — отгружены, ожидают подтверждения доставки */}
       {deliveryShipped.length > 0 && (
         <>
-          <h2 className="display-font text-xl mb-3" style={{ color: '#1A1814' }}>
+          <h2 className="display-font text-xl mb-3" style={{ color: 'var(--mc-text)' }}>
             В доставке
             <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: '#E0F2FE', color: '#0284C7' }}>
               {deliveryShipped.length}
@@ -5067,23 +5063,23 @@ function WarehouseHome({ ctx }) {
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="flex-1 min-w-0">
                     <div className="font-bold mono-font text-sm mb-1" style={{ color: '#0284C7' }}>№{o.order_number}</div>
-                    <div className="font-semibold truncate" style={{ color: '#1A1814' }}>
+                    <div className="font-semibold truncate" style={{ color: 'var(--mc-text)' }}>
                       {o.client_type === 'individual' ? o.full_name : o.company_name}
                     </div>
                   </div>
                   <button
                     onClick={() => navigate({ name: 'order_detail', orderId: o.id })}
                     className="text-xs px-3 py-1.5 rounded-lg font-semibold flex-shrink-0"
-                    style={{ background: '#F1F5F9', color: '#64748B' }}
+                    style={{ background: '#F1F5F9', color: 'var(--mc-muted)' }}
                   >
                     Детали
                   </button>
                 </div>
-                <div className="text-sm mb-3" style={{ color: '#64748B' }}>
+                <div className="text-sm mb-3" style={{ color: 'var(--mc-muted)' }}>
                   {o.items.map(it => `${it.name} — ${it.quantity} ${it.unit}`).join(' · ')}
                 </div>
                 {o.address && (
-                  <div className="text-xs mb-3 flex items-center gap-1" style={{ color: '#64748B' }}>
+                  <div className="text-xs mb-3 flex items-center gap-1" style={{ color: 'var(--mc-muted)' }}>
                     <Truck size={12} /> {o.address}
                   </div>
                 )}
@@ -5107,8 +5103,8 @@ function WarehouseHome({ ctx }) {
       {pickupModal && (
         <Modal onClose={() => setPickupModal(null)} title="Выдача по коду">
           <div className="space-y-4">
-            <div className="text-sm" style={{ color: '#64748B' }}>
-              Заявка <strong style={{ color: '#1A1814' }}>№{pickupModal.order_number}</strong>
+            <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
+              Заявка <strong style={{ color: 'var(--mc-text)' }}>№{pickupModal.order_number}</strong>
             </div>
             <SiteInput label="Код от клиента" value={enteredCode} onChange={v => setEnteredCode(v.replace(/\D/g, '').slice(0, 4))} placeholder="4 цифры" />
             {enteredCode.length === 4 && enteredCode !== pickupModal.pickup_code && (
@@ -5117,7 +5113,7 @@ function WarehouseHome({ ctx }) {
               </div>
             )}
             <div className="flex gap-2">
-              <button onClick={() => setPickupModal(null)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+              <button onClick={() => setPickupModal(null)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
               <button
                 disabled={enteredCode !== pickupModal.pickup_code}
                 onClick={() => { closePickupOrder(pickupModal.id, enteredCode); setPickupModal(null); showToast('Заказ выдан · перенесён в архив'); }}
@@ -5135,16 +5131,16 @@ function WarehouseHome({ ctx }) {
 
 function Stat({ label, value, color }) {
   return (
-    <div className="rounded-xl p-4 bg-white" style={{ border: '1px solid #E5E7EB' }}>
+    <div className="rounded-xl p-4 bg-white" style={{ border: '1px solid var(--mc-border)' }}>
       <div className="text-3xl font-bold mb-1" style={{ color }}>{value}</div>
-      <div className="text-xs" style={{ color: '#64748B' }}>{label}</div>
+      <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>{label}</div>
     </div>
   );
 }
 
 function ActionPill({ label, onClick, icon: Icon, accent }) {
   return (
-    <button onClick={onClick} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-white" style={{ border: '1px solid #E5E7EB', color: accent || '#1A1814' }}>
+    <button onClick={onClick} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-white" style={{ border: '1px solid var(--mc-border)', color: accent || 'var(--mc-text)' }}>
       <Icon size={14} /> {label}
     </button>
   );
@@ -5232,7 +5228,7 @@ function OrdersListScreen({ ctx }) {
             <div className="flex gap-2">
               <button onClick={() => navigate({ name: 'create_quick' })}
                 className="px-3 py-2 rounded-lg font-semibold text-sm flex items-center gap-1.5"
-                style={{ background: '#F5F7F8', color: '#1A1814' }}>
+                style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
                 <Sparkles size={14} /> Быстрая
               </button>
               <button onClick={() => navigate({ name: 'create_order' })}
@@ -5255,23 +5251,23 @@ function OrdersListScreen({ ctx }) {
               className="rounded-lg p-3 text-left transition"
               style={{
                 background: active ? `${t.color}15` : 'white',
-                border: active ? `1.5px solid ${t.color}` : '1px solid #E5E7EB',
+                border: active ? `1.5px solid ${t.color}` : '1px solid var(--mc-border)',
               }}>
               <div className="text-2xl font-bold" style={{ color: t.color }}>{t.count}</div>
-              <div className="text-xs" style={{ color: '#64748B' }}>{t.label}</div>
+              <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>{t.label}</div>
             </button>
           );
         })}
       </div>
 
       {/* Поиск + быстрый фильтр "Все" */}
-      <div className="bg-white rounded-xl p-3 mb-4" style={{ border: '1px solid #E5E7EB' }}>
+      <div className="bg-white rounded-xl p-3 mb-4" style={{ border: '1px solid var(--mc-border)' }}>
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#A8A8AE' }} />
             <input
               className="w-full pl-9 pr-3 py-2 rounded-lg outline-none"
-              style={{ border: '1px solid #E5E7EB' }}
+              style={{ border: '1px solid var(--mc-border)' }}
               placeholder="Номер заявки, клиент, телефон, товар…"
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -5280,7 +5276,7 @@ function OrdersListScreen({ ctx }) {
           {filter !== 'all' && (
             <button onClick={() => setFilter('all')}
               className="text-xs px-3 py-2 rounded-lg whitespace-nowrap"
-              style={{ background: '#F5F7F8', color: '#64748B' }}>
+              style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
               Сбросить фильтр
             </button>
           )}
@@ -5319,29 +5315,29 @@ function OrderCard({ order, ctx }) {
     <button
       onClick={() => navigate({ name: 'order_detail', orderId: order.id })}
       className="w-full text-left bg-white rounded-xl p-4 transition hover:shadow-sm"
-      style={{ border: '1px solid #E5E7EB' }}
+      style={{ border: '1px solid var(--mc-border)' }}
     >
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 min-w-0 flex-wrap">
-          {order.client_type === 'individual' ? <User size={15} style={{ color: '#64748B' }} /> : <Building2 size={15} style={{ color: '#64748B' }} />}
+          {order.client_type === 'individual' ? <User size={15} style={{ color: 'var(--mc-muted)' }} /> : <Building2 size={15} style={{ color: 'var(--mc-muted)' }} />}
           <span className="font-bold mono-font text-sm" style={{ color: '#3390EC' }}>№{order.order_number}</span>
           {order.kind === 'quick' && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#FEF3C7', color: '#92400E' }}>QUICK</span>}
         </div>
         <StatusBadge status={order.status} />
       </div>
-      <div className="font-semibold mb-1 truncate" style={{ color: '#1A1814' }}>
+      <div className="font-semibold mb-1 truncate" style={{ color: 'var(--mc-text)' }}>
         {order.client_type === 'individual' ? order.full_name : order.company_name}
       </div>
-      <div className="text-sm mb-2 truncate" style={{ color: '#64748B' }}>
+      <div className="text-sm mb-2 truncate" style={{ color: 'var(--mc-muted)' }}>
         {order.items.map(it => `${it.name.slice(0, 30)}${it.name.length > 30 ? '…' : ''} · ${it.quantity}${it.unit}`).join(' · ')}
       </div>
-      <div className="flex items-center justify-between text-xs flex-wrap gap-2" style={{ color: '#64748B' }}>
+      <div className="flex items-center justify-between text-xs flex-wrap gap-2" style={{ color: 'var(--mc-muted)' }}>
         <span className="flex items-center gap-1">
           {order.delivery_method === 'pickup' ? <Package size={12} /> : <Truck size={12} />}
           {order.delivery_method === 'pickup' ? 'Самовывоз' : 'Доставка'}
           {order.pickup_code && <span className="mono-font font-bold ml-1" style={{ color: '#22C55E' }}>· код {order.pickup_code}</span>}
         </span>
-        <span className="font-bold" style={{ color: '#1A1814' }}>{fmtNum(order.total_amount)} тг</span>
+        <span className="font-bold" style={{ color: 'var(--mc-text)' }}>{fmtNum(order.total_amount)} тг</span>
       </div>
       <div className="flex items-center justify-between text-[11px] mt-1.5" style={{ color: '#A8A8AE' }}>
         <span>{author ? `${author.first_name} ${author.last_name[0]}.` : ''}</span>
@@ -5364,12 +5360,12 @@ function StatusBadge({ status }) {
 
 function Empty({ icon: Icon = Inbox, title, subtitle }) {
   return (
-    <div className="rounded-xl bg-white py-14 px-6 text-center" style={{ border: '1px solid #E5E7EB' }}>
-      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-4" style={{ background: '#F5F7F8' }}>
+    <div className="rounded-xl bg-white py-14 px-6 text-center" style={{ border: '1px solid var(--mc-border)' }}>
+      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-4" style={{ background: 'var(--mc-active-item)' }}>
         <Icon size={22} style={{ color: '#A8A8AE' }} />
       </div>
-      <div className="font-semibold mb-1" style={{ color: '#1A1814' }}>{title}</div>
-      {subtitle && <div className="text-sm max-w-md mx-auto" style={{ color: '#64748B' }}>{subtitle}</div>}
+      <div className="font-semibold mb-1" style={{ color: 'var(--mc-text)' }}>{title}</div>
+      {subtitle && <div className="text-sm max-w-md mx-auto" style={{ color: 'var(--mc-muted)' }}>{subtitle}</div>}
     </div>
   );
 }
@@ -5399,7 +5395,7 @@ function PickupDeliverBlock({ order, closePickupOrder, showToast }) {
           placeholder="0000"
           maxLength={4}
           className="flex-1 px-3 py-2 rounded-lg outline-none mono-font text-center text-2xl font-bold tracking-wider"
-          style={{ border: '1px solid #86EFAC', background: 'white' }}
+          style={{ border: '1px solid #86EFAC', background: 'var(--mc-surface)' }}
         />
         <button
           onClick={() => {
@@ -5473,19 +5469,19 @@ function OrderDetailScreen({ ctx, orderId }) {
           <Card title={isLegal ? 'Юридическое лицо' : 'Физическое лицо'}>
             {isLegal ? (
               <>
-                <FieldRow label="Наименование" value={<strong style={{ color: '#1A1814' }}>{order.company_name}</strong>} />
+                <FieldRow label="Наименование" value={<strong style={{ color: 'var(--mc-text)' }}>{order.company_name}</strong>} />
                 <FieldRow label="БИН/ИИН" value={<span className="mono-font">{order.bin}</span>} />
                 <FieldRow label="Контакт" value={order.contact_person} />
               </>
             ) : (
-              <FieldRow label="ФИО" value={<strong style={{ color: '#1A1814' }}>{order.full_name}</strong>} />
+              <FieldRow label="ФИО" value={<strong style={{ color: 'var(--mc-text)' }}>{order.full_name}</strong>} />
             )}
             <FieldRow label="Телефон" value={prettyPhone(order.phone)} />
             <FieldRow label={isLegal ? 'Юр. адрес' : 'Адрес'} value={order.address} />
             {isLegal && (order.bank || order.kbe || order.bik || order.account_number) && (
               <>
                 <div className="pt-2 mt-1" style={{ borderTop: '1px solid #F1F5F9' }}>
-                  <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#64748B' }}>Банковские реквизиты</div>
+                  <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--mc-muted)' }}>Банковские реквизиты</div>
                 </div>
                 {order.bank           && <FieldRow label="Банк"        value={order.bank} />}
                 {order.kbe            && <FieldRow label="КБе"         value={<span className="mono-font">{order.kbe}</span>} />}
@@ -5499,20 +5495,20 @@ function OrderDetailScreen({ ctx, orderId }) {
             {order.items.map((it, i) => (
               <div key={i} className="flex items-start justify-between py-2.5" style={{ borderBottom: i < order.items.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
                 <div className="flex-1 min-w-0 pr-3">
-                  <div className="text-sm font-medium" style={{ color: '#1A1814' }}>{it.name}</div>
-                  <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>
+                  <div className="text-sm font-medium" style={{ color: 'var(--mc-text)' }}>{it.name}</div>
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>
                     {it.quantity} {it.unit} × {fmtNum(it.price)} тг
                     {it.original_price && it.price !== it.original_price && (
                       <span className="ml-2" style={{ color: '#F59E0B' }}>(прайс {fmtNum(it.original_price)})</span>
                     )}
                   </div>
                 </div>
-                <div className="font-bold whitespace-nowrap" style={{ color: '#1A1814' }}>{fmtNum(it.quantity * it.price)} тг</div>
+                <div className="font-bold whitespace-nowrap" style={{ color: 'var(--mc-text)' }}>{fmtNum(it.quantity * it.price)} тг</div>
               </div>
             ))}
-            <div className="flex items-center justify-between pt-3 mt-1" style={{ borderTop: '1px solid #E5E7EB' }}>
-              <span className="text-sm font-semibold" style={{ color: '#64748B' }}>ИТОГО</span>
-              <span className="text-lg font-bold" style={{ color: '#1A1814' }}>{fmtNum(order.total_amount)} тг</span>
+            <div className="flex items-center justify-between pt-3 mt-1" style={{ borderTop: '1px solid var(--mc-border)' }}>
+              <span className="text-sm font-semibold" style={{ color: 'var(--mc-muted)' }}>ИТОГО</span>
+              <span className="text-lg font-bold" style={{ color: 'var(--mc-text)' }}>{fmtNum(order.total_amount)} тг</span>
             </div>
           </Card>
 
@@ -5523,16 +5519,16 @@ function OrderDetailScreen({ ctx, orderId }) {
               const actor = db.users.find(u => u.id === l.actor);
               return (
                 <div key={i} className="flex items-start gap-3 py-2" style={{ borderBottom: i < order.log.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#F5F7F8', color: '#64748B' }}>
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
                     {l.event === 'created' ? <Plus size={13} /> : l.event === 'pickup_closed' ? <CheckCircle2 size={13} /> : <ArrowRight size={13} />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm" style={{ color: '#1A1814' }}>
+                    <div className="text-sm" style={{ color: 'var(--mc-text)' }}>
                       {l.event === 'created' && 'Создана'}
                       {l.event === 'status' && <>{STATUS[l.from]?.short || l.from} → <strong>{STATUS[l.to]?.short || l.to}</strong></>}
                       {l.event === 'pickup_closed' && 'Заказ выдан клиенту'}
                     </div>
-                    <div className="text-xs" style={{ color: '#64748B' }}>
+                    <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                       {actor ? `${actor.first_name} ${actor.last_name}` : 'Система'} · {fmtDateTime(l.at)}
                     </div>
                     {l.meta?.pdf && <div className="text-xs mt-0.5" style={{ color: '#8B5CF6' }}>📎 {typeof l.meta.pdf === 'string' ? l.meta.pdf : l.meta.pdf.name}</div>}
@@ -5553,7 +5549,7 @@ function OrderDetailScreen({ ctx, orderId }) {
               </div>
               {order.pickup_code && (
                 <div className="text-right">
-                  <div className="text-[11px]" style={{ color: '#64748B' }}>Код</div>
+                  <div className="text-[11px]" style={{ color: 'var(--mc-muted)' }}>Код</div>
                   <div className="mono-font text-xl font-bold tracking-wider" style={{ color: '#22C55E' }}>{order.pickup_code}</div>
                 </div>
               )}
@@ -5564,13 +5560,13 @@ function OrderDetailScreen({ ctx, orderId }) {
             <Card title="Способ оплаты">
               <div className="flex items-center gap-2">
                 <Banknote size={16} style={{ color: '#297b8a' }} />
-                <span className="font-semibold" style={{ color: '#1A1814' }}>
+                <span className="font-semibold" style={{ color: 'var(--mc-text)' }}>
                   {order.payment_method === 'on_delivery'    && 'При получении'}
                   {order.payment_method === 'kaspi_remote'   && 'Удалённый счёт Kaspi'}
                   {order.payment_method === 'prepay_invoice' && 'Счёт на предоплату'}
                 </span>
               </div>
-              <div className="text-xs mt-1" style={{ color: '#64748B' }}>
+              <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>
                 {order.payment_method === 'on_delivery'    && 'Оплата при выдаче. Можно сразу отгружать.'}
                 {order.payment_method === 'kaspi_remote'   && 'Клиент оплачивает по ссылке/QR. Отгружать после подтверждения оплаты.'}
                 {order.payment_method === 'prepay_invoice' && 'Отгрузка только после поступления денег по счёту.'}
@@ -5583,8 +5579,8 @@ function OrderDetailScreen({ ctx, orderId }) {
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: '#EDE9FE', color: '#8B5CF6' }}><FileText size={18} /></div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold truncate" style={{ color: '#1A1814' }}>{order.invoice_pdf.name}</div>
-                  <div className="text-xs" style={{ color: '#64748B' }}>{order.invoice_pdf.size_kb} КБ</div>
+                  <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>{order.invoice_pdf.name}</div>
+                  <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>{order.invoice_pdf.size_kb} КБ</div>
                 </div>
               </div>
             </Card>
@@ -5592,8 +5588,8 @@ function OrderDetailScreen({ ctx, orderId }) {
 
           {order.realization_doc_no && (
             <Card title="Документ реализации (1С)">
-              <div className="mono-font text-xl font-bold tracking-wider" style={{ color: isValidDocNo(order.realization_doc_no) ? '#22C55E' : '#1A1814' }}>{order.realization_doc_no}</div>
-              {order.shipped_at && <div className="text-xs mt-1" style={{ color: '#64748B' }}>Отгружен: {fmtDate(order.shipped_at)}</div>}
+              <div className="mono-font text-xl font-bold tracking-wider" style={{ color: isValidDocNo(order.realization_doc_no) ? '#22C55E' : 'var(--mc-text)' }}>{order.realization_doc_no}</div>
+              {order.shipped_at && <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>Отгружен: {fmtDate(order.shipped_at)}</div>}
             </Card>
           )}
 
@@ -5707,7 +5703,7 @@ function StatusTimeline({ status }) {
               >
                 {reached ? <Check size={14} /> : <CircleDot size={11} />}
               </div>
-              <div className="text-[10px] mt-1.5 text-center whitespace-nowrap" style={{ color: reached ? '#1A1814' : '#A8A8AE', fontWeight: current ? 700 : 500 }}>
+              <div className="text-[10px] mt-1.5 text-center whitespace-nowrap" style={{ color: reached ? 'var(--mc-text)' : '#A8A8AE', fontWeight: current ? 700 : 500 }}>
                 {STATUS[s].short}
               </div>
             </div>
@@ -5740,26 +5736,26 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
   return (
     <Modal onClose={onClose} title={title}>
       <div className="space-y-4">
-        <div className="text-sm" style={{ color: '#64748B' }}>
-          Заявка <strong style={{ color: '#1A1814' }}>№{order.order_number}</strong>
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
+          Заявка <strong style={{ color: 'var(--mc-text)' }}>№{order.order_number}</strong>
         </div>
 
         {isCancellation && (
           <div>
-            <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Причина отмены</label>
+            <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Причина отмены</label>
             <textarea
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
               placeholder="Объясните причину отмены (обязательно)"
               className="w-full p-2.5 rounded-lg outline-none resize-none"
-              style={{ border: '1px solid #E5E7EB', minHeight: 80, color: '#1A1814' }}
+              style={{ border: '1px solid var(--mc-border)', minHeight: 80, color: 'var(--mc-text)' }}
             />
           </div>
         )}
 
         {needsPDF && (
           <div>
-            <label className="text-xs font-semibold mb-2 block" style={{ color: '#64748B' }}>Прикрепите PDF счёта (обязательно для юр. лица)</label>
+            <label className="text-xs font-semibold mb-2 block" style={{ color: 'var(--mc-muted)' }}>Прикрепите PDF счёта (обязательно для юр. лица)</label>
             {pdfFile ? (
               <div className="flex items-center gap-2 p-3 rounded-lg" style={{ background: '#EDE9FE' }}>
                 <FileText size={18} style={{ color: '#8B5CF6' }} />
@@ -5773,7 +5769,7 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
               <button
                 onClick={() => setPdfFile({ name: `Счёт_№${order.order_number}.pdf`, size_kb: 142 + Math.floor(Math.random() * 80), uploaded_at: new Date().toISOString() })}
                 className="w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
-                style={{ background: '#F5F7F8', color: '#1A1814' }}
+                style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}
               >
                 <FileText size={16} /> Выбрать PDF
               </button>
@@ -5785,7 +5781,7 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
           <>
             <SiteInput label="Дата отгрузки" type="date" value={shipDate} onChange={setShipDate} />
             <div>
-              <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Номер документа реализации (1С)</label>
+              <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Номер документа реализации (1С)</label>
               <input
                 value={docNo}
                 onChange={e => setDocNo(e.target.value.trim())}
@@ -5793,9 +5789,9 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
                 autoFocus
                 className="w-full px-3 py-2.5 rounded-lg outline-none mono-font font-bold tracking-wider"
                 style={{
-                  border: `1px solid ${docNo && !docValid ? '#EB5757' : (docValid && docNo !== '00ЦТ-' ? '#22C55E' : '#E5E7EB')}`,
+                  border: `1px solid ${docNo && !docValid ? '#EB5757' : (docValid && docNo !== '00ЦТ-' ? '#22C55E' : 'var(--mc-border)')}`,
                   fontSize: 15,
-                  color: '#1A1814',
+                  color: 'var(--mc-text)',
                 }}
               />
               <div className="text-[11px] mt-1" style={{ color: docNo && !docValid ? '#EB5757' : '#A8A8AE' }}>
@@ -5806,11 +5802,11 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
         )}
 
         {!needsPDF && !needsShipMeta && !isCancellation && (
-          <div className="text-sm" style={{ color: '#64748B' }}>Подтвердите смену статуса.</div>
+          <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>Подтвердите смену статуса.</div>
         )}
 
         <div className="flex gap-2 pt-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button
             disabled={!canConfirm}
             onClick={() => {
@@ -5833,8 +5829,8 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
 
 function Card({ title, children }) {
   return (
-    <div className="bg-white rounded-xl p-4" style={{ border: '1px solid #E5E7EB' }}>
-      {title && <div className="text-[11px] uppercase font-bold mb-3" style={{ color: '#64748B', letterSpacing: '0.08em' }}>{title}</div>}
+    <div className="bg-white rounded-xl p-4" style={{ border: '1px solid var(--mc-border)' }}>
+      {title && <div className="text-[11px] uppercase font-bold mb-3" style={{ color: 'var(--mc-muted)', letterSpacing: '0.08em' }}>{title}</div>}
       {children}
     </div>
   );
@@ -5846,7 +5842,7 @@ function SiteInput({ label, value, onChange, error, type = 'text', placeholder, 
   return (
     <div>
       {label && (
-        <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>{label}</label>
+        <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>{label}</label>
       )}
       <input
         type={type}
@@ -5856,9 +5852,9 @@ function SiteInput({ label, value, onChange, error, type = 'text', placeholder, 
         disabled={disabled}
         className="w-full px-3 py-2 rounded-lg outline-none"
         style={{
-          border: `1px solid ${error ? '#EB5757' : '#E5E7EB'}`,
-          background: disabled ? '#F5F7F8' : 'white',
-          color: disabled ? '#64748B' : '#1A1814',
+          border: `1px solid ${error ? '#EB5757' : 'var(--mc-border)'}`,
+          background: disabled ? 'var(--mc-active-item)' : 'white',
+          color: disabled ? '#64748B' : 'var(--mc-text)',
           fontSize: 15,
         }}
       />
@@ -5871,8 +5867,8 @@ function FieldRow({ label, value }) {
   if (!value && value !== 0) return null;
   return (
     <div className="flex items-baseline gap-3 py-1">
-      <div className="text-xs flex-shrink-0" style={{ color: '#64748B', minWidth: 90 }}>{label}</div>
-      <div className="text-sm flex-1" style={{ color: '#1A1814', wordBreak: 'break-word' }}>{value}</div>
+      <div className="text-xs flex-shrink-0" style={{ color: 'var(--mc-muted)', minWidth: 90 }}>{label}</div>
+      <div className="text-sm flex-1" style={{ color: 'var(--mc-text)', wordBreak: 'break-word' }}>{value}</div>
     </div>
   );
 }
@@ -5968,7 +5964,7 @@ function CreateOrderScreen({ ctx }) {
                 return (
                   <button key={opt.v} onClick={() => update({ client_type: opt.v })}
                     className="rounded-lg p-3 flex items-center justify-center gap-2 font-semibold text-sm"
-                    style={{ background: active ? '#1A1814' : '#F5F7F8', color: active ? 'white' : '#1A1814' }}>
+                    style={{ background: active ? '#297b8a' : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)' }}>
                     <Icon size={16} /> {opt.label}
                   </button>
                 );
@@ -5996,14 +5992,14 @@ function CreateOrderScreen({ ctx }) {
               )}
               <SiteInput label="Номер телефона" value={form.phone} onChange={v => update({ phone: v })} error={errors.phone} placeholder="+7 777 123 45 67" />
               <div>
-                <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>
                   {form.client_type === 'legal' ? 'Юр. адрес' : 'Адрес'}
                 </label>
                 <textarea
                   value={form.address || ''} onChange={e => update({ address: e.target.value })}
                   rows={2}
                   className="w-full px-3 py-2.5 rounded-lg outline-none"
-                  style={{ border: `1px solid ${errors.address ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }}
+                  style={{ border: `1px solid ${errors.address ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 15 }}
                   placeholder={form.client_type === 'legal' ? 'г. Алматы, ул. Абая 150, оф. 405' : 'г. Алматы, ул. Абая 150'}
                 />
                 {errors.address && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.address}</div>}
@@ -6011,7 +6007,7 @@ function CreateOrderScreen({ ctx }) {
               {form.client_type === 'legal' && (
                 <>
                   <div className="pt-1" style={{ borderTop: '1px solid #F1F5F9' }}>
-                    <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#64748B' }}>Банковские реквизиты</div>
+                    <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--mc-muted)' }}>Банковские реквизиты</div>
                   </div>
                   <SiteInput label="Банк" value={form.bank} onChange={v => update({ bank: v })} error={errors.bank} placeholder='АО "Kaspi Bank"' />
                   <div className="grid grid-cols-2 gap-3">
@@ -6032,40 +6028,40 @@ function CreateOrderScreen({ ctx }) {
                 <div key={i} className="rounded-lg p-3 mb-2" style={{ border: '1px solid #F1F5F9' }}>
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold" style={{ color: '#1A1814' }}>{it.name}</div>
-                      <div className="text-xs" style={{ color: '#64748B' }}>прайс: {fmtNum(it.original_price)} тг / {it.unit}</div>
+                      <div className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>{it.name}</div>
+                      <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>прайс: {fmtNum(it.original_price)} тг / {it.unit}</div>
                     </div>
                     <button onClick={() => removeItem(i)} style={{ color: '#EB5757' }}><Trash2 size={16} /></button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-xs" style={{ color: '#64748B' }}>Количество</label>
+                      <label className="text-xs" style={{ color: 'var(--mc-muted)' }}>Количество</label>
                       <input value={it.quantity} onChange={e => updateItem(i, { quantity: e.target.value.replace(/[^0-9.]/g, '') })}
-                        className="w-full px-2.5 py-1.5 rounded-md text-sm" style={{ border: `1px solid ${itemErr.quantity ? '#EB5757' : '#E5E7EB'}` }} />
+                        className="w-full px-2.5 py-1.5 rounded-md text-sm" style={{ border: `1px solid ${itemErr.quantity ? '#EB5757' : 'var(--mc-border)'}` }} />
                     </div>
                     <div>
-                      <label className="text-xs" style={{ color: '#64748B' }}>Цена за {it.unit}</label>
+                      <label className="text-xs" style={{ color: 'var(--mc-muted)' }}>Цена за {it.unit}</label>
                       <input value={it.price} onChange={e => updateItem(i, { price: e.target.value.replace(/[^0-9.]/g, '') })}
-                        className="w-full px-2.5 py-1.5 rounded-md text-sm" style={{ border: `1px solid ${itemErr.price ? '#EB5757' : '#E5E7EB'}` }} />
+                        className="w-full px-2.5 py-1.5 rounded-md text-sm" style={{ border: `1px solid ${itemErr.price ? '#EB5757' : 'var(--mc-border)'}` }} />
                     </div>
                   </div>
                   {it.price && it.original_price && Number(it.price) !== Number(it.original_price) && (
                     <div className="text-xs mt-1" style={{ color: '#F59E0B' }}>⚠ Цена изменена ({fmtNum(it.original_price)} → {fmtNum(it.price)}). Будет залогировано.</div>
                   )}
-                  <div className="text-right text-sm font-bold mt-2" style={{ color: '#1A1814' }}>
+                  <div className="text-right text-sm font-bold mt-2" style={{ color: 'var(--mc-text)' }}>
                     {fmtNum((Number(it.quantity) || 0) * (Number(it.price) || 0))} тг
                   </div>
                 </div>
               );
             })}
             {errors.items && <div className="text-xs mt-1 mb-2" style={{ color: '#EB5757' }}>{errors.items}</div>}
-            <button onClick={addItem} className="w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+            <button onClick={addItem} className="w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
               <Plus size={14} /> Добавить товар
             </button>
             {form.items.length > 0 && (
-              <div className="flex items-center justify-between pt-3 mt-3" style={{ borderTop: '1px solid #E5E7EB' }}>
-                <span className="font-semibold" style={{ color: '#64748B' }}>ИТОГО</span>
-                <span className="text-lg font-bold" style={{ color: '#1A1814' }}>{fmtNum(total)} тг</span>
+              <div className="flex items-center justify-between pt-3 mt-3" style={{ borderTop: '1px solid var(--mc-border)' }}>
+                <span className="font-semibold" style={{ color: 'var(--mc-muted)' }}>ИТОГО</span>
+                <span className="text-lg font-bold" style={{ color: 'var(--mc-text)' }}>{fmtNum(total)} тг</span>
               </div>
             )}
           </Card>
@@ -6075,7 +6071,7 @@ function CreateOrderScreen({ ctx }) {
               value={form.comment || ''} onChange={e => update({ comment: e.target.value })}
               rows={3} placeholder="Любая дополнительная информация (или «—»)"
               className="w-full px-3 py-2.5 rounded-lg outline-none"
-              style={{ border: `1px solid ${errors.comment ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }}
+              style={{ border: `1px solid ${errors.comment ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 15 }}
             />
             {errors.comment && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.comment}</div>}
           </Card>
@@ -6093,7 +6089,7 @@ function CreateOrderScreen({ ctx }) {
                 return (
                   <button key={opt.v} onClick={() => update({ delivery_method: opt.v })}
                     className="w-full rounded-lg p-3 flex items-center gap-2 font-semibold text-sm"
-                    style={{ background: active ? '#1A1814' : '#F5F7F8', color: active ? 'white' : '#1A1814' }}>
+                    style={{ background: active ? '#297b8a' : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)' }}>
                     <Icon size={16} /> {opt.label}
                   </button>
                 );
@@ -6114,7 +6110,7 @@ function CreateOrderScreen({ ctx }) {
                   return (
                     <button key={opt.v} onClick={() => update({ payment_method: opt.v })}
                       className="w-full rounded-lg p-3 text-left flex items-start justify-between font-semibold text-sm"
-                      style={{ background: active ? '#1A1814' : '#F5F7F8', color: active ? 'white' : '#1A1814' }}>
+                      style={{ background: active ? '#297b8a' : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)' }}>
                       <div>
                         <div>{opt.label}</div>
                         <div className="text-xs" style={{ color: active ? '#E0E0E0' : '#64748B', marginTop: 4 }}>{opt.desc}</div>
@@ -6699,7 +6695,7 @@ function CreateQuickScreen({ ctx }) {
           <Card>
             <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: '#EAF4F6' }}>
               <Sparkles size={16} style={{ color: '#297b8a', marginTop: 2, flexShrink: 0 }} />
-              <div className="text-sm" style={{ color: '#1A1814' }}>
+              <div className="text-sm" style={{ color: 'var(--mc-text)' }}>
                 Скопируйте сообщение клиента с подтверждением заказа и вставьте в большое поле ниже. Поля справа заполнятся автоматически через секунду. Распознанные поля помечены зелёной точкой.
               </div>
             </div>
@@ -6713,7 +6709,7 @@ function CreateQuickScreen({ ctx }) {
               rows={7}
               placeholder={'Пример:\nCoffee Boom Almaty\nQazaq Blend 20 кг по 14 500\nДоставка, г. Алматы, ул. Достык 132\n+7 777 123 45 67\nРЕА-555'}
               className="w-full px-3 py-2.5 rounded-lg outline-none mono-font"
-              style={{ border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'JetBrains Mono, monospace' }}
+              style={{ border: '1px solid var(--mc-border)', fontSize: 13, fontFamily: 'JetBrains Mono, monospace' }}
             />
             <div className="flex gap-2 mt-2">
               <button
@@ -6735,9 +6731,9 @@ function CreateQuickScreen({ ctx }) {
                 disabled={!form.raw_text}
                 className="px-3 py-2 rounded-lg font-semibold text-sm disabled:opacity-40 flex items-center gap-1"
                 style={{
-                  background: parseLocked ? '#FEF3C7' : '#F5F7F8',
-                  color: parseLocked ? '#92400E' : '#1A1814',
-                  border: `1px solid ${parseLocked ? '#F59E0B' : '#E5E7EB'}`,
+                  background: parseLocked ? '#FEF3C7' : 'var(--mc-active-item)',
+                  color: parseLocked ? '#92400E' : 'var(--mc-text)',
+                  border: `1px solid ${parseLocked ? '#F59E0B' : 'var(--mc-border)'}`,
                 }}
                 title={parseLocked ? 'Разобрать заново (сбросит ручные правки товаров)' : 'Разобрать сейчас'}
               >
@@ -6748,7 +6744,7 @@ function CreateQuickScreen({ ctx }) {
                 onClick={() => { update({ raw_text: '' }); setDetected(new Set()); setParseLocked(false); }}
                 disabled={!form.raw_text}
                 className="px-3 py-2 rounded-lg font-semibold text-sm disabled:opacity-40"
-                style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}
+                style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}
                 title="Очистить поле"
               >
                 <X size={14} />
@@ -6764,7 +6760,7 @@ function CreateQuickScreen({ ctx }) {
 
           <Card title="Тип клиента и способ получения">
             <div>
-              <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
+              <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: 'var(--mc-muted)' }}>
                 Тип клиента <Dot field="client_type" />
               </label>
               <div className="grid grid-cols-2 gap-2 mb-3">
@@ -6776,7 +6772,7 @@ function CreateQuickScreen({ ctx }) {
                   return (
                     <button key={opt.v} onClick={() => update({ client_type: opt.v })}
                       className="rounded-lg p-2.5 font-semibold text-sm"
-                      style={{ background: active ? '#297b8a' : '#F5F7F8', color: active ? 'white' : '#1A1814' }}>
+                      style={{ background: active ? '#297b8a' : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)' }}>
                       {opt.label}
                     </button>
                   );
@@ -6784,7 +6780,7 @@ function CreateQuickScreen({ ctx }) {
               </div>
             </div>
             <div>
-              <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
+              <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: 'var(--mc-muted)' }}>
                 Способ получения <Dot field="delivery_method" />
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -6797,7 +6793,7 @@ function CreateQuickScreen({ ctx }) {
                   return (
                     <button key={opt.v} onClick={() => update({ delivery_method: opt.v })}
                       className="rounded-lg p-2.5 flex items-center justify-center gap-2 font-semibold text-sm"
-                      style={{ background: active ? '#297b8a' : '#F5F7F8', color: active ? 'white' : '#1A1814' }}>
+                      style={{ background: active ? '#297b8a' : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)' }}>
                       <Icon size={14} /> {opt.label}
                     </button>
                   );
@@ -6806,7 +6802,7 @@ function CreateQuickScreen({ ctx }) {
               {errors.delivery_method && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.delivery_method}</div>}
             </div>
             <div>
-              <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
+              <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: 'var(--mc-muted)' }}>
                 Способ оплаты <Dot field="payment_method" />
               </label>
               <div className="grid grid-cols-1 gap-1.5">
@@ -6820,8 +6816,8 @@ function CreateQuickScreen({ ctx }) {
                     <button key={opt.v} onClick={() => update({ payment_method: opt.v })}
                       className="rounded-lg p-2.5 text-left text-sm"
                       style={{
-                        background: active ? '#297b8a' : '#F5F7F8',
-                        color: active ? 'white' : '#1A1814',
+                        background: active ? '#297b8a' : 'var(--mc-active-item)',
+                        color: active ? 'white' : 'var(--mc-text)',
                         border: active ? '1px solid #297b8a' : '1px solid transparent',
                       }}>
                       <div className="font-semibold">{opt.label}</div>
@@ -6840,14 +6836,14 @@ function CreateQuickScreen({ ctx }) {
             <div className="space-y-2.5">
               {/* Имя клиента */}
               <div>
-                <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
+                <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: 'var(--mc-muted)' }}>
                   {form.client_type === 'legal' ? 'Компания' : 'Имя клиента'} <Dot field="client_name" />
                 </label>
                 <input
                   value={form.client_name || ''}
                   onChange={e => update({ client_name: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg outline-none"
-                  style={{ border: `1px solid ${errors.client_name ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }}
+                  style={{ border: `1px solid ${errors.client_name ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 15 }}
                 />
                 {errors.client_name && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.client_name}</div>}
               </div>
@@ -6855,47 +6851,47 @@ function CreateQuickScreen({ ctx }) {
               {/* БИН для юр. лиц */}
               {form.client_type === 'legal' && (
                 <div>
-                  <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
+                  <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: 'var(--mc-muted)' }}>
                     БИН (если есть) <Dot field="bin" />
                   </label>
                   <input
                     value={form.bin || ''}
                     onChange={e => update({ bin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
                     className="w-full px-3 py-2 rounded-lg outline-none"
-                    style={{ border: '1px solid #E5E7EB', fontSize: 15 }}
+                    style={{ border: '1px solid var(--mc-border)', fontSize: 15 }}
                   />
                 </div>
               )}
 
               {/* Телефон */}
               <div>
-                <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
+                <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: 'var(--mc-muted)' }}>
                   Телефон <Dot field="phone" />
                 </label>
                 <input
                   value={form.phone || ''}
                   onChange={e => update({ phone: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg outline-none"
-                  style={{ border: '1px solid #E5E7EB', fontSize: 15 }}
+                  style={{ border: '1px solid var(--mc-border)', fontSize: 15 }}
                 />
               </div>
 
               {/* Адрес */}
               <div>
-                <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
+                <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: 'var(--mc-muted)' }}>
                   Адрес <Dot field="address" />
                 </label>
                 <input
                   value={form.address || ''}
                   onChange={e => update({ address: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg outline-none"
-                  style={{ border: '1px solid #E5E7EB', fontSize: 15 }}
+                  style={{ border: '1px solid var(--mc-border)', fontSize: 15 }}
                 />
               </div>
 
               {/* Номер документа 1С */}
               <div>
-                <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: '#64748B' }}>
+                <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: 'var(--mc-muted)' }}>
                   Номер документа 1С (опц.) <Dot field="doc_no" />
                 </label>
                 <input
@@ -6904,7 +6900,7 @@ function CreateQuickScreen({ ctx }) {
                   placeholder="00ЦТ-012573"
                   className="w-full px-3 py-2 rounded-lg outline-none mono-font"
                   style={{
-                    border: `1px solid ${errors.doc_no ? '#EB5757' : (form.doc_no && isValidDocNo(form.doc_no.trim()) ? '#22C55E' : '#E5E7EB')}`,
+                    border: `1px solid ${errors.doc_no ? '#EB5757' : (form.doc_no && isValidDocNo(form.doc_no.trim()) ? '#22C55E' : 'var(--mc-border)')}`,
                     fontSize: 15,
                   }}
                 />
@@ -6918,7 +6914,7 @@ function CreateQuickScreen({ ctx }) {
           {/* ── Список товаров ────────────────────────────────────────────── */}
           <Card>
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-semibold" style={{ color: '#1A1814' }}>
+              <span className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>
                 Товары <Dot field="items" />
                 {(form.items || []).length > 0 && (
                   <span className="ml-1.5 px-1.5 py-0.5 rounded text-[11px]" style={{ background: '#EAF4F6', color: '#297b8a' }}>
@@ -6937,7 +6933,7 @@ function CreateQuickScreen({ ctx }) {
                 <button
                   onClick={addEmptyItem}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
-                  style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}
+                  style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}
                 >
                   <Plus size={12} /> Вручную
                 </button>
@@ -6962,18 +6958,18 @@ function CreateQuickScreen({ ctx }) {
                   const priceErr = errors[`item_${idx}_price`];
                   const grindErr = errors[`item_${idx}_grind`];
                   return (
-                    <div key={it.local_id} className="rounded-lg p-3 space-y-2" style={{ background: '#F8FAFB', border: '1px solid #E5E7EB' }}>
+                    <div key={it.local_id} className="rounded-lg p-3 space-y-2" style={{ background: '#F8FAFB', border: '1px solid var(--mc-border)' }}>
                       {/* Строка: товар + кнопка удалить */}
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => pickItemProduct(idx)}
                           className="flex-1 px-2.5 py-1.5 rounded-lg flex items-center justify-between text-left text-sm"
-                          style={{ background: 'white', border: `1px solid ${errors[`item_${idx}_name`] ? '#EB5757' : '#E5E7EB'}` }}
+                          style={{ background: 'var(--mc-surface)', border: `1px solid ${errors[`item_${idx}_name`] ? '#EB5757' : 'var(--mc-border)'}` }}
                         >
                           {it.product_id || it.name ? (
-                            <span className="truncate" style={{ color: '#1A1814' }}>
+                            <span className="truncate" style={{ color: 'var(--mc-text)' }}>
                               {it.name || products.find(p => p.id === it.product_id)?.name || '—'}
-                              <span className="ml-1" style={{ color: '#64748B' }}>({it.unit})</span>
+                              <span className="ml-1" style={{ color: 'var(--mc-muted)' }}>({it.unit})</span>
                             </span>
                           ) : (
                             <span style={{ color: '#A8A8AE' }}>Выбрать товар…</span>
@@ -7000,29 +6996,29 @@ function CreateQuickScreen({ ctx }) {
                           onChange={e => updateItem(it.local_id, { name: e.target.value })}
                           placeholder="Название товара"
                           className="w-full px-2.5 py-1.5 rounded-lg outline-none text-sm"
-                          style={{ border: '1px solid #E5E7EB', background: 'white' }}
+                          style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)' }}
                         />
                       )}
 
                       {/* Кол-во + цена */}
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <div className="text-[11px] mb-1" style={{ color: '#64748B' }}>Кол-во ({it.unit || 'ед'})</div>
+                          <div className="text-[11px] mb-1" style={{ color: 'var(--mc-muted)' }}>Кол-во ({it.unit || 'ед'})</div>
                           <input
                             value={it.quantity || ''}
                             onChange={e => updateItem(it.local_id, { quantity: e.target.value.replace(/[^0-9.]/g, '') })}
                             className="w-full px-2.5 py-1.5 rounded-lg outline-none text-sm"
-                            style={{ border: `1px solid ${qtyErr ? '#EB5757' : '#E5E7EB'}`, background: 'white' }}
+                            style={{ border: `1px solid ${qtyErr ? '#EB5757' : 'var(--mc-border)'}`, background: 'var(--mc-surface)' }}
                           />
                           {qtyErr && <div className="text-[11px] mt-0.5" style={{ color: '#EB5757' }}>{qtyErr}</div>}
                         </div>
                         <div>
-                          <div className="text-[11px] mb-1" style={{ color: '#64748B' }}>Цена / ед. (тг)</div>
+                          <div className="text-[11px] mb-1" style={{ color: 'var(--mc-muted)' }}>Цена / ед. (тг)</div>
                           <input
                             value={it.price || ''}
                             onChange={e => updateItem(it.local_id, { price: e.target.value.replace(/[^0-9.]/g, '') })}
                             className="w-full px-2.5 py-1.5 rounded-lg outline-none text-sm"
-                            style={{ border: `1px solid ${priceErr ? '#EB5757' : '#E5E7EB'}`, background: 'white' }}
+                            style={{ border: `1px solid ${priceErr ? '#EB5757' : 'var(--mc-border)'}`, background: 'var(--mc-surface)' }}
                           />
                           {priceErr && <div className="text-[11px] mt-0.5" style={{ color: '#EB5757' }}>{priceErr}</div>}
                         </div>
@@ -7030,7 +7026,7 @@ function CreateQuickScreen({ ctx }) {
 
                       {/* Строка итого по item */}
                       {Number(it.quantity) > 0 && Number(it.price) > 0 && (
-                        <div className="text-xs text-right" style={{ color: '#64748B' }}>
+                        <div className="text-xs text-right" style={{ color: 'var(--mc-muted)' }}>
                           = {fmtNum(Number(it.quantity) * Number(it.price))} тг
                         </div>
                       )}
@@ -7070,9 +7066,9 @@ function CreateQuickScreen({ ctx }) {
                                 onClick={() => updateItem(it.local_id, { grind_type: it.grind_type === key ? '' : key })}
                                 className="px-2 py-1 rounded-lg text-[11px] font-semibold"
                                 style={{
-                                  background: it.grind_type === key ? '#297b8a' : '#F5F7F8',
-                                  color: it.grind_type === key ? 'white' : '#1A1814',
-                                  border: it.grind_type === key ? '1px solid #297b8a' : '1px solid #E5E7EB',
+                                  background: it.grind_type === key ? '#297b8a' : 'var(--mc-active-item)',
+                                  color: it.grind_type === key ? 'white' : 'var(--mc-text)',
+                                  border: it.grind_type === key ? '1px solid #297b8a' : '1px solid var(--mc-border)',
                                 }}
                               >
                                 {val.label}
@@ -7085,7 +7081,7 @@ function CreateQuickScreen({ ctx }) {
                               onChange={e => updateItem(it.local_id, { grind_custom: e.target.value })}
                               placeholder="Опишите помол…"
                               className="w-full px-2.5 py-1.5 rounded-lg outline-none text-sm"
-                              style={{ border: '1px solid #E5E7EB', background: 'white' }}
+                              style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)' }}
                             />
                           )}
                           {it.grind_type && (
@@ -7104,9 +7100,9 @@ function CreateQuickScreen({ ctx }) {
 
             {/* Итого */}
             {total > 0 && (
-              <div className="flex items-center justify-between pt-3 mt-3" style={{ borderTop: '1px solid #E5E7EB' }}>
-                <span className="text-sm font-semibold" style={{ color: '#64748B' }}>ИТОГО</span>
-                <span className="text-lg font-bold" style={{ color: '#1A1814' }}>{fmtNum(total)} тг</span>
+              <div className="flex items-center justify-between pt-3 mt-3" style={{ borderTop: '1px solid var(--mc-border)' }}>
+                <span className="text-sm font-semibold" style={{ color: 'var(--mc-muted)' }}>ИТОГО</span>
+                <span className="text-lg font-bold" style={{ color: 'var(--mc-text)' }}>{fmtNum(total)} тг</span>
               </div>
             )}
           </Card>
@@ -7115,7 +7111,7 @@ function CreateQuickScreen({ ctx }) {
             Создать заявку → В работе
           </button>
           <div className="text-[11px] text-center" style={{ color: '#A8A8AE' }}>
-            или нажмите <kbd style={{ background: '#F5F7F8', padding: '1px 5px', borderRadius: 3, fontFamily: 'monospace', border: '1px solid #E5E7EB' }}>Ctrl/⌘ + Enter</kbd>
+            или нажмите <kbd style={{ background: 'var(--mc-active-item)', padding: '1px 5px', borderRadius: 3, fontFamily: 'monospace', border: '1px solid var(--mc-border)' }}>Ctrl/⌘ + Enter</kbd>
           </div>
         </div>
       </div>
@@ -7159,11 +7155,11 @@ function QuickConfirmModal({ order, forwardText, showToast, onClose, onCreateAno
   return (
     <Modal onClose={onClose} title="Готово к отправке">
       <div className="space-y-3">
-        <div className="text-sm" style={{ color: '#64748B' }}>
-          Заявка <strong style={{ color: '#1A1814' }}>{order.order_number}</strong> создана и переведена в работу.
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
+          Заявка <strong style={{ color: 'var(--mc-text)' }}>{order.order_number}</strong> создана и переведена в работу.
           Скопируйте текст ниже и вставьте в чат-группу Sales Department.
         </div>
-        <div className="rounded-lg p-3 mono-font whitespace-pre-wrap" style={{ background: '#F5F7F8', fontSize: 13, color: '#1A1814', maxHeight: 240, overflowY: 'auto', border: '1px solid #E5E7EB' }}>
+        <div className="rounded-lg p-3 mono-font whitespace-pre-wrap" style={{ background: 'var(--mc-active-item)', fontSize: 13, color: 'var(--mc-text)', maxHeight: 240, overflowY: 'auto', border: '1px solid var(--mc-border)' }}>
           {forwardText}
         </div>
         <button
@@ -7174,10 +7170,10 @@ function QuickConfirmModal({ order, forwardText, showToast, onClose, onCreateAno
           {copied ? <><Check size={16} /> Скопировано</> : <><Copy size={16} /> Скопировать для чата-группы</>}
         </button>
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={onCreateAnother} className="py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+          <button onClick={onCreateAnother} className="py-2.5 rounded-lg font-semibold text-sm" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
             Создать ещё одну
           </button>
-          <button onClick={onClose} className="py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+          <button onClick={onClose} className="py-2.5 rounded-lg font-semibold text-sm" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
             Готово
           </button>
         </div>
@@ -7247,22 +7243,22 @@ function ProductPickerScreen({ ctx, pickerTarget }) {
     <div>
       <PageHeader title="Выбор товара" subtitle={`${products.filter(p => p.active).length} активных позиций`} onBack={goBack} />
 
-      <div className="bg-white rounded-xl p-3 mb-4" style={{ border: '1px solid #E5E7EB' }}>
+      <div className="bg-white rounded-xl p-3 mb-4" style={{ border: '1px solid var(--mc-border)' }}>
         <div className="relative mb-3">
           <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#A8A8AE' }} />
-          <input className="w-full pl-9 pr-3 py-2 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB' }} placeholder="Поиск по названию…" value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="w-full pl-9 pr-3 py-2 rounded-lg outline-none" style={{ border: '1px solid var(--mc-border)' }} placeholder="Поиск по названию…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div className="flex gap-1.5 overflow-x-auto pb-1">
           {cats.map(c => (
             <button key={c} onClick={() => setActiveCat(c)} className="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold"
-              style={{ background: activeCat === c ? '#1A1814' : '#F5F7F8', color: activeCat === c ? 'white' : '#64748B' }}>
+              style={{ background: activeCat === c ? '#297b8a' : 'var(--mc-active-item)', color: activeCat === c ? 'white' : 'var(--mc-muted)' }}>
               {c}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="bg-white rounded-xl overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
+      <div className="bg-white rounded-xl overflow-hidden" style={{ border: '1px solid var(--mc-border)' }}>
         {filtered.length === 0 ? (
           <Empty title="Ничего не найдено" />
         ) : (
@@ -7271,10 +7267,10 @@ function ProductPickerScreen({ ctx, pickerTarget }) {
               className="w-full text-left px-4 py-3 flex items-start justify-between gap-3 hover:bg-gray-50 transition"
               style={{ borderBottom: '1px solid #F1F5F9' }}>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium" style={{ color: '#1A1814' }}>{p.name}</div>
-                <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>{p.cat} · {p.unit}</div>
+                <div className="text-sm font-medium" style={{ color: 'var(--mc-text)' }}>{p.name}</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>{p.cat} · {p.unit}</div>
               </div>
-              <div className="text-sm font-bold whitespace-nowrap" style={{ color: '#1A1814' }}>{fmtNum(p.price)} тг</div>
+              <div className="text-sm font-bold whitespace-nowrap" style={{ color: 'var(--mc-text)' }}>{fmtNum(p.price)} тг</div>
             </button>
           ))
         )}
@@ -7318,29 +7314,29 @@ function ArchiveScreen({ ctx }) {
     <div>
       <PageHeader title="Архив" subtitle={`${archived.length} заявок · поиск и фильтрация`} />
 
-      <div className="bg-white rounded-xl p-4 mb-4" style={{ border: '1px solid #E5E7EB' }}>
+      <div className="bg-white rounded-xl p-4 mb-4" style={{ border: '1px solid var(--mc-border)' }}>
         <div className="relative mb-3">
           <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#A8A8AE' }} />
-          <input className="w-full pl-9 pr-3 py-2 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB' }} placeholder="ФИО / компания / БИН / № документа" value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="w-full pl-9 pr-3 py-2 rounded-lg outline-none" style={{ border: '1px solid var(--mc-border)' }} placeholder="ФИО / компания / БИН / № документа" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-          <select className="px-3 py-2 rounded-lg text-sm" style={{ border: '1px solid #E5E7EB' }} value={clientType} onChange={e => setClientType(e.target.value)}>
+          <select className="px-3 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--mc-border)' }} value={clientType} onChange={e => setClientType(e.target.value)}>
             <option value="all">Тип: все</option>
             <option value="individual">Физ. лицо</option>
             <option value="legal">Юр. лицо</option>
           </select>
-          <select className="px-3 py-2 rounded-lg text-sm" style={{ border: '1px solid #E5E7EB' }} value={delivery} onChange={e => setDelivery(e.target.value)}>
+          <select className="px-3 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--mc-border)' }} value={delivery} onChange={e => setDelivery(e.target.value)}>
             <option value="all">Получение: все</option>
             <option value="delivery">Доставка</option>
             <option value="pickup">Самовывоз</option>
           </select>
-          <select className="px-3 py-2 rounded-lg text-sm" style={{ border: '1px solid #E5E7EB' }} value={manager} onChange={e => setManager(e.target.value)}>
+          <select className="px-3 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--mc-border)' }} value={manager} onChange={e => setManager(e.target.value)}>
             <option value="all">Менеджер: все</option>
             {managers.map(m => <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>)}
           </select>
           <div className="grid grid-cols-2 gap-1">
-            <input type="date" className="px-2 py-2 rounded-lg text-xs" style={{ border: '1px solid #E5E7EB' }} value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-            <input type="date" className="px-2 py-2 rounded-lg text-xs" style={{ border: '1px solid #E5E7EB' }} value={dateTo} onChange={e => setDateTo(e.target.value)} />
+            <input type="date" className="px-2 py-2 rounded-lg text-xs" style={{ border: '1px solid var(--mc-border)' }} value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+            <input type="date" className="px-2 py-2 rounded-lg text-xs" style={{ border: '1px solid var(--mc-border)' }} value={dateTo} onChange={e => setDateTo(e.target.value)} />
           </div>
         </div>
       </div>
@@ -7413,8 +7409,8 @@ function ExportScreen({ ctx }) {
             <SiteInput label="Период от" type="date" value={dateFrom} onChange={setDateFrom} />
             <SiteInput label="Период до" type="date" value={dateTo} onChange={setDateTo} />
             <div>
-              <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Статус</label>
-              <select className="w-full px-3 py-2.5 rounded-lg" style={{ border: '1px solid #E5E7EB', fontSize: 15 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Статус</label>
+              <select className="w-full px-3 py-2.5 rounded-lg" style={{ border: '1px solid var(--mc-border)', fontSize: 15 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
                 <option value="all">Все статусы</option>
                 {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
@@ -7424,9 +7420,9 @@ function ExportScreen({ ctx }) {
         <div className="space-y-4">
           <Card>
             <div className="text-center py-2">
-              <div className="text-4xl font-bold mb-1" style={{ color: '#1A1814' }}>{filtered.length}</div>
-              <div className="text-xs" style={{ color: '#64748B' }}>заявок попадает в экспорт</div>
-              <div className="text-xs mt-1" style={{ color: '#64748B' }}>Будет {filtered.reduce((s, o) => s + o.items.length, 0)} строк (1 на товар)</div>
+              <div className="text-4xl font-bold mb-1" style={{ color: 'var(--mc-text)' }}>{filtered.length}</div>
+              <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>заявок попадает в экспорт</div>
+              <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>Будет {filtered.reduce((s, o) => s + o.items.length, 0)} строк (1 на товар)</div>
             </div>
           </Card>
           <button onClick={handleExport} disabled={filtered.length === 0}
@@ -7514,7 +7510,7 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgN
   const assignableRoles = (db.roleDefinitions || []).filter(rd => rd.key !== 'admin' && rd.key !== 'pending');
 
   return (
-    <div className="bg-white rounded-xl p-4" style={{ border: '1px solid #E5E7EB' }}>
+    <div className="bg-white rounded-xl p-4" style={{ border: '1px solid var(--mc-border)' }}>
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 overflow-hidden" style={{ background: user.role ? r.color : '#A8A8AE' }}>
           {user.photo_url
@@ -7523,10 +7519,10 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgN
           }
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm truncate" style={{ color: '#1A1814' }}>
+          <div className="font-semibold text-sm truncate" style={{ color: 'var(--mc-text)' }}>
             {user.first_name} {user.last_name}
           </div>
-          <div className="text-xs truncate flex items-center gap-1.5" style={{ color: '#64748B' }}>
+          <div className="text-xs truncate flex items-center gap-1.5" style={{ color: 'var(--mc-muted)' }}>
             <Send size={10} />
             {user.tg_username ? `@${user.tg_username}` : <span className="mono-font">{user.telegram_id}</span>}
           </div>
@@ -7537,10 +7533,10 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgN
               {r.short}
             </span>
           ) : (
-            <span className="text-[10px] font-semibold rounded-full px-2 py-1" style={{ background: '#F5F7F8', color: '#64748B' }}>без роли</span>
+            <span className="text-[10px] font-semibold rounded-full px-2 py-1" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>без роли</span>
           )}
           {!user.active && <span className="text-[10px] font-semibold rounded-full px-2 py-1" style={{ background: '#FEE2E2', color: '#991B1B' }}>отключён</span>}
-          <button onClick={() => setOpen(v => !v)} className="p-1" style={{ color: '#64748B' }}>
+          <button onClick={() => setOpen(v => !v)} className="p-1" style={{ color: 'var(--mc-muted)' }}>
             <ChevronDown size={16} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
           </button>
         </div>
@@ -7552,7 +7548,7 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgN
             {assignableRoles.map(rd => (
               <button key={rd.key} onClick={() => onChangeRole(rd.key)}
                 className="text-xs font-semibold rounded-full px-3 py-1.5"
-                style={{ background: user.role === rd.key ? rd.color : '#F5F7F8', color: user.role === rd.key ? 'white' : '#64748B' }}>
+                style={{ background: user.role === rd.key ? rd.color : 'var(--mc-active-item)', color: user.role === rd.key ? 'white' : '#64748B' }}>
                 {rd.label}
               </button>
             ))}
@@ -7568,15 +7564,15 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgN
           </div>
           {/* TG-уведомления в бот */}
           {user.telegram_id && (
-            <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: '#F5F7F8' }}>
+            <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--mc-active-item)' }}>
               <div>
-                <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>Уведомления в Telegram-бот</div>
-                <div className="text-[10px]" style={{ color: '#64748B' }}>Личные сообщения о событиях по роли</div>
+                <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>Уведомления в Telegram-бот</div>
+                <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>Личные сообщения о событиях по роли</div>
               </div>
               <button
                 onClick={() => onToggleTgNotif && onToggleTgNotif(user.id, user.tg_notif_enabled === false ? true : false)}
                 className="relative flex-shrink-0 w-10 h-6 rounded-full transition-colors"
-                style={{ background: user.tg_notif_enabled === false ? '#E5E7EB' : '#297b8a' }}
+                style={{ background: user.tg_notif_enabled === false ? 'var(--mc-border)' : '#297b8a' }}
               >
                 <span
                   className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
@@ -7588,10 +7584,10 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgN
 
           {/* PIN для входа в браузере */}
           {onSetPin && (
-            <div className="rounded-lg overflow-hidden" style={{ background: '#F5F7F8' }}>
+            <div className="rounded-lg overflow-hidden" style={{ background: 'var(--mc-active-item)' }}>
               <div className="flex items-center justify-between px-3 py-2">
                 <div>
-                  <div className="text-xs font-semibold" style={{ color: '#1A1814' }}>PIN для браузера</div>
+                  <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>PIN для браузера</div>
                   <div className="text-[10px]" style={{ color: user.pin_hash ? '#10B981' : '#64748B' }}>
                     {user.pin_hash ? '✓ Установлен' : 'Не установлен'}
                   </div>
@@ -7622,7 +7618,7 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgN
                 </div>
               </div>
               {pinFormOpen && (
-                <div className="px-3 pb-3 pt-1" style={{ borderTop: '1px solid #E5E7EB' }}>
+                <div className="px-3 pb-3 pt-1" style={{ borderTop: '1px solid var(--mc-border)' }}>
                   <div className="flex gap-2">
                     <input
                       type="tel"
@@ -7633,7 +7629,7 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgN
                       placeholder="0000"
                       disabled={pinLoading}
                       className="flex-1 px-3 py-1.5 rounded-lg text-center font-bold outline-none"
-                      style={{ fontSize: 18, letterSpacing: '0.3em', border: '2px solid #E5E7EB', background: 'white' }}
+                      style={{ fontSize: 18, letterSpacing: '0.3em', border: '2px solid var(--mc-border)', background: 'var(--mc-surface)' }}
                     />
                     <button
                       onClick={async () => {
@@ -7682,7 +7678,7 @@ function AdminRequestsScreen({ ctx }) {
           />
         ) : (
           pendingUsers.map(u => (
-            <div key={u.id} className="bg-white rounded-xl p-4" style={{ border: '1px solid #E5E7EB' }}>
+            <div key={u.id} className="bg-white rounded-xl p-4" style={{ border: '1px solid var(--mc-border)' }}>
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 overflow-hidden" style={{ background: '#A8A8AE' }}>
                   {u.photo_url
@@ -7691,10 +7687,10 @@ function AdminRequestsScreen({ ctx }) {
                   }
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm truncate" style={{ color: '#1A1814' }}>
+                  <div className="font-semibold text-sm truncate" style={{ color: 'var(--mc-text)' }}>
                     {u.first_name} {u.last_name}
                   </div>
-                  <div className="text-xs truncate flex items-center gap-1.5" style={{ color: '#64748B' }}>
+                  <div className="text-xs truncate flex items-center gap-1.5" style={{ color: 'var(--mc-muted)' }}>
                     <Send size={10} />
                     {u.tg_username ? `@${u.tg_username}` : <span className="mono-font">{u.telegram_id}</span>}
                     <span>·</span>
@@ -7741,7 +7737,7 @@ function ApproveModal({ user, db, onClose, onApprove }) {
   return (
     <Modal onClose={onClose} title="Одобрить доступ">
       <div className="space-y-4">
-        <div className="p-3 rounded-lg flex items-center gap-3" style={{ background: '#F5F7F8' }}>
+        <div className="p-3 rounded-lg flex items-center gap-3" style={{ background: 'var(--mc-active-item)' }}>
           <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0" style={{ background: '#A8A8AE' }}>
             {user.photo_url
               ? <img src={user.photo_url} alt="" className="w-full h-full object-cover" />
@@ -7749,19 +7745,19 @@ function ApproveModal({ user, db, onClose, onApprove }) {
             }
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-semibold" style={{ color: '#1A1814' }}>{user.first_name} {user.last_name}</div>
-            <div className="text-sm flex items-center gap-1.5" style={{ color: '#64748B' }}>
+            <div className="font-semibold" style={{ color: 'var(--mc-text)' }}>{user.first_name} {user.last_name}</div>
+            <div className="text-sm flex items-center gap-1.5" style={{ color: 'var(--mc-muted)' }}>
               <Send size={10} />
               {user.tg_username ? `@${user.tg_username}` : <span className="mono-font">{user.telegram_id}</span>}
             </div>
           </div>
         </div>
         <div>
-          <label className="text-xs font-semibold mb-2 block" style={{ color: '#64748B' }}>Роль</label>
+          <label className="text-xs font-semibold mb-2 block" style={{ color: 'var(--mc-muted)' }}>Роль</label>
           <div className="grid grid-cols-3 gap-1.5">
             {assignableRoles.map(rd => (
               <button key={rd.key} onClick={() => setRole(rd.key)} className="rounded-lg py-2 text-xs font-semibold"
-                style={{ background: role === rd.key ? rd.color : '#F5F7F8', color: role === rd.key ? 'white' : '#64748B' }}>
+                style={{ background: role === rd.key ? rd.color : 'var(--mc-active-item)', color: role === rd.key ? 'white' : '#64748B' }}>
                 {rd.short}
               </button>
             ))}
@@ -7771,7 +7767,7 @@ function ApproveModal({ user, db, onClose, onApprove }) {
           После одобрения пользователь сможет зайти в приложение через того же Telegram-бота — никаких паролей не нужно.
         </div>
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button onClick={() => onApprove(role)} className="flex-1 py-2.5 rounded-lg font-semibold text-white" style={{ background: '#297b8a' }}>Одобрить</button>
         </div>
       </div>
@@ -7802,13 +7798,13 @@ function AdminTransferScreen({ ctx }) {
             {candidates.map(u => (
               <button key={u.id} onClick={() => setSelectedId(u.id)}
                 className="w-full bg-white rounded-xl p-4 flex items-center gap-3 text-left"
-                style={{ border: `2px solid ${selectedId === u.id ? '#3390EC' : '#E5E7EB'}` }}>
+                style={{ border: `2px solid ${selectedId === u.id ? '#3390EC' : 'var(--mc-border)'}` }}>
                 <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0" style={{ background: roleOf(db, u.role).color }}>
                   {u.first_name[0]}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm" style={{ color: '#1A1814' }}>{u.first_name} {u.last_name}</div>
-                  <div className="text-xs" style={{ color: '#64748B' }}>{u.email} · {roleOf(db, u.role).label}</div>
+                  <div className="font-semibold text-sm" style={{ color: 'var(--mc-text)' }}>{u.first_name} {u.last_name}</div>
+                  <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>{u.email} · {roleOf(db, u.role).label}</div>
                 </div>
                 {selectedId === u.id && <CheckCircle2 size={20} style={{ color: '#3390EC' }} />}
               </button>
@@ -7825,15 +7821,15 @@ function AdminTransferScreen({ ctx }) {
           <>
             <div className="rounded-xl p-5 mb-4" style={{ background: '#FEF2F2', border: '1px solid #FCA5A5' }}>
               <div className="font-bold text-lg mb-3" style={{ color: '#991B1B' }}>Подтвердите передачу</div>
-              <div className="text-sm mb-3" style={{ color: '#1A1814' }}>
+              <div className="text-sm mb-3" style={{ color: 'var(--mc-text)' }}>
                 Вы передаёте права администратора пользователю <strong>{target.first_name} {target.last_name}</strong> ({target.email}).
               </div>
-              <div className="text-sm" style={{ color: '#1A1814' }}>
+              <div className="text-sm" style={{ color: 'var(--mc-text)' }}>
                 После подтверждения ваша роль изменится на «Менеджер B2B». Все будущие действия администратора сможет выполнять только новый владелец.
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setStep(1)} className="flex-1 py-3 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Назад</button>
+              <button onClick={() => setStep(1)} className="flex-1 py-3 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Назад</button>
               <button onClick={() => { transferAdmin(selectedId); goBack(); }} className="flex-1 py-3 rounded-lg font-semibold text-white" style={{ background: '#EB5757' }}>
                 Подтвердить
               </button>
@@ -7869,7 +7865,7 @@ function TaskCard({ task, ctx }) {
 
   return (
     <button onClick={() => navigate({ name: 'task_detail', taskId: task.id })}
-      className="w-full text-left bg-white rounded-xl p-4 transition hover:shadow-sm" style={{ border: '1px solid #E5E7EB' }}>
+      className="w-full text-left bg-white rounded-xl p-4 transition hover:shadow-sm" style={{ border: '1px solid var(--mc-border)' }}>
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <span className="font-bold mono-font text-sm" style={{ color: '#3390EC' }}>{task.task_number}</span>
@@ -7881,8 +7877,8 @@ function TaskCard({ task, ctx }) {
           <Icon size={11} /> {s.short}
         </span>
       </div>
-      <div className="font-semibold mb-1 truncate" style={{ color: '#1A1814' }}>{task.client_name}</div>
-      <div className="text-sm mb-2" style={{ color: '#64748B' }}>{task.problem.length > 80 ? task.problem.slice(0, 80) + '…' : task.problem}</div>
+      <div className="font-semibold mb-1 truncate" style={{ color: 'var(--mc-text)' }}>{task.client_name}</div>
+      <div className="text-sm mb-2" style={{ color: 'var(--mc-muted)' }}>{task.problem.length > 80 ? task.problem.slice(0, 80) + '…' : task.problem}</div>
       <div className="flex items-center justify-between text-xs flex-wrap gap-2" style={{ color: '#A8A8AE' }}>
         <span>Исполнитель: {assignee ? `${assignee.first_name} ${assignee.last_name[0]}.` : '—'}</span>
         {task.visit_date && <span>Визит: {fmtDate(task.visit_date)}</span>}
@@ -7932,9 +7928,9 @@ function TasksListScreen({ ctx }) {
           <button key={f.id} onClick={() => setFilter(f.id)}
             className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
             style={{
-              background: filter === f.id ? '#1A1814' : 'white',
+              background: filter === f.id ? '#297b8a' : 'var(--mc-surface)',
               color: filter === f.id ? 'white' : '#64748B',
-              border: filter === f.id ? '1px solid #1A1814' : '1px solid #E5E7EB',
+              border: filter === f.id ? '1px solid #297b8a' : '1px solid var(--mc-border)',
             }}>
             {f.label}
           </button>
@@ -8054,7 +8050,7 @@ function CreateTaskScreen({ ctx }) {
                     <button key={opt.v}
                       onClick={() => update({ kind: opt.v, ...(opt.v === 'tasting' ? { department: 'barista' } : {}) })}
                       className="rounded-lg p-3 flex flex-col items-center justify-center gap-1 font-semibold text-xs"
-                      style={{ background: active ? '#297b8a' : '#F5F7F8', color: active ? 'white' : '#1A1814' }}>
+                      style={{ background: active ? '#297b8a' : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)' }}>
                       <Icon size={16} /> {opt.label}
                     </button>
                   );
@@ -8086,25 +8082,25 @@ function CreateTaskScreen({ ctx }) {
                     return (
                       <button key={opt.v} onClick={() => update({ kind: opt.v })}
                         className="rounded-lg p-3 flex items-center justify-center gap-2 font-semibold text-sm"
-                        style={{ background: active ? '#297b8a' : '#F5F7F8', color: active ? 'white' : '#1A1814' }}>
+                        style={{ background: active ? '#297b8a' : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)' }}>
                         <Icon size={16} /> {opt.label}
                       </button>
                     );
                   })}
                 </div>
-                <div className="flex items-center gap-3 p-2.5 rounded-lg" style={{ background: '#F5F7F8' }}>
+                <div className="flex items-center gap-3 p-2.5 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
                   <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style={{ background: ROLES[effectiveRole]?.color || '#297b8a' }}>
                     {currentUser.first_name[0]}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold" style={{ color: '#1A1814' }}>
+                    <div className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>
                       Исполнитель: я ({currentUser.first_name} {currentUser.last_name})
                     </div>
-                    <div className="text-[11px]" style={{ color: '#64748B' }}>{ROLES[effectiveRole]?.label}</div>
+                    <div className="text-[11px]" style={{ color: 'var(--mc-muted)' }}>{ROLES[effectiveRole]?.label}</div>
                   </div>
                 </div>
                 {isInternal && (
-                  <div className="text-xs p-3 rounded-lg" style={{ background: '#EAF4F6', color: '#1A1814' }}>
+                  <div className="text-xs p-3 rounded-lg" style={{ background: '#EAF4F6', color: 'var(--mc-text)' }}>
                     Внутренняя задача блокирует слот в календаре (например: «забрать запчасти со склада», «обучение», «выезд на ТО»). Поля клиент / адрес / телефон не нужны.
                   </div>
                 )}
@@ -8126,7 +8122,7 @@ function CreateTaskScreen({ ctx }) {
                       <button key={opt.v} onClick={() => !disabled && update({ department: opt.v, assignee_id: isFieldWorker ? currentUser.id : '' })}
                         disabled={disabled}
                         className="rounded-lg p-3 flex items-center justify-center gap-2 font-semibold text-sm disabled:opacity-30 disabled:cursor-not-allowed"
-                        style={{ background: active ? ROLES[opt.v].color : '#F5F7F8', color: active ? 'white' : '#1A1814' }}>
+                        style={{ background: active ? ROLES[opt.v].color : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)' }}>
                         <Icon size={16} /> {opt.label}
                       </button>
                     );
@@ -8134,7 +8130,7 @@ function CreateTaskScreen({ ctx }) {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Исполнитель</label>
+                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Исполнитель</label>
                   {assignees.length === 0 ? (
                     <div className="text-sm p-3 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>
                       Нет активных пользователей с ролью «{ROLES[form.department]?.label}». Попросите Admin создать пользователя или назначить роль.
@@ -8144,16 +8140,16 @@ function CreateTaskScreen({ ctx }) {
                       {assignees.map(u => (
                         <button key={u.id} onClick={() => update({ assignee_id: u.id })}
                           className="w-full flex items-center gap-3 p-2.5 rounded-lg text-left"
-                          style={{ background: form.assignee_id === u.id ? `${ROLES[u.role].color}15` : '#F5F7F8', border: `2px solid ${form.assignee_id === u.id ? ROLES[u.role].color : 'transparent'}` }}>
+                          style={{ background: form.assignee_id === u.id ? `${ROLES[u.role].color}15` : 'var(--mc-active-item)', border: `2px solid ${form.assignee_id === u.id ? ROLES[u.role].color : 'transparent'}` }}>
                           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style={{ background: ROLES[u.role].color }}>
                             {u.first_name[0]}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-semibold truncate" style={{ color: '#1A1814' }}>
+                            <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>
                               {u.first_name} {u.last_name}
-                              {u.id === currentUser.id && <span className="ml-2 text-[10px] font-normal" style={{ color: '#64748B' }}>(я)</span>}
+                              {u.id === currentUser.id && <span className="ml-2 text-[10px] font-normal" style={{ color: 'var(--mc-muted)' }}>(я)</span>}
                             </div>
-                            <div className="text-xs truncate" style={{ color: '#64748B' }}>{u.email}</div>
+                            <div className="text-xs truncate" style={{ color: 'var(--mc-muted)' }}>{u.email}</div>
                           </div>
                           {form.assignee_id === u.id && <CheckCircle2 size={18} style={{ color: ROLES[u.role].color }} />}
                         </button>
@@ -8168,7 +8164,7 @@ function CreateTaskScreen({ ctx }) {
 
           <Card title={isInternal ? 'Когда' : (isInstall || isTasting) ? 'Дата и время' : 'Дата визита'}>
             <div className="space-y-3">
-              <div className="text-xs p-3 rounded-lg" style={{ background: '#EAF4F6', color: '#1A1814' }}>
+              <div className="text-xs p-3 rounded-lg" style={{ background: '#EAF4F6', color: 'var(--mc-text)' }}>
                 {isInternal
                   ? 'Дата и время обязательны — это блокирует слот в календаре.'
                   : isInstall
@@ -8179,12 +8175,12 @@ function CreateTaskScreen({ ctx }) {
               </div>
               {/* Дата */}
               <div>
-                <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>
                   Дата{(isInternal || isInstall || isTasting) ? ' *' : ' (необязательно)'}
                 </label>
                 <input type="date" value={form.visit_date || ''} onChange={e => update({ visit_date: e.target.value })}
                   className="w-full px-3 py-2.5 rounded-lg outline-none"
-                  style={{ border: `1px solid ${errors.visit_date ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }} />
+                  style={{ border: `1px solid ${errors.visit_date ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 15 }} />
                 {errors.visit_date && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.visit_date}</div>}
               </div>
               {/* Время С → По — для internal/install/tasting/field worker */}
@@ -8192,7 +8188,7 @@ function CreateTaskScreen({ ctx }) {
                 <>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>
+                      <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>
                         С{(isInternal || isInstall || isTasting) ? ' *' : ''}
                       </label>
                       <input type="time" value={form.visit_time || ''}
@@ -8204,10 +8200,10 @@ function CreateTaskScreen({ ctx }) {
                           update({ visit_time: s, visit_time_end: end });
                         }}
                         className="w-full px-3 py-2.5 rounded-lg outline-none"
-                        style={{ border: `1px solid ${errors.visit_time ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }} />
+                        style={{ border: `1px solid ${errors.visit_time ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 15 }} />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>По</label>
+                      <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>По</label>
                       <input type="time" value={form.visit_time_end || ''}
                         onChange={e => {
                           const end = e.target.value;
@@ -8215,12 +8211,12 @@ function CreateTaskScreen({ ctx }) {
                           const diff = form.visit_time && end ? toM(end) - toM(form.visit_time) : null;
                           update({ visit_time_end: end, ...(diff > 0 ? { duration_min: diff } : {}) });
                         }}
-                        className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 15 }} />
+                        className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid var(--mc-border)', fontSize: 15 }} />
                     </div>
                   </div>
                   {/* Быстрый выбор длительности */}
                   <div>
-                    <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Длительность</label>
+                    <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Длительность</label>
                     <div className="flex gap-1.5 flex-wrap">
                       {[30, 60, 90, 120, 180].map(min => (
                         <button key={min} onClick={() => {
@@ -8230,7 +8226,7 @@ function CreateTaskScreen({ ctx }) {
                           update({ duration_min: min, visit_time_end: end });
                         }}
                           className="rounded-full px-3 py-1.5 text-xs font-semibold"
-                          style={{ background: form.duration_min === min ? '#297b8a' : '#F5F7F8', color: form.duration_min === min ? 'white' : '#64748B' }}>
+                          style={{ background: form.duration_min === min ? '#297b8a' : 'var(--mc-active-item)', color: form.duration_min === min ? 'white' : '#64748B' }}>
                           {min < 60 ? `${min} мин` : min === 60 ? '1 ч' : `${min / 60} ч`}
                         </button>
                       ))}
@@ -8259,7 +8255,7 @@ function CreateTaskScreen({ ctx }) {
                 <SiteInput label="Контактное лицо" value={form.tasting_contact || ''} onChange={v => update({ tasting_contact: v })} placeholder="Иванов Иван" />
                 <SiteInput label="Телефон" value={form.phone} onChange={v => update({ phone: v })} placeholder="+7 777 ..." />
                 <div>
-                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Тип дегустации</label>
+                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Тип дегустации</label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
                       { v: 'school',  label: '🏫 В школе бариста' },
@@ -8267,7 +8263,7 @@ function CreateTaskScreen({ ctx }) {
                     ].map(opt => (
                       <button key={opt.v} onClick={() => update({ tasting_location: opt.v })}
                         className="rounded-lg p-2.5 text-sm font-semibold"
-                        style={{ background: (form.tasting_location || 'school') === opt.v ? '#297b8a' : '#F5F7F8', color: (form.tasting_location || 'school') === opt.v ? 'white' : '#1A1814' }}>
+                        style={{ background: (form.tasting_location || 'school') === opt.v ? '#297b8a' : 'var(--mc-active-item)', color: (form.tasting_location || 'school') === opt.v ? 'white' : 'var(--mc-text)' }}>
                         {opt.label}
                       </button>
                     ))}
@@ -8283,7 +8279,7 @@ function CreateTaskScreen({ ctx }) {
           {isTasting && (
             <Card title="Предпочтения клиента">
               <textarea value={form.coffee_preferences || ''} onChange={e => update({ coffee_preferences: e.target.value })} rows={3}
-                className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 15, resize: 'none' }}
+                className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid var(--mc-border)', fontSize: 15, resize: 'none' }}
                 placeholder="Какой кофе предпочитает клиент, особые пожелания..." />
             </Card>
           )}
@@ -8292,7 +8288,7 @@ function CreateTaskScreen({ ctx }) {
             <Card title={isInternal ? 'Описание задачи' : 'Суть проблемы'}>
               <div>
                 <textarea value={form.problem || ''} onChange={e => update({ problem: e.target.value })} rows={4}
-                  className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: `1px solid ${errors.problem ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }}
+                  className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: `1px solid ${errors.problem ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 15 }}
                   placeholder={isInternal ? 'Забрать запчасти со склада, обучение нового сотрудника...' : 'Кофемашина не варит эспрессо, шумит компрессор...'} />
                 {errors.problem && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.problem}</div>}
               </div>
@@ -8347,8 +8343,8 @@ function TaskDetailScreen({ ctx, taskId }) {
         />
         <Card>
           <div className="flex items-start gap-3 p-2">
-            <Lock size={20} style={{ color: '#64748B' }} className="flex-shrink-0 mt-0.5" />
-            <div className="text-sm" style={{ color: '#1A1814' }}>
+            <Lock size={20} style={{ color: 'var(--mc-muted)' }} className="flex-shrink-0 mt-0.5" />
+            <div className="text-sm" style={{ color: 'var(--mc-text)' }}>
               Чтобы соблюдать конфиденциальность бариста и техников, детали задач видят только тот, кто поставил задачу, и тот, кто её выполняет. Загруженность по времени можно посмотреть в общем календаре команды.
             </div>
           </div>
@@ -8377,7 +8373,7 @@ function TaskDetailScreen({ ctx, taskId }) {
           </Card>
 
           <Card title={task.kind === 'tasting' ? 'Заведение' : 'Клиент'}>
-            <FieldRow label="Наименование" value={<strong style={{ color: '#1A1814' }}>{task.client_name}</strong>} />
+            <FieldRow label="Наименование" value={<strong style={{ color: 'var(--mc-text)' }}>{task.client_name}</strong>} />
             <FieldRow label="Адрес" value={task.address} />
             <FieldRow label="Телефон" value={task.phone} />
             {task.kind === 'tasting' && task.meta?.contact_name && (
@@ -8393,14 +8389,14 @@ function TaskDetailScreen({ ctx, taskId }) {
 
           {task.kind !== 'tasting' && (
             <Card title="Суть проблемы">
-              <div className="text-sm whitespace-pre-wrap" style={{ color: '#1A1814' }}>{task.problem}</div>
+              <div className="text-sm whitespace-pre-wrap" style={{ color: 'var(--mc-text)' }}>{task.problem}</div>
             </Card>
           )}
 
           {task.done_summary && (
             <Card title="Что сделано">
-              <div className="text-sm whitespace-pre-wrap" style={{ color: '#1A1814' }}>{task.done_summary}</div>
-              {task.done_at && <div className="text-xs mt-2" style={{ color: '#64748B' }}>Закрыто: {fmtDateTime(task.done_at)}</div>}
+              <div className="text-sm whitespace-pre-wrap" style={{ color: 'var(--mc-text)' }}>{task.done_summary}</div>
+              {task.done_at && <div className="text-xs mt-2" style={{ color: 'var(--mc-muted)' }}>Закрыто: {fmtDateTime(task.done_at)}</div>}
             </Card>
           )}
 
@@ -8409,15 +8405,15 @@ function TaskDetailScreen({ ctx, taskId }) {
               const actor = db.users.find(u => u.id === l.actor);
               return (
                 <div key={i} className="flex items-start gap-3 py-2" style={{ borderBottom: i < task.log.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#F5F7F8', color: '#64748B' }}>
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
                     {l.event === 'created' ? <Plus size={13} /> : <ArrowRight size={13} />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm" style={{ color: '#1A1814' }}>
+                    <div className="text-sm" style={{ color: 'var(--mc-text)' }}>
                       {l.event === 'created' && 'Задача создана'}
                       {l.event === 'status' && <>{TASK_STATUS[l.from]?.short || l.from} → <strong>{TASK_STATUS[l.to]?.short || l.to}</strong></>}
                     </div>
-                    <div className="text-xs" style={{ color: '#64748B' }}>
+                    <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                       {actor ? `${actor.first_name} ${actor.last_name}` : 'Система'} · {fmtDateTime(l.at)}
                     </div>
                     {l.meta?.visit_date && <div className="text-xs mt-0.5" style={{ color: '#0EA5E9' }}>Дата визита: {fmtDate(l.meta.visit_date)}</div>}
@@ -8436,8 +8432,8 @@ function TaskDetailScreen({ ctx, taskId }) {
                 {assignee?.first_name[0] || '?'}
               </div>
               <div className="min-w-0">
-                <div className="font-semibold truncate" style={{ color: '#1A1814' }}>{assignee ? `${assignee.first_name} ${assignee.last_name}` : '—'}</div>
-                <div className="text-xs truncate" style={{ color: '#64748B' }}>{assignee?.email}</div>
+                <div className="font-semibold truncate" style={{ color: 'var(--mc-text)' }}>{assignee ? `${assignee.first_name} ${assignee.last_name}` : '—'}</div>
+                <div className="text-xs truncate" style={{ color: 'var(--mc-muted)' }}>{assignee?.email}</div>
               </div>
             </div>
           </Card>
@@ -8459,7 +8455,7 @@ function TaskDetailScreen({ ctx, taskId }) {
               <button onClick={() => setDoneModalOpen(true)} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#22C55E' }}>
                 Подтвердить выполнение
               </button>
-              <button onClick={() => setRescheduleModalOpen(true)} className="w-full py-2.5 rounded-lg font-semibold mt-2" style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}>
+              <button onClick={() => setRescheduleModalOpen(true)} className="w-full py-2.5 rounded-lg font-semibold mt-2" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}>
                 <Calendar size={14} className="inline mr-1.5 -mt-0.5" /> Перенести визит
               </button>
             </>
@@ -8527,7 +8523,7 @@ function TaskTimeline({ status }) {
                 style={{ background: reached ? TASK_STATUS[s].color : '#E7E7E9', color: reached ? 'white' : '#A8A8AE', boxShadow: current ? `0 0 0 4px ${TASK_STATUS[s].color}25` : 'none' }}>
                 {reached ? <Check size={15} /> : <CircleDot size={12} />}
               </div>
-              <div className="text-xs mt-1.5 text-center whitespace-nowrap" style={{ color: reached ? '#1A1814' : '#A8A8AE', fontWeight: current ? 700 : 500 }}>
+              <div className="text-xs mt-1.5 text-center whitespace-nowrap" style={{ color: reached ? 'var(--mc-text)' : '#A8A8AE', fontWeight: current ? 700 : 500 }}>
                 {TASK_STATUS[s].short}
               </div>
             </div>
@@ -8566,8 +8562,8 @@ function StartTaskModal({ task, onClose, onStart }) {
   return (
     <Modal onClose={onClose} title="Взять в работу">
       <div className="space-y-4">
-        <div className="text-sm" style={{ color: '#64748B' }}>
-          Задача <strong style={{ color: '#1A1814' }}>{task.task_number}</strong> — {task.kind === 'internal' ? 'Внутренняя задача' : task.kind === 'install' ? `Установка у ${task.client_name}` : task.client_name}
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
+          Задача <strong style={{ color: 'var(--mc-text)' }}>{task.task_number}</strong> — {task.kind === 'internal' ? 'Внутренняя задача' : task.kind === 'install' ? `Установка у ${task.client_name}` : task.client_name}
         </div>
         <SiteInput label="Дата визита" type="date" value={date} onChange={setDate} />
         <div className="grid grid-cols-2 gap-2">
@@ -8575,12 +8571,12 @@ function StartTaskModal({ task, onClose, onStart }) {
           <SiteInput label="По" type="time" value={timeTo}   onChange={handleTo} />
         </div>
         <div>
-          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Длительность</label>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Длительность</label>
           <div className="flex gap-1.5 flex-wrap">
             {[30, 60, 90, 120, 180].map(min => (
               <button key={min} onClick={() => handleDuration(min)}
                 className="rounded-full px-3 py-1.5 text-xs font-semibold"
-                style={{ background: duration === min ? '#297b8a' : '#F5F7F8', color: duration === min ? 'white' : '#64748B' }}>
+                style={{ background: duration === min ? '#297b8a' : 'var(--mc-active-item)', color: duration === min ? 'white' : '#64748B' }}>
                 {min < 60 ? `${min} мин` : min === 60 ? '1 ч' : `${min / 60} ч`}
               </button>
             ))}
@@ -8590,7 +8586,7 @@ function StartTaskModal({ task, onClose, onStart }) {
           Закрыть задачу можно будет только в день визита.
         </div>
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button onClick={() => onStart(date, timeFrom, duration, timeTo)} className="flex-1 py-2.5 rounded-lg font-semibold text-white" style={{ background: '#F59E0B' }}>Взять</button>
         </div>
       </div>
@@ -8619,7 +8615,7 @@ function RescheduleTaskModal({ task, onClose, onReschedule }) {
   return (
     <Modal onClose={onClose} title="Перенести визит">
       <div className="space-y-3">
-        <div className="text-sm" style={{ color: '#64748B' }}>
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
           Текущая дата: <strong>{task.visit_date ? fmtDate(task.visit_date) : '—'}</strong>
           {task.visit_time && <> · {task.visit_time}{task.visit_time_end ? `–${task.visit_time_end}` : ''}</>}
         </div>
@@ -8629,18 +8625,18 @@ function RescheduleTaskModal({ task, onClose, onReschedule }) {
           <SiteInput label="По" type="time" value={timeTo}   onChange={handleTo} />
         </div>
         <div>
-          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Причина переноса (необязательно)</label>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Причина переноса (необязательно)</label>
           <textarea
             value={reason}
             onChange={e => setReason(e.target.value)}
             placeholder="Например: клиент попросил перенести"
             rows={2}
             className="w-full px-3 py-2 rounded-lg outline-none"
-            style={{ border: '1px solid #E5E7EB' }}
+            style={{ border: '1px solid var(--mc-border)' }}
           />
         </div>
         <div className="flex gap-2 pt-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
             Отмена
           </button>
           <button
@@ -8664,8 +8660,8 @@ function CompleteTaskModal({ task, onClose, onComplete }) {
   return (
     <Modal onClose={onClose} title="Подтвердить выполнение">
       <div className="space-y-4">
-        <div className="text-sm" style={{ color: '#64748B' }}>
-          Задача <strong style={{ color: '#1A1814' }}>{task.task_number}</strong> — {task.client_name}
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
+          Задача <strong style={{ color: 'var(--mc-text)' }}>{task.task_number}</strong> — {task.client_name}
         </div>
         <FieldRow label="Дата визита" value={fmtDate(task.visit_date)} />
         <FieldRow label="Сегодня" value={fmtDate(today)} />
@@ -8676,13 +8672,13 @@ function CompleteTaskModal({ task, onClose, onComplete }) {
           </div>
         )}
         <div>
-          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Что сделано (кратко)</label>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Что сделано (кратко)</label>
           <textarea value={summary} onChange={e => setSummary(e.target.value)} rows={4} disabled={!dateMatches}
-            className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 15, opacity: dateMatches ? 1 : 0.5 }}
+            className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid var(--mc-border)', fontSize: 15, opacity: dateMatches ? 1 : 0.5 }}
             placeholder="Заменили помпу, прочистили группу..." />
         </div>
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button onClick={() => onComplete(summary)} disabled={!dateMatches || summary.trim().length < 3}
             className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50" style={{ background: '#22C55E' }}>
             Закрыть задачу
@@ -8798,23 +8794,23 @@ function AdminRolesScreen({ ctx }) {
             return (
               <button key={r.key} onClick={() => setSelectedKey(r.key)}
                 className="w-full text-left p-3 rounded-xl flex items-center gap-3"
-                style={{ background: isCur ? `${r.color}15` : 'white', border: `2px solid ${isCur ? r.color : '#E5E7EB'}` }}
+                style={{ background: isCur ? `${r.color}15` : 'white', border: `2px solid ${isCur ? r.color : 'var(--mc-border)'}` }}
               >
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: r.color }}>
                   {(r.short || r.label)[0]}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm truncate" style={{ color: '#1A1814' }}>{r.label}</div>
-                  <div className="text-[11px] mono-font truncate" style={{ color: '#64748B' }}>
-                    {r.key} {r.is_system && <span className="ml-1 px-1 rounded" style={{ background: '#F5F7F8' }}>система</span>}
+                  <div className="font-semibold text-sm truncate" style={{ color: 'var(--mc-text)' }}>{r.label}</div>
+                  <div className="text-[11px] mono-font truncate" style={{ color: 'var(--mc-muted)' }}>
+                    {r.key} {r.is_system && <span className="ml-1 px-1 rounded" style={{ background: 'var(--mc-active-item)' }}>система</span>}
                   </div>
                 </div>
                 <div className="text-xs text-right flex-shrink-0">
-                  <div className="font-bold" style={{ color: '#1A1814' }}>{(r.permissions || []).length}</div>
+                  <div className="font-bold" style={{ color: 'var(--mc-text)' }}>{(r.permissions || []).length}</div>
                   <div style={{ color: '#A8A8AE' }}>прав</div>
                 </div>
                 <div className="text-xs text-right flex-shrink-0 ml-2">
-                  <div className="font-bold" style={{ color: '#1A1814' }}>{count}</div>
+                  <div className="font-bold" style={{ color: 'var(--mc-text)' }}>{count}</div>
                   <div style={{ color: '#A8A8AE' }}>польз.</div>
                 </div>
               </button>
@@ -8828,45 +8824,45 @@ function AdminRolesScreen({ ctx }) {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Ключ роли</label>
+                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Ключ роли</label>
                   <input
                     value={selected.key}
                     disabled
                     className="w-full px-3 py-2.5 rounded-lg outline-none mono-font"
-                    style={{ border: '1px solid #E5E7EB', fontSize: 14, background: '#F5F7F8', color: '#64748B' }}
+                    style={{ border: '1px solid var(--mc-border)', fontSize: 14, background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}
                   />
                   <div className="text-[11px] mt-1" style={{ color: '#A8A8AE' }}>Ключ нельзя изменить после создания</div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Название</label>
+                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Название</label>
                   <input
                     value={draft.label}
                     onChange={e => setDraft(d => ({ ...d, label: e.target.value }))}
                     disabled={isAdmin}
                     className="w-full px-3 py-2.5 rounded-lg outline-none"
-                    style={{ border: '1px solid #E5E7EB', fontSize: 15, ...(isAdmin ? { background: '#F5F7F8' } : {}) }}
+                    style={{ border: '1px solid var(--mc-border)', fontSize: 15, ...(isAdmin ? { background: 'var(--mc-active-item)' } : {}) }}
                   />
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Короткое имя (для бейджей)</label>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Короткое имя (для бейджей)</label>
                 <input
                   value={draft.short}
                   onChange={e => setDraft(d => ({ ...d, short: e.target.value }))}
                   disabled={isAdmin}
                   maxLength={20}
                   className="w-full px-3 py-2.5 rounded-lg outline-none"
-                  style={{ border: '1px solid #E5E7EB', fontSize: 14, ...(isAdmin ? { background: '#F5F7F8' } : {}) }}
+                  style={{ border: '1px solid var(--mc-border)', fontSize: 14, ...(isAdmin ? { background: 'var(--mc-active-item)' } : {}) }}
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Цвет</label>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Цвет</label>
                 <div className="flex flex-wrap gap-1.5">
                   {ROLE_COLOR_PALETTE.map(c => (
                     <button key={c} onClick={() => !isAdmin && setDraft(d => ({ ...d, color: c }))}
                       disabled={isAdmin}
                       className="w-8 h-8 rounded-lg disabled:cursor-not-allowed disabled:opacity-50"
-                      style={{ background: c, border: `2px solid ${draft.color === c ? '#1A1814' : 'transparent'}` }}
+                      style={{ background: c, border: `2px solid ${draft.color === c ? 'var(--mc-text)' : 'transparent'}` }}
                       title={c}
                     />
                   ))}
@@ -8884,7 +8880,7 @@ function AdminRolesScreen({ ctx }) {
               <div className="space-y-3">
                 {Object.entries(permissionGroups).map(([group, perms]) => (
                   <div key={group}>
-                    <div className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: '#64748B' }}>{group}</div>
+                    <div className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--mc-muted)' }}>{group}</div>
                     <div className="space-y-1">
                       {perms.map(p => (
                         <label key={p.key} className="flex items-start gap-2 p-2 rounded-lg cursor-pointer hover:bg-gray-50">
@@ -8896,7 +8892,7 @@ function AdminRolesScreen({ ctx }) {
                             style={{ accentColor: draft.color }}
                           />
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm" style={{ color: '#1A1814' }}>{p.label}</div>
+                            <div className="text-sm" style={{ color: 'var(--mc-text)' }}>{p.label}</div>
                             <div className="text-[11px] mono-font" style={{ color: '#A8A8AE' }}>{p.key}</div>
                           </div>
                         </label>
@@ -8912,13 +8908,13 @@ function AdminRolesScreen({ ctx }) {
             <Card title={`Пользователи с этой ролью (${usersWithRole.length})`}>
               <div className="space-y-1">
                 {usersWithRole.map(u => (
-                  <div key={u.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: '#F5F7F8' }}>
+                  <div key={u.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
                     <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0" style={{ background: selected.color }}>
                       {u.first_name[0]}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold truncate" style={{ color: '#1A1814' }}>{u.first_name} {u.last_name}</div>
-                      <div className="text-xs truncate" style={{ color: '#64748B' }}>{u.email}</div>
+                      <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>{u.first_name} {u.last_name}</div>
+                      <div className="text-xs truncate" style={{ color: 'var(--mc-muted)' }}>{u.email}</div>
                     </div>
                     {!u.active && <span className="text-[10px] font-semibold rounded-full px-2 py-0.5" style={{ background: '#FEE2E2', color: '#991B1B' }}>отключён</span>}
                   </div>
@@ -8941,7 +8937,7 @@ function AdminRolesScreen({ ctx }) {
                     color: selected.color,
                     permissions: [...(selected.permissions || [])],
                   })}
-                  className="px-4 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F5F7F8', color: '#1A1814' }}
+                  className="px-4 py-2.5 rounded-lg font-semibold text-sm" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}
                 >
                   Отменить
                 </button>
@@ -8983,11 +8979,11 @@ function AdminRolesScreen({ ctx }) {
       {resetConfirmOpen && selected && (
         <Modal onClose={() => setResetConfirmOpen(false)} title="Сбросить права?">
           <div className="space-y-4">
-            <div className="text-sm" style={{ color: '#64748B' }}>
-              Права роли <strong style={{ color: '#1A1814' }}>{selected.label}</strong> будут сброшены к значениям по умолчанию.
+            <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
+              Права роли <strong style={{ color: 'var(--mc-text)' }}>{selected.label}</strong> будут сброшены к значениям по умолчанию.
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setResetConfirmOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+              <button onClick={() => setResetConfirmOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
               <button
                 onClick={() => {
                   const defaults = defaultPermissionsFor(selected.key);
@@ -9004,11 +9000,11 @@ function AdminRolesScreen({ ctx }) {
       {deleteConfirmOpen && selected && (
         <Modal onClose={() => setDeleteConfirmOpen(false)} title="Удалить роль?">
           <div className="space-y-4">
-            <div className="text-sm" style={{ color: '#64748B' }}>
-              Роль <strong style={{ color: '#1A1814' }}>{selected.label}</strong> будет удалена. Это действие нельзя отменить.
+            <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
+              Роль <strong style={{ color: 'var(--mc-text)' }}>{selected.label}</strong> будет удалена. Это действие нельзя отменить.
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setDeleteConfirmOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+              <button onClick={() => setDeleteConfirmOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
               <button
                 onClick={() => {
                   const r = deleteCustomRole(selected.key);
@@ -9072,38 +9068,38 @@ function CreateRoleModal({ onClose, onCreate }) {
   return (
     <Modal onClose={onClose} title="Новая роль">
       <div className="space-y-3">
-        <div className="text-xs p-3 rounded-lg" style={{ background: '#EAF4F6', color: '#1A1814' }}>
+        <div className="text-xs p-3 rounded-lg" style={{ background: '#EAF4F6', color: 'var(--mc-text)' }}>
           Создайте роль и сразу выберите для неё нужные права. После создания роль можно будет назначить пользователям в разделе «Пользователи».
         </div>
         <SiteInput label="Название роли" value={form.label} onChange={v => setForm(f => ({ ...f, label: v, _keyTouched: f._keyTouched }))} placeholder="Например: Менеджер по маркетингу" />
         <div>
-          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Ключ роли (латиница)</label>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Ключ роли (латиница)</label>
           <input
             value={form.key}
             onChange={e => setForm(f => ({ ...f, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''), _keyTouched: true }))}
             placeholder="marketing_manager"
             className="w-full px-3 py-2.5 rounded-lg outline-none mono-font"
-            style={{ border: '1px solid #E5E7EB', fontSize: 14 }}
+            style={{ border: '1px solid var(--mc-border)', fontSize: 14 }}
           />
         </div>
         <SiteInput label="Короткое имя (для бейджей)" value={form.short} onChange={v => setForm(f => ({ ...f, short: v }))} placeholder="Маркетинг" />
         <div>
-          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Цвет</label>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Цвет</label>
           <div className="flex flex-wrap gap-1.5">
             {ROLE_COLOR_PALETTE.map(c => (
               <button key={c} onClick={() => setForm(f => ({ ...f, color: c }))}
                 className="w-7 h-7 rounded-lg"
-                style={{ background: c, border: `2px solid ${form.color === c ? '#1A1814' : 'transparent'}` }}
+                style={{ background: c, border: `2px solid ${form.color === c ? 'var(--mc-text)' : 'transparent'}` }}
               />
             ))}
           </div>
         </div>
         <div>
-          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Права ({form.permissions.length} выбрано)</label>
-          <div className="rounded-lg p-2 space-y-3 max-h-72 overflow-y-auto" style={{ border: '1px solid #E5E7EB' }}>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Права ({form.permissions.length} выбрано)</label>
+          <div className="rounded-lg p-2 space-y-3 max-h-72 overflow-y-auto" style={{ border: '1px solid var(--mc-border)' }}>
             {Object.entries(permissionGroups).map(([group, perms]) => (
               <div key={group}>
-                <div className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: '#64748B' }}>{group}</div>
+                <div className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--mc-muted)' }}>{group}</div>
                 <div className="space-y-0.5">
                   {perms.map(p => (
                     <label key={p.key} className="flex items-start gap-2 p-1 rounded cursor-pointer hover:bg-gray-50">
@@ -9114,7 +9110,7 @@ function CreateRoleModal({ onClose, onCreate }) {
                         className="mt-0.5"
                         style={{ accentColor: form.color }}
                       />
-                      <div className="text-sm" style={{ color: '#1A1814' }}>{p.label}</div>
+                      <div className="text-sm" style={{ color: 'var(--mc-text)' }}>{p.label}</div>
                     </label>
                   ))}
                 </div>
@@ -9124,7 +9120,7 @@ function CreateRoleModal({ onClose, onCreate }) {
         </div>
         {error && <div className="text-sm p-3 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>{error}</div>}
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button onClick={handleCreate} className="flex-1 py-2.5 rounded-lg font-semibold text-white" style={{ background: '#297b8a' }}>Создать роль</button>
         </div>
       </div>
@@ -9207,9 +9203,9 @@ function WriteOffListScreen({ ctx }) {
           <button key={f.id} onClick={() => setFilter(f.id)}
             className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
             style={{
-              background: filter === f.id ? '#1A1814' : 'white',
+              background: filter === f.id ? '#297b8a' : 'var(--mc-surface)',
               color: filter === f.id ? 'white' : '#64748B',
-              border: filter === f.id ? '1px solid #1A1814' : '1px solid #E5E7EB',
+              border: filter === f.id ? '1px solid #297b8a' : '1px solid var(--mc-border)',
             }}>
             {f.label}
           </button>
@@ -9238,7 +9234,7 @@ function WriteOffCard({ writeOff, ctx }) {
 
   return (
     <button onClick={() => navigate({ name: 'writeoff_detail', writeOffId: writeOff.id })}
-      className="w-full text-left bg-white rounded-xl p-4 transition hover:shadow-sm" style={{ border: '1px solid #E5E7EB' }}>
+      className="w-full text-left bg-white rounded-xl p-4 transition hover:shadow-sm" style={{ border: '1px solid var(--mc-border)' }}>
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <span className="font-bold mono-font text-sm" style={{ color: '#3390EC' }}>{writeOff.number}</span>
@@ -9250,10 +9246,10 @@ function WriteOffCard({ writeOff, ctx }) {
           <Icon size={11} /> {s.short}
         </span>
       </div>
-      <div className="font-semibold mb-1 truncate" style={{ color: '#1A1814' }}>
+      <div className="font-semibold mb-1 truncate" style={{ color: 'var(--mc-text)' }}>
         {firstItem}{moreItems}
       </div>
-      <div className="text-sm mb-2" style={{ color: '#64748B' }}>
+      <div className="text-sm mb-2" style={{ color: 'var(--mc-muted)' }}>
         {writeOff.reason.length > 80 ? writeOff.reason.slice(0, 80) + '…' : writeOff.reason}
       </div>
       <div className="flex items-center justify-between text-xs flex-wrap gap-2" style={{ color: '#A8A8AE' }}>
@@ -9314,9 +9310,9 @@ function CreateWriteOffScreen({ ctx }) {
           <Card title="Позиции к списанию">
             <div className="space-y-3">
               {items.map((it, i) => (
-                <div key={it.tempId} className="rounded-lg p-3" style={{ background: '#F5F7F8', border: '1px solid #E5E7EB' }}>
+                <div key={it.tempId} className="rounded-lg p-3" style={{ background: 'var(--mc-active-item)', border: '1px solid var(--mc-border)' }}>
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="text-xs font-semibold" style={{ color: '#64748B' }}>Позиция {i + 1}</div>
+                    <div className="text-xs font-semibold" style={{ color: 'var(--mc-muted)' }}>Позиция {i + 1}</div>
                     {items.length > 1 && (
                       <button onClick={() => removeItem(i)} className="p-1" style={{ color: '#EB5757' }}>
                         <Trash2 size={14} />
@@ -9328,11 +9324,11 @@ function CreateWriteOffScreen({ ctx }) {
                       <button
                         onClick={() => setPickerOpen(i)}
                         className="w-full px-3 py-2 rounded-lg flex items-center justify-between text-left text-sm bg-white"
-                        style={{ border: `1px solid ${errors[`name_${i}`] && !it.name ? '#EB5757' : '#E5E7EB'}` }}
+                        style={{ border: `1px solid ${errors[`name_${i}`] && !it.name ? '#EB5757' : 'var(--mc-border)'}` }}
                       >
                         {it.name ? (
-                          <span className="truncate" style={{ color: '#1A1814' }}>
-                            {it.name} <span style={{ color: '#64748B' }}>({it.unit})</span>
+                          <span className="truncate" style={{ color: 'var(--mc-text)' }}>
+                            {it.name} <span style={{ color: 'var(--mc-muted)' }}>({it.unit})</span>
                             {it.category === 'Запчасти' && <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#FEF3C7', color: '#92400E' }}>ЗАПЧАСТЬ</span>}
                           </span>
                         ) : (
@@ -9340,7 +9336,7 @@ function CreateWriteOffScreen({ ctx }) {
                         )}
                         <ChevronRight size={16} style={{ color: '#A8A8AE', flexShrink: 0 }} />
                       </button>
-                      <div className="text-[11px] mt-1" style={{ color: '#64748B' }}>
+                      <div className="text-[11px] mt-1" style={{ color: 'var(--mc-muted)' }}>
                         или впишите наименование вручную (если позиции нет в базе):
                       </div>
                       <input
@@ -9348,30 +9344,30 @@ function CreateWriteOffScreen({ ctx }) {
                         onChange={e => updateItem(i, { name: e.target.value, product_id: '' })}
                         placeholder="Например: Терморегулятор 230В"
                         className="w-full px-3 py-2 mt-1 rounded-lg outline-none text-sm"
-                        style={{ border: `1px solid ${errors[`name_${i}`] && !it.name ? '#EB5757' : '#E5E7EB'}` }}
+                        style={{ border: `1px solid ${errors[`name_${i}`] && !it.name ? '#EB5757' : 'var(--mc-border)'}` }}
                       />
                       {errors[`name_${i}`] && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors[`name_${i}`]}</div>}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-xs font-semibold mb-1 block" style={{ color: '#64748B' }}>Кол-во</label>
+                        <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Кол-во</label>
                         <input
                           value={it.quantity || ''}
                           onChange={e => updateItem(i, { quantity: e.target.value.replace(/[^0-9.]/g, '') })}
                           placeholder="0"
                           className="w-full px-3 py-2 rounded-lg outline-none text-sm bg-white"
-                          style={{ border: `1px solid ${errors[`qty_${i}`] ? '#EB5757' : '#E5E7EB'}` }}
+                          style={{ border: `1px solid ${errors[`qty_${i}`] ? '#EB5757' : 'var(--mc-border)'}` }}
                         />
                         {errors[`qty_${i}`] && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors[`qty_${i}`]}</div>}
                       </div>
                       <div>
-                        <label className="text-xs font-semibold mb-1 block" style={{ color: '#64748B' }}>Ед.</label>
+                        <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Ед.</label>
                         <input
                           value={it.unit || ''}
                           onChange={e => updateItem(i, { unit: e.target.value })}
                           placeholder="шт"
                           className="w-full px-3 py-2 rounded-lg outline-none text-sm bg-white"
-                          style={{ border: '1px solid #E5E7EB' }}
+                          style={{ border: '1px solid var(--mc-border)' }}
                         />
                       </div>
                     </div>
@@ -9391,7 +9387,7 @@ function CreateWriteOffScreen({ ctx }) {
               rows={4}
               placeholder="Например: разбили чашку при чистке группы; запчасть была установлена в кофемашину клиента X..."
               className="w-full px-3 py-2.5 rounded-lg outline-none"
-              style={{ border: `1px solid ${errors.reason ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }}
+              style={{ border: `1px solid ${errors.reason ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 15 }}
             />
             {errors.reason && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.reason}</div>}
           </Card>
@@ -9399,7 +9395,7 @@ function CreateWriteOffScreen({ ctx }) {
 
         <div className="space-y-4">
           <Card title="Что будет дальше">
-            <div className="text-sm space-y-2" style={{ color: '#64748B' }}>
+            <div className="text-sm space-y-2" style={{ color: 'var(--mc-muted)' }}>
               <div className="flex gap-2"><span style={{ color: '#F59E0B' }}>1.</span> Заявка уйдёт на подтверждение директору и старшему менеджеру.</div>
               <div className="flex gap-2"><span style={{ color: '#3390EC' }}>2.</span> После одобрения её увидит кассир и проведёт документ через 1С.</div>
               <div className="flex gap-2"><span style={{ color: '#8B5CF6' }}>3.</span> Склад соберёт товары и присвоит код выдачи.</div>
@@ -9440,27 +9436,27 @@ function WriteOffProductPickerModal({ db, onPick, onClose }) {
       <div className="space-y-3">
         <div className="relative">
           <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#A8A8AE' }} />
-          <input className="w-full pl-9 pr-3 py-2 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB' }} placeholder="Поиск…" value={search} onChange={e => setSearch(e.target.value)} autoFocus />
+          <input className="w-full pl-9 pr-3 py-2 rounded-lg outline-none" style={{ border: '1px solid var(--mc-border)' }} placeholder="Поиск…" value={search} onChange={e => setSearch(e.target.value)} autoFocus />
         </div>
         <div className="flex gap-1.5 overflow-x-auto pb-1">
           {cats.map(c => (
             <button key={c} onClick={() => setActiveCat(c)} className="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold"
-              style={{ background: activeCat === c ? '#1A1814' : '#F5F7F8', color: activeCat === c ? 'white' : '#64748B' }}>
+              style={{ background: activeCat === c ? '#297b8a' : 'var(--mc-active-item)', color: activeCat === c ? 'white' : 'var(--mc-muted)' }}>
               {c}
             </button>
           ))}
         </div>
-        <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #E5E7EB', maxHeight: 360, overflowY: 'auto' }}>
+        <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--mc-border)', maxHeight: 360, overflowY: 'auto' }}>
           {filtered.length === 0 ? (
-            <div className="p-6 text-center text-sm" style={{ color: '#64748B' }}>Ничего не найдено</div>
+            <div className="p-6 text-center text-sm" style={{ color: 'var(--mc-muted)' }}>Ничего не найдено</div>
           ) : (
             filtered.map(p => (
               <button key={p.id} onClick={() => onPick(p)}
                 className="w-full text-left px-3 py-2 flex items-start justify-between gap-3 hover:bg-gray-50 transition"
-                style={{ borderBottom: '1px solid #F1F5F9', background: 'white' }}>
+                style={{ borderBottom: '1px solid #F1F5F9', background: 'var(--mc-surface)' }}>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium" style={{ color: '#1A1814' }}>{p.name}</div>
-                  <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>{p.cat} · {p.unit}</div>
+                  <div className="text-sm font-medium" style={{ color: 'var(--mc-text)' }}>{p.name}</div>
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>{p.cat} · {p.unit}</div>
                 </div>
               </button>
             ))
@@ -9494,8 +9490,8 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
         <PageHeader title="Нет доступа" subtitle="Эту заявку видят только автор, директор, старший менеджер и кассир" onBack={goBack} />
         <Card>
           <div className="flex items-start gap-3 p-2">
-            <Lock size={20} style={{ color: '#64748B' }} className="flex-shrink-0 mt-0.5" />
-            <div className="text-sm" style={{ color: '#1A1814' }}>
+            <Lock size={20} style={{ color: 'var(--mc-muted)' }} className="flex-shrink-0 mt-0.5" />
+            <div className="text-sm" style={{ color: 'var(--mc-text)' }}>
               У вашей роли нет прав видеть детали этой заявки.
             </div>
           </div>
@@ -9529,38 +9525,38 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
               {wo.items.map(it => (
                 <div key={it.id} className="flex items-start justify-between gap-3 py-2" style={{ borderBottom: '1px solid #F1F5F9' }}>
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-sm" style={{ color: '#1A1814' }}>{it.name}</div>
-                    <div className="text-xs" style={{ color: '#64748B' }}>{it.category || '—'}</div>
+                    <div className="font-semibold text-sm" style={{ color: 'var(--mc-text)' }}>{it.name}</div>
+                    <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>{it.category || '—'}</div>
                   </div>
-                  <div className="font-bold mono-font text-sm whitespace-nowrap" style={{ color: '#1A1814' }}>
+                  <div className="font-bold mono-font text-sm whitespace-nowrap" style={{ color: 'var(--mc-text)' }}>
                     {fmtNum(it.quantity)} {it.unit}
                   </div>
                 </div>
               ))}
-              <div className="flex items-center justify-between pt-2" style={{ borderTop: '1px solid #E5E7EB' }}>
-                <span className="text-sm font-semibold" style={{ color: '#64748B' }}>Итого позиций / единиц</span>
-                <span className="text-sm font-bold" style={{ color: '#1A1814' }}>{wo.items.length} / {fmtNum(itemsTotal)}</span>
+              <div className="flex items-center justify-between pt-2" style={{ borderTop: '1px solid var(--mc-border)' }}>
+                <span className="text-sm font-semibold" style={{ color: 'var(--mc-muted)' }}>Итого позиций / единиц</span>
+                <span className="text-sm font-bold" style={{ color: 'var(--mc-text)' }}>{wo.items.length} / {fmtNum(itemsTotal)}</span>
               </div>
             </div>
           </Card>
 
           <Card title="Причина списания">
-            <div className="text-sm whitespace-pre-wrap" style={{ color: '#1A1814' }}>{wo.reason}</div>
+            <div className="text-sm whitespace-pre-wrap" style={{ color: 'var(--mc-text)' }}>{wo.reason}</div>
           </Card>
 
           {wo.approval_comment && (
             <Card title={wo.status === 'rejected' ? 'Причина отклонения' : 'Комментарий при одобрении'}>
-              <div className="text-sm whitespace-pre-wrap" style={{ color: wo.status === 'rejected' ? '#991B1B' : '#1A1814' }}>{wo.approval_comment}</div>
+              <div className="text-sm whitespace-pre-wrap" style={{ color: wo.status === 'rejected' ? '#991B1B' : 'var(--mc-text)' }}>{wo.approval_comment}</div>
             </Card>
           )}
 
           {wo.doc_no && (
             <Card title="Документ в 1С">
               <div className="flex items-center gap-3">
-                <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: '#64748B' }}>Номер</div>
+                <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--mc-muted)' }}>Номер</div>
                 <div className="mono-font text-xl font-bold" style={{ color: '#22C55E' }}>{wo.doc_no}</div>
               </div>
-              {wo.completed_at && <div className="text-xs mt-2" style={{ color: '#64748B' }}>Списано: {fmtDateTime(wo.completed_at)}</div>}
+              {wo.completed_at && <div className="text-xs mt-2" style={{ color: 'var(--mc-muted)' }}>Списано: {fmtDateTime(wo.completed_at)}</div>}
             </Card>
           )}
 
@@ -9569,18 +9565,18 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
               const actor = db.users.find(u => u.id === l.actor);
               return (
                 <div key={i} className="flex items-start gap-3 py-2" style={{ borderBottom: i < wo.log.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#F5F7F8', color: '#64748B' }}>
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
                     {l.event === 'created' ? <Plus size={13} /> : <ArrowRight size={13} />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm" style={{ color: '#1A1814' }}>
+                    <div className="text-sm" style={{ color: 'var(--mc-text)' }}>
                       {l.event === 'created' && 'Заявка создана'}
                       {l.event === 'status' && <>{WRITEOFF_STATUS[l.from]?.short || l.from} → <strong>{WRITEOFF_STATUS[l.to]?.short || l.to}</strong></>}
                     </div>
-                    <div className="text-xs" style={{ color: '#64748B' }}>
+                    <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                       {actor ? `${actor.first_name} ${actor.last_name}` : 'Система'} · {fmtDateTime(l.at)}
                     </div>
-                    {l.meta?.comment && <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>💬 {l.meta.comment}</div>}
+                    {l.meta?.comment && <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>💬 {l.meta.comment}</div>}
                     {l.meta?.doc_no && <div className="text-xs mt-0.5 mono-font" style={{ color: '#22C55E' }}>📄 {l.meta.doc_no}</div>}
                   </div>
                 </div>
@@ -9645,7 +9641,7 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
             <Card title="Ваш код выдачи на складе">
               <div className="text-center py-3">
                 <div className="mono-font text-4xl font-bold tracking-wider" style={{ color: '#22C55E' }}>{wo.pickup_code}</div>
-                <div className="text-xs mt-2" style={{ color: '#64748B' }}>Подойдите на склад и назовите этот код</div>
+                <div className="text-xs mt-2" style={{ color: 'var(--mc-muted)' }}>Подойдите на склад и назовите этот код</div>
               </div>
             </Card>
           )}
@@ -9653,7 +9649,7 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
           {canCancel && (
             <button
               onClick={() => setCancelOpen(true)}
-              className="w-full py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F5F7F8', color: '#64748B' }}
+              className="w-full py-2.5 rounded-lg font-semibold text-sm" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}
             >
               Отменить заявку
             </button>
@@ -9688,14 +9684,14 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
       {prepareOpen && (
         <Modal onClose={() => setPrepareOpen(false)} title="Подтвердить сборку">
           <div className="space-y-4">
-            <div className="text-sm" style={{ color: '#64748B' }}>
-              Товары из заявки <strong style={{ color: '#1A1814' }}>{wo.number}</strong> собраны и готовы к выдаче?
+            <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
+              Товары из заявки <strong style={{ color: 'var(--mc-text)' }}>{wo.number}</strong> собраны и готовы к выдаче?
             </div>
             <div className="text-sm p-3 rounded-lg" style={{ background: '#EDE9FE', color: '#5B21B6' }}>
               После подтверждения будет сгенерирован 4-значный код выдачи. Заявитель получит уведомление с кодом.
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setPrepareOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+              <button onClick={() => setPrepareOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
                 Отмена
               </button>
               <button
@@ -9717,11 +9713,11 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
       {cancelOpen && (
         <Modal onClose={() => setCancelOpen(false)} title="Отменить заявку?">
           <div className="space-y-4">
-            <div className="text-sm" style={{ color: '#64748B' }}>
-              Заявка <strong style={{ color: '#1A1814' }}>{wo.number}</strong> будет отменена. Это действие нельзя отменить.
+            <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
+              Заявка <strong style={{ color: 'var(--mc-text)' }}>{wo.number}</strong> будет отменена. Это действие нельзя отменить.
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setCancelOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+              <button onClick={() => setCancelOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
                 Не отменять
               </button>
               <button
@@ -9749,7 +9745,7 @@ function DeliverWriteOffBlock({ wo, ctx, showToast }) {
   const [code, setCode] = useState('');
   return (
     <Card title="Выдать заявителю">
-      <div className="text-sm mb-2" style={{ color: '#64748B' }}>
+      <div className="text-sm mb-2" style={{ color: 'var(--mc-muted)' }}>
         Попроси клиента назвать код выдачи и введи его сюда:
       </div>
       <div className="flex gap-2">
@@ -9759,7 +9755,7 @@ function DeliverWriteOffBlock({ wo, ctx, showToast }) {
           placeholder="0000"
           maxLength={4}
           className="flex-1 px-3 py-2 rounded-lg outline-none mono-font text-center text-2xl font-bold tracking-wider"
-          style={{ border: '1px solid #E5E7EB' }}
+          style={{ border: '1px solid var(--mc-border)' }}
         />
         <button
           onClick={() => {
@@ -9786,7 +9782,7 @@ function WriteOffTimeline({ status }) {
         <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: WRITEOFF_STATUS.rejected.color, color: 'white' }}>
           <XCircle size={15} />
         </div>
-        <div className="font-semibold" style={{ color: '#1A1814' }}>Заявка отклонена</div>
+        <div className="font-semibold" style={{ color: 'var(--mc-text)' }}>Заявка отклонена</div>
       </div>
     );
   }
@@ -9805,7 +9801,7 @@ function WriteOffTimeline({ status }) {
                 style={{ background: reached ? WRITEOFF_STATUS[s].color : '#E7E7E9', color: reached ? 'white' : '#A8A8AE', boxShadow: current ? `0 0 0 4px ${WRITEOFF_STATUS[s].color}25` : 'none' }}>
                 {reached ? <Check size={15} /> : <CircleDot size={12} />}
               </div>
-              <div className="text-xs mt-1.5 text-center whitespace-nowrap" style={{ color: reached ? '#1A1814' : '#A8A8AE', fontWeight: current ? 700 : 500 }}>
+              <div className="text-xs mt-1.5 text-center whitespace-nowrap" style={{ color: reached ? 'var(--mc-text)' : '#A8A8AE', fontWeight: current ? 700 : 500 }}>
                 {WRITEOFF_STATUS[s].short}
               </div>
             </div>
@@ -9824,17 +9820,17 @@ function ApproveWriteOffModal({ onClose, onApprove }) {
   return (
     <Modal onClose={onClose} title="Одобрить заявку">
       <div className="space-y-3">
-        <div className="text-sm" style={{ color: '#64748B' }}>
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
           После одобрения заявку увидит кассир для списания в 1С. В чат-группу «Акты списаний» уйдёт уведомление.
         </div>
         <div>
-          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Комментарий (необязательно)</label>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Комментарий (необязательно)</label>
           <textarea value={comment} onChange={e => setComment(e.target.value)} rows={3}
-            className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 14 }}
+            className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid var(--mc-border)', fontSize: 14 }}
             placeholder="Например: согласовано, списать сегодня" />
         </div>
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button onClick={() => onApprove(comment)} className="flex-1 py-2.5 rounded-lg font-semibold text-white" style={{ background: '#3390EC' }}>Одобрить</button>
         </div>
       </div>
@@ -9848,17 +9844,17 @@ function RejectWriteOffModal({ onClose, onReject }) {
   return (
     <Modal onClose={onClose} title="Отклонить заявку">
       <div className="space-y-3">
-        <div className="text-sm" style={{ color: '#64748B' }}>
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
           Укажите автору, почему заявка отклонена.
         </div>
         <div>
-          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Причина отклонения</label>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Причина отклонения</label>
           <textarea value={comment} onChange={e => setComment(e.target.value)} rows={3} autoFocus
-            className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 14 }}
+            className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid var(--mc-border)', fontSize: 14 }}
             placeholder="Например: нужны фотографии повреждённой запчасти" />
         </div>
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button onClick={() => onReject(comment)} disabled={!valid} className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50" style={{ background: '#EB5757' }}>Отклонить</button>
         </div>
       </div>
@@ -9872,25 +9868,25 @@ function CompleteWriteOffModal({ onClose, onComplete }) {
   return (
     <Modal onClose={onClose} title="Провести через 1С">
       <div className="space-y-3">
-        <div className="text-sm" style={{ color: '#64748B' }}>
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
           Введите номер документа списания из 1С. После этого заявка уйдёт на склад для сборки и выдачи.
         </div>
         <div>
-          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Номер документа</label>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Номер документа</label>
           <input
             value={docNo}
             onChange={e => setDocNo(e.target.value.trim())}
             autoFocus
             placeholder="00ЦТ-012573"
             className="w-full px-3 py-2.5 rounded-lg outline-none mono-font text-lg font-bold tracking-wider"
-            style={{ border: `1px solid ${valid || docNo === '00ЦТ-' ? '#E5E7EB' : '#EB5757'}`, color: '#1A1814' }}
+            style={{ border: `1px solid ${valid || docNo === '00ЦТ-' ? 'var(--mc-border)' : '#EB5757'}`, color: 'var(--mc-text)' }}
           />
           <div className="text-[11px] mt-1" style={{ color: valid ? '#22C55E' : '#64748B' }}>
             Формат: 00ЦТ-NNNNNN (от 4 до 7 цифр)
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button onClick={() => onComplete(docNo)} disabled={!valid} className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50" style={{ background: '#22C55E' }}>
             Списать и закрыть
           </button>
@@ -9926,14 +9922,14 @@ function FileOrUrlInput({ label, value, onChange, hint }) {
 
   return (
     <div>
-      <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>{label}</label>
+      <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>{label}</label>
       <div className="flex gap-1 mb-2">
         <button onClick={() => setMode('url')} className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
-          style={{ background: mode === 'url' ? '#297b8a' : '#F5F7F8', color: mode === 'url' ? 'white' : '#64748B' }}>
+          style={{ background: mode === 'url' ? '#297b8a' : 'var(--mc-active-item)', color: mode === 'url' ? 'white' : '#64748B' }}>
           🔗 Ссылка (рекомендуется)
         </button>
         <button onClick={() => setMode('file')} className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
-          style={{ background: mode === 'file' ? '#297b8a' : '#F5F7F8', color: mode === 'file' ? 'white' : '#64748B' }}>
+          style={{ background: mode === 'file' ? '#297b8a' : 'var(--mc-active-item)', color: mode === 'file' ? 'white' : '#64748B' }}>
           📎 Загрузить файл
         </button>
       </div>
@@ -9943,12 +9939,12 @@ function FileOrUrlInput({ label, value, onChange, hint }) {
           onChange={e => onChange(e.target.value ? { type: 'url', name: e.target.value.split('/').pop() || 'Документ', value: e.target.value } : null)}
           placeholder="https://drive.google.com/file/d/..."
           className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
-          style={{ border: '1px solid #E5E7EB' }}
+          style={{ border: '1px solid var(--mc-border)' }}
         />
       ) : (
         <div>
-          <label className="block w-full px-3 py-2.5 rounded-lg cursor-pointer text-sm text-center" style={{ border: '1px dashed #E5E7EB', background: '#F5F7F8', color: '#64748B' }}>
-            {value?.type === 'file' ? <span style={{ color: '#1A1814' }}>📎 {value.name}</span> : 'Выбрать файл (до 2 МБ)'}
+          <label className="block w-full px-3 py-2.5 rounded-lg cursor-pointer text-sm text-center" style={{ border: '1px dashed var(--mc-border)', background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
+            {value?.type === 'file' ? <span style={{ color: 'var(--mc-text)' }}>📎 {value.name}</span> : 'Выбрать файл (до 2 МБ)'}
             <input type="file" onChange={onFile} className="hidden" />
           </label>
           {value?.type === 'file' && (
@@ -10026,9 +10022,9 @@ function ContractListScreen({ ctx }) {
           <button key={f.id} onClick={() => setFilter(f.id)}
             className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
             style={{
-              background: filter === f.id ? '#1A1814' : 'white',
+              background: filter === f.id ? '#297b8a' : 'var(--mc-surface)',
               color: filter === f.id ? 'white' : '#64748B',
-              border: filter === f.id ? '1px solid #1A1814' : '1px solid #E5E7EB',
+              border: filter === f.id ? '1px solid #297b8a' : '1px solid var(--mc-border)',
             }}>
             {f.label}
           </button>
@@ -10057,7 +10053,7 @@ function ContractCard({ contract, ctx }) {
 
   return (
     <button onClick={() => navigate({ name: 'contract_detail', contractId: contract.id })}
-      className="w-full text-left bg-white rounded-xl p-4 transition hover:shadow-sm" style={{ border: '1px solid #E5E7EB' }}>
+      className="w-full text-left bg-white rounded-xl p-4 transition hover:shadow-sm" style={{ border: '1px solid var(--mc-border)' }}>
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <span className="font-bold mono-font text-sm" style={{ color: '#3390EC' }}>{contract.number}</span>
@@ -10074,10 +10070,10 @@ function ContractCard({ contract, ctx }) {
           <Icon size={11} /> {s.short}
         </span>
       </div>
-      <div className="font-semibold mb-1 truncate" style={{ color: '#1A1814' }}>
+      <div className="font-semibold mb-1 truncate" style={{ color: 'var(--mc-text)' }}>
         {CONTRACT_TYPE[contract.contract_type].short}
       </div>
-      <div className="text-sm mb-2 truncate" style={{ color: '#64748B' }}>
+      <div className="text-sm mb-2 truncate" style={{ color: 'var(--mc-muted)' }}>
         {firstLine || '—'}
       </div>
       <div className="flex items-center justify-between text-xs flex-wrap gap-2" style={{ color: '#A8A8AE' }}>
@@ -10154,8 +10150,8 @@ function CreateContractScreen({ ctx }) {
                 <button key={k} onClick={() => update({ contract_type: k })}
                   className="rounded-lg p-3 text-left text-sm font-semibold transition"
                   style={{
-                    background: form.contract_type === k ? '#297b8a' : '#F5F7F8',
-                    color: form.contract_type === k ? 'white' : '#1A1814',
+                    background: form.contract_type === k ? '#297b8a' : 'var(--mc-active-item)',
+                    color: form.contract_type === k ? 'white' : 'var(--mc-text)',
                   }}>
                   {v.label}
                 </button>
@@ -10166,9 +10162,9 @@ function CreateContractScreen({ ctx }) {
           <Card title="2. Спецификация">
             <div className="space-y-3">
               {form.specification.map((it, i) => (
-                <div key={it.tempId} className="rounded-lg p-3" style={{ background: '#F5F7F8', border: '1px solid #E5E7EB' }}>
+                <div key={it.tempId} className="rounded-lg p-3" style={{ background: 'var(--mc-active-item)', border: '1px solid var(--mc-border)' }}>
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="text-xs font-semibold" style={{ color: '#64748B' }}>Позиция {i + 1}</div>
+                    <div className="text-xs font-semibold" style={{ color: 'var(--mc-muted)' }}>Позиция {i + 1}</div>
                     {form.specification.length > 1 && (
                       <button onClick={() => removeItem(i)} className="p-1" style={{ color: '#EB5757' }}>
                         <Trash2 size={14} />
@@ -10179,11 +10175,11 @@ function CreateContractScreen({ ctx }) {
                     <button
                       onClick={() => setPickerOpen(i)}
                       className="w-full px-3 py-2 rounded-lg flex items-center justify-between text-left text-sm bg-white"
-                      style={{ border: `1px solid ${errors[`name_${i}`] && !it.name ? '#EB5757' : '#E5E7EB'}` }}
+                      style={{ border: `1px solid ${errors[`name_${i}`] && !it.name ? '#EB5757' : 'var(--mc-border)'}` }}
                     >
                       {it.name ? (
-                        <span className="truncate" style={{ color: '#1A1814' }}>
-                          {it.name} <span style={{ color: '#64748B' }}>({it.unit})</span>
+                        <span className="truncate" style={{ color: 'var(--mc-text)' }}>
+                          {it.name} <span style={{ color: 'var(--mc-muted)' }}>({it.unit})</span>
                         </span>
                       ) : (
                         <span style={{ color: '#A8A8AE' }}>Выбрать из прайса…</span>
@@ -10195,44 +10191,44 @@ function CreateContractScreen({ ctx }) {
                       onChange={e => updateItem(i, { name: e.target.value, product_id: '' })}
                       placeholder="или вписать вручную"
                       className="w-full px-3 py-2 rounded-lg outline-none text-sm bg-white"
-                      style={{ border: `1px solid ${errors[`name_${i}`] && !it.name ? '#EB5757' : '#E5E7EB'}` }}
+                      style={{ border: `1px solid ${errors[`name_${i}`] && !it.name ? '#EB5757' : 'var(--mc-border)'}` }}
                     />
                     {errors[`name_${i}`] && <div className="text-xs" style={{ color: '#EB5757' }}>{errors[`name_${i}`]}</div>}
                     <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <label className="text-[11px] font-semibold mb-1 block" style={{ color: '#64748B' }}>Объём</label>
+                        <label className="text-[11px] font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Объём</label>
                         <input
                           value={it.volume || ''}
                           onChange={e => updateItem(i, { volume: e.target.value.replace(/[^0-9.]/g, '') })}
                           placeholder="0"
                           className="w-full px-3 py-2 rounded-lg outline-none text-sm bg-white"
-                          style={{ border: `1px solid ${errors[`volume_${i}`] ? '#EB5757' : '#E5E7EB'}` }}
+                          style={{ border: `1px solid ${errors[`volume_${i}`] ? '#EB5757' : 'var(--mc-border)'}` }}
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] font-semibold mb-1 block" style={{ color: '#64748B' }}>Ед.</label>
+                        <label className="text-[11px] font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Ед.</label>
                         <input
                           value={it.unit || ''}
                           onChange={e => updateItem(i, { unit: e.target.value })}
                           placeholder="кг"
                           className="w-full px-3 py-2 rounded-lg outline-none text-sm bg-white"
-                          style={{ border: '1px solid #E5E7EB' }}
+                          style={{ border: '1px solid var(--mc-border)' }}
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] font-semibold mb-1 block" style={{ color: '#64748B' }}>Цена за ед., ₸</label>
+                        <label className="text-[11px] font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Цена за ед., ₸</label>
                         <input
                           value={it.price_per_unit || ''}
                           onChange={e => updateItem(i, { price_per_unit: e.target.value.replace(/[^0-9.]/g, '') })}
                           placeholder="0"
                           className="w-full px-3 py-2 rounded-lg outline-none text-sm bg-white"
-                          style={{ border: `1px solid ${errors[`price_${i}`] ? '#EB5757' : '#E5E7EB'}` }}
+                          style={{ border: `1px solid ${errors[`price_${i}`] ? '#EB5757' : 'var(--mc-border)'}` }}
                         />
                       </div>
                     </div>
                     {Number(it.volume) > 0 && Number(it.price_per_unit) > 0 && (
-                      <div className="text-xs text-right" style={{ color: '#64748B' }}>
-                        Сумма по позиции: <strong style={{ color: '#1A1814' }}>{fmtNum(Number(it.volume) * Number(it.price_per_unit))} ₸</strong>
+                      <div className="text-xs text-right" style={{ color: 'var(--mc-muted)' }}>
+                        Сумма по позиции: <strong style={{ color: 'var(--mc-text)' }}>{fmtNum(Number(it.volume) * Number(it.price_per_unit))} ₸</strong>
                       </div>
                     )}
                   </div>
@@ -10250,8 +10246,8 @@ function CreateContractScreen({ ctx }) {
                 <button key={k} onClick={() => update({ payment_terms: k })}
                   className="w-full rounded-lg p-3 text-left text-sm font-semibold"
                   style={{
-                    background: form.payment_terms === k ? `#297b8a15` : '#F5F7F8',
-                    color: '#1A1814',
+                    background: form.payment_terms === k ? `#297b8a15` : 'var(--mc-active-item)',
+                    color: 'var(--mc-text)',
                     border: `2px solid ${form.payment_terms === k ? '#297b8a' : 'transparent'}`,
                   }}>
                   {v.label}
@@ -10267,7 +10263,7 @@ function CreateContractScreen({ ctx }) {
               rows={5}
               placeholder={'ТОО «Coffee Boom Almaty»\nБИН: 123456789012\nЮр.адрес: г. Алматы, ул. Достык 132\nИИК: KZ123ABC...\nБИК: KCJBKZKX'}
               className="w-full px-3 py-2.5 rounded-lg outline-none mono-font"
-              style={{ border: `1px solid ${errors.client_details ? '#EB5757' : '#E5E7EB'}`, fontSize: 13 }}
+              style={{ border: `1px solid ${errors.client_details ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 13 }}
             />
             {errors.client_details && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.client_details}</div>}
             <div className="text-[11px] mt-1" style={{ color: '#A8A8AE' }}>Название, БИН/ИИН, юр.адрес, банковские реквизиты</div>
@@ -10298,7 +10294,7 @@ function CreateContractScreen({ ctx }) {
               rows={2}
               placeholder="Доставка до клиента. По прибытию на склад г. Алматы, ориентировочные сроки 15.06.2026"
               className="w-full px-3 py-2.5 rounded-lg outline-none"
-              style={{ border: '1px solid #E5E7EB', fontSize: 13 }}
+              style={{ border: '1px solid var(--mc-border)', fontSize: 13 }}
             />
             <div className="text-[11px] mt-1" style={{ color: '#A8A8AE' }}>Необязательно — появится в конце спецификации в тексте для юриста.</div>
           </Card>
@@ -10309,8 +10305,8 @@ function CreateContractScreen({ ctx }) {
                 <button key={k} onClick={() => update({ tax_regime: k })}
                   className="rounded-lg p-3 text-center transition"
                   style={{
-                    background: form.tax_regime === k ? '#297b8a' : '#F5F7F8',
-                    color: form.tax_regime === k ? 'white' : '#1A1814',
+                    background: form.tax_regime === k ? '#297b8a' : 'var(--mc-active-item)',
+                    color: form.tax_regime === k ? 'white' : 'var(--mc-text)',
                   }}>
                   <div className="font-bold text-lg">{v.label}</div>
                   <div className="text-[11px] mt-0.5" style={{ opacity: 0.85 }}>{v.desc}</div>
@@ -10341,7 +10337,7 @@ function CreateContractScreen({ ctx }) {
           </Card>
 
           <Card title="Что будет дальше">
-            <div className="text-sm space-y-2" style={{ color: '#64748B' }}>
+            <div className="text-sm space-y-2" style={{ color: 'var(--mc-muted)' }}>
               <div className="flex gap-2"><span style={{ color: '#F59E0B' }}>1.</span> Заявка уйдёт директору и ст.менеджеру.</div>
               <div className="flex gap-2"><span style={{ color: '#3390EC' }}>2.</span> Один из них примет в работу — начнут готовить договор. Все правки и версии будут в этой же заявке.</div>
               <div className="flex gap-2"><span style={{ color: '#22C55E' }}>3.</span> Когда договор подпишут — присвоят номер, заявка закроется.</div>
@@ -10383,8 +10379,8 @@ function ContractDetailScreen({ ctx, contractId }) {
         <PageHeader title="Нет доступа" subtitle="Эту заявку видят только автор, директор и ст.менеджер" onBack={goBack} />
         <Card>
           <div className="flex items-start gap-3 p-2">
-            <Lock size={20} style={{ color: '#64748B' }} className="flex-shrink-0 mt-0.5" />
-            <div className="text-sm" style={{ color: '#1A1814' }}>У вашей роли нет прав видеть эту заявку.</div>
+            <Lock size={20} style={{ color: 'var(--mc-muted)' }} className="flex-shrink-0 mt-0.5" />
+            <div className="text-sm" style={{ color: 'var(--mc-text)' }}>У вашей роли нет прав видеть эту заявку.</div>
           </div>
         </Card>
       </div>
@@ -10424,25 +10420,25 @@ function ContractDetailScreen({ ctx, contractId }) {
               {cr.specification.map(it => (
                 <div key={it.id} className="flex items-start justify-between gap-3 py-2" style={{ borderBottom: '1px solid #F1F5F9' }}>
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-sm" style={{ color: '#1A1814' }}>{it.name}</div>
-                    <div className="text-xs mono-font" style={{ color: '#64748B' }}>
+                    <div className="font-semibold text-sm" style={{ color: 'var(--mc-text)' }}>{it.name}</div>
+                    <div className="text-xs mono-font" style={{ color: 'var(--mc-muted)' }}>
                       {fmtNum(it.volume)} {it.unit} × {fmtNum(it.price_per_unit)} ₸
                     </div>
                   </div>
-                  <div className="font-bold mono-font text-sm whitespace-nowrap" style={{ color: '#1A1814' }}>
+                  <div className="font-bold mono-font text-sm whitespace-nowrap" style={{ color: 'var(--mc-text)' }}>
                     {fmtNum(it.volume * it.price_per_unit)} ₸
                   </div>
                 </div>
               ))}
-              <div className="flex items-center justify-between pt-2" style={{ borderTop: '1px solid #E5E7EB' }}>
-                <span className="text-sm font-semibold" style={{ color: '#64748B' }}>ИТОГО</span>
+              <div className="flex items-center justify-between pt-2" style={{ borderTop: '1px solid var(--mc-border)' }}>
+                <span className="text-sm font-semibold" style={{ color: 'var(--mc-muted)' }}>ИТОГО</span>
                 <span className="text-lg font-bold mono-font" style={{ color: '#297b8a' }}>{fmtNum(totalSum)} ₸</span>
               </div>
             </div>
           </Card>
 
           <Card title="Реквизиты клиента">
-            <div className="text-sm whitespace-pre-wrap mono-font p-3 rounded-lg" style={{ background: '#F5F7F8', color: '#1A1814', fontSize: 13 }}>{cr.client_details}</div>
+            <div className="text-sm whitespace-pre-wrap mono-font p-3 rounded-lg" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', fontSize: 13 }}>{cr.client_details}</div>
           </Card>
 
           {/* Текст для юриста — показываем когда заявка взята в работу или подписана */}
@@ -10453,7 +10449,7 @@ function ContractDetailScreen({ ctx, contractId }) {
               </div>
               <div
                 className="text-xs whitespace-pre-wrap mono-font p-3 rounded-lg mb-3 select-all"
-                style={{ background: '#F5F7F8', color: '#1A1814', fontSize: 12, lineHeight: 1.6, maxHeight: 320, overflowY: 'auto', border: '1px solid #E5E7EB' }}
+                style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', fontSize: 12, lineHeight: 1.6, maxHeight: 320, overflowY: 'auto', border: '1px solid var(--mc-border)' }}
               >
                 {buildLawyerMessage(cr)}
               </div>
@@ -10478,11 +10474,11 @@ function ContractDetailScreen({ ctx, contractId }) {
           <Card title="Документы">
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-sm" style={{ color: '#64748B' }}>УДВ подписанта:</div>
+                <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>УДВ подписанта:</div>
                 <DocLink doc={cr.identity_doc} />
               </div>
               <div className="flex items-center justify-between gap-3">
-                <div className="text-sm" style={{ color: '#64748B' }}>Основание полномочий:</div>
+                <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>Основание полномочий:</div>
                 <DocLink doc={cr.authority_doc} />
               </div>
             </div>
@@ -10494,16 +10490,16 @@ function ContractDetailScreen({ ctx, contractId }) {
                 {cr.revisions.map(rev => {
                   const ru = db.users.find(u => u.id === rev.created_by);
                   return (
-                    <div key={rev.id} className="rounded-lg p-3" style={{ background: rev.is_final ? '#DCFCE7' : '#F5F7F8', border: '1px solid #E5E7EB' }}>
+                    <div key={rev.id} className="rounded-lg p-3" style={{ background: rev.is_final ? '#DCFCE7' : 'var(--mc-active-item)', border: '1px solid var(--mc-border)' }}>
                       <div className="flex items-start justify-between gap-2 mb-1">
-                        <div className="font-bold text-sm" style={{ color: rev.is_final ? '#15803D' : '#1A1814' }}>
+                        <div className="font-bold text-sm" style={{ color: rev.is_final ? '#15803D' : 'var(--mc-text)' }}>
                           {rev.is_final ? '✅ Финальная версия' : `Версия #${rev.version}`}
                         </div>
-                        <div className="text-[11px] whitespace-nowrap" style={{ color: '#64748B' }}>
+                        <div className="text-[11px] whitespace-nowrap" style={{ color: 'var(--mc-muted)' }}>
                           {ru ? `${ru.first_name} ${ru.last_name}` : '—'} · {fmtDateTime(rev.created_at)}
                         </div>
                       </div>
-                      <div className="text-sm mb-2" style={{ color: '#1A1814' }}>{rev.comment}</div>
+                      <div className="text-sm mb-2" style={{ color: 'var(--mc-text)' }}>{rev.comment}</div>
                       {rev.file && <DocLink doc={rev.file} />}
                     </div>
                   );
@@ -10521,7 +10517,7 @@ function ContractDetailScreen({ ctx, contractId }) {
           {cr.contract_no && (
             <Card title="Номер подписанного договора">
               <div className="text-2xl font-bold mono-font" style={{ color: '#22C55E' }}>{cr.contract_no}</div>
-              {cr.signed_at && <div className="text-xs mt-1" style={{ color: '#64748B' }}>Подписан: {fmtDateTime(cr.signed_at)}</div>}
+              {cr.signed_at && <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>Подписан: {fmtDateTime(cr.signed_at)}</div>}
             </Card>
           )}
 
@@ -10530,19 +10526,19 @@ function ContractDetailScreen({ ctx, contractId }) {
               const actor = db.users.find(u => u.id === l.actor);
               return (
                 <div key={i} className="flex items-start gap-3 py-2" style={{ borderBottom: i < cr.log.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#F5F7F8', color: '#64748B' }}>
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
                     {l.event === 'created' ? <Plus size={13} /> : l.event === 'revision' ? <FileText size={13} /> : <ArrowRight size={13} />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm" style={{ color: '#1A1814' }}>
+                    <div className="text-sm" style={{ color: 'var(--mc-text)' }}>
                       {l.event === 'created' && 'Заявка создана'}
                       {l.event === 'status' && <>{CONTRACT_STATUS[l.from]?.short || l.from} → <strong>{CONTRACT_STATUS[l.to]?.short || l.to}</strong></>}
                       {l.event === 'revision' && <>Добавлена правка #{l.meta?.version}</>}
                     </div>
-                    <div className="text-xs" style={{ color: '#64748B' }}>
+                    <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                       {actor ? `${actor.first_name} ${actor.last_name}` : 'Система'} · {fmtDateTime(l.at)}
                     </div>
-                    {l.meta?.comment && <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>💬 {l.meta.comment}</div>}
+                    {l.meta?.comment && <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>💬 {l.meta.comment}</div>}
                     {l.meta?.contract_no && <div className="text-xs mt-0.5 mono-font" style={{ color: '#22C55E' }}>📄 {l.meta.contract_no}</div>}
                   </div>
                 </div>
@@ -10592,7 +10588,7 @@ function ContractDetailScreen({ ctx, contractId }) {
           {canCancel && (
             <button
               onClick={() => setCancelOpen(true)}
-              className="w-full py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F5F7F8', color: '#64748B' }}
+              className="w-full py-2.5 rounded-lg font-semibold text-sm" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}
             >
               Отменить заявку
             </button>
@@ -10627,11 +10623,11 @@ function ContractDetailScreen({ ctx, contractId }) {
       {cancelOpen && (
         <Modal onClose={() => setCancelOpen(false)} title="Отменить заявку на договор?">
           <div className="space-y-4">
-            <div className="text-sm" style={{ color: '#64748B' }}>
-              Заявка <strong style={{ color: '#1A1814' }}>{cr.number}</strong> будет отменена. Это действие нельзя отменить.
+            <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
+              Заявка <strong style={{ color: 'var(--mc-text)' }}>{cr.number}</strong> будет отменена. Это действие нельзя отменить.
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setCancelOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+              <button onClick={() => setCancelOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
                 Не отменять
               </button>
               <button
@@ -10662,7 +10658,7 @@ function ContractTimeline({ status }) {
         <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: CONTRACT_STATUS.rejected.color, color: 'white' }}>
           <XCircle size={15} />
         </div>
-        <div className="font-semibold" style={{ color: '#1A1814' }}>Заявка отклонена</div>
+        <div className="font-semibold" style={{ color: 'var(--mc-text)' }}>Заявка отклонена</div>
       </div>
     );
   }
@@ -10679,7 +10675,7 @@ function ContractTimeline({ status }) {
                 style={{ background: reached ? CONTRACT_STATUS[s].color : '#E7E7E9', color: reached ? 'white' : '#A8A8AE', boxShadow: current ? `0 0 0 4px ${CONTRACT_STATUS[s].color}25` : 'none' }}>
                 {reached ? <Check size={15} /> : <CircleDot size={12} />}
               </div>
-              <div className="text-xs mt-1.5 text-center whitespace-nowrap" style={{ color: reached ? '#1A1814' : '#A8A8AE', fontWeight: current ? 700 : 500 }}>
+              <div className="text-xs mt-1.5 text-center whitespace-nowrap" style={{ color: reached ? 'var(--mc-text)' : '#A8A8AE', fontWeight: current ? 700 : 500 }}>
                 {CONTRACT_STATUS[s].short}
               </div>
             </div>
@@ -10700,15 +10696,15 @@ function AddRevisionModal({ onClose, onSave }) {
   return (
     <Modal onClose={onClose} title="Добавить правку / версию">
       <div className="space-y-3">
-        <div className="text-sm" style={{ color: '#64748B' }}>
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
           Используйте при каждой итерации правок договора: опишите что изменилось, прикрепите новую версию.
         </div>
         <div>
-          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Что изменилось / комментарий</label>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Что изменилось / комментарий</label>
           <textarea
             value={comment} onChange={e => setComment(e.target.value)} rows={3} autoFocus
             placeholder="Например: клиент попросил поменять условие оплаты на отсрочку 14 дней"
-            className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 14 }}
+            className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid var(--mc-border)', fontSize: 14 }}
           />
         </div>
         <FileOrUrlInput
@@ -10718,7 +10714,7 @@ function AddRevisionModal({ onClose, onSave }) {
           hint="Загрузите новую версию проекта договора или ссылку"
         />
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button onClick={() => onSave({ comment, file })} disabled={!valid} className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50" style={{ background: '#F59E0B' }}>
             Сохранить
           </button>
@@ -10735,16 +10731,16 @@ function SignContractModal({ onClose, onSign }) {
   return (
     <Modal onClose={onClose} title="Закрыть как подписанный">
       <div className="space-y-3">
-        <div className="text-sm" style={{ color: '#64748B' }}>
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
           Введите номер подписанного договора. После этого заявка перейдёт в статус «Подписан» и закроется.
         </div>
         <div>
-          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Номер договора</label>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Номер договора</label>
           <input
             value={contractNo} onChange={e => setContractNo(e.target.value)} autoFocus
             placeholder="ДГ-2026-042 или внутренний номер"
             className="w-full px-3 py-2.5 rounded-lg outline-none font-bold"
-            style={{ border: '1px solid #E5E7EB', fontSize: 15 }}
+            style={{ border: '1px solid var(--mc-border)', fontSize: 15 }}
           />
         </div>
         <FileOrUrlInput
@@ -10754,7 +10750,7 @@ function SignContractModal({ onClose, onSign }) {
           hint="Скан подписанного договора или ссылка на него"
         />
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button onClick={() => onSign(contractNo, finalFile)} disabled={!valid} className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50" style={{ background: '#22C55E' }}>
             Закрыть как подписанный
           </button>
@@ -10770,18 +10766,18 @@ function RejectContractModal({ onClose, onReject }) {
   return (
     <Modal onClose={onClose} title="Отклонить заявку">
       <div className="space-y-3">
-        <div className="text-sm" style={{ color: '#64748B' }}>Укажите автору причину отклонения.</div>
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>Укажите автору причину отклонения.</div>
         <div>
-          <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Причина</label>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Причина</label>
           <textarea
             value={comment} onChange={e => setComment(e.target.value)} rows={3} autoFocus
             placeholder="Например: реквизиты неполные, нет ИИК или подписанта"
             className="w-full px-3 py-2.5 rounded-lg outline-none"
-            style={{ border: '1px solid #E5E7EB', fontSize: 14 }}
+            style={{ border: '1px solid var(--mc-border)', fontSize: 14 }}
           />
         </div>
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>Отмена</button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button onClick={() => onReject(comment)} disabled={!valid} className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50" style={{ background: '#EB5757' }}>
             Отклонить
           </button>
@@ -10973,25 +10969,25 @@ function AdminTelegramScreen({ ctx }) {
         <div className="space-y-3">
           <div>
             <SiteInput label="Bot Token (от @BotFather)" value={form.bot_token} onChange={v => update({ bot_token: v })} placeholder="1234567890:AAEhBOweik6ad6PsVMtyR..." />
-            <div className="text-xs mt-1" style={{ color: '#64748B' }}>
+            <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>
               Создайте бота в @BotFather, добавьте в вашу группу как администратора. Скопируйте токен сюда.
             </div>
           </div>
           <div>
             <SiteInput label="Username бота (без @)" value={form.bot_username || ''} onChange={v => update({ bot_username: v.replace(/^@/, '').trim() })} placeholder="MyCRMBot" />
-            <div className="text-xs mt-1" style={{ color: '#64748B' }}>
+            <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>
               Нужно для виджета «Войти через Telegram» на экране входа. Виджет появится автоматически, когда поле заполнено.
             </div>
           </div>
           <div>
             <SiteInput label="ID группы (chat_id)" value={form.group_chat_id} onChange={v => update({ group_chat_id: v })} placeholder="-1001234567890" />
-            <div className="text-xs mt-1" style={{ color: '#64748B' }}>
+            <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>
               Для группы — отрицательное число. Узнать: добавить в группу @userinfobot и попросить /start, он покажет ID.
             </div>
           </div>
           <div>
             <SiteInput label="URL приложения" value={form.app_url || ''} onChange={v => update({ app_url: v.trim() })} placeholder="https://master-coffee-app.vercel.app" />
-            <div className="text-xs mt-1" style={{ color: '#64748B' }}>
+            <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>
               Используется для кнопок «Открыть заявку» в личных уведомлениях бота.
             </div>
           </div>
@@ -11000,12 +10996,12 @@ function AdminTelegramScreen({ ctx }) {
 
       <div className="mt-4">
         <Card title="Telegram-логин и Mini App">
-          <div className="text-sm space-y-3" style={{ color: '#1A1814' }}>
+          <div className="text-sm space-y-3" style={{ color: 'var(--mc-text)' }}>
             <div className="p-3 rounded-lg space-y-2" style={{ background: '#EAF4F6' }}>
               <div className="font-semibold">Шаги настройки (один раз):</div>
-              <ol className="text-xs space-y-1 list-decimal pl-4" style={{ color: '#1A1814' }}>
-                <li>В @BotFather: <code className="mono-font px-1 rounded" style={{ background: 'white' }}>/setdomain</code> → выбрать бота → указать домен этого сайта (например <code className="mono-font">crm.mastercoffee.kz</code>). Без этого «Войти через Telegram» не сработает на сайте.</li>
-                <li>В @BotFather: <code className="mono-font px-1 rounded" style={{ background: 'white' }}>/newapp</code> или <code className="mono-font px-1 rounded" style={{ background: 'white' }}>/editbot → Configure Mini App</code> → указать URL этого приложения. После этого ссылка <code className="mono-font px-1 rounded" style={{ background: 'white' }}>t.me/{form.bot_username || 'YourBot'}/app</code> откроет CRM внутри Telegram.</li>
+              <ol className="text-xs space-y-1 list-decimal pl-4" style={{ color: 'var(--mc-text)' }}>
+                <li>В @BotFather: <code className="mono-font px-1 rounded" style={{ background: 'var(--mc-surface)' }}>/setdomain</code> → выбрать бота → указать домен этого сайта (например <code className="mono-font">crm.mastercoffee.kz</code>). Без этого «Войти через Telegram» не сработает на сайте.</li>
+                <li>В @BotFather: <code className="mono-font px-1 rounded" style={{ background: 'var(--mc-surface)' }}>/newapp</code> или <code className="mono-font px-1 rounded" style={{ background: 'var(--mc-surface)' }}>/editbot → Configure Mini App</code> → указать URL этого приложения. После этого ссылка <code className="mono-font px-1 rounded" style={{ background: 'var(--mc-surface)' }}>t.me/{form.bot_username || 'YourBot'}/app</code> откроет CRM внутри Telegram.</li>
                 <li>Каждому сотруднику попросить открыть бота в Telegram и нажать /start, чтобы привязка стала возможной. Потом в разделе «Пользователи» админу нужно ввести их Telegram ID (узнать можно через @userinfobot).</li>
               </ol>
             </div>
@@ -11019,7 +11015,7 @@ function AdminTelegramScreen({ ctx }) {
       <div className="mt-4 space-y-3">
         {topicGroups.map(group => (
           <Card key={group.title} title={group.title}>
-            <div className="text-xs mb-3" style={{ color: '#64748B' }}>{group.hint}</div>
+            <div className="text-xs mb-3" style={{ color: 'var(--mc-muted)' }}>{group.hint}</div>
             <div className="space-y-3">
               {group.items.map(({ key, label }) => {
                 const enabled = isEnabled(key);
@@ -11031,7 +11027,7 @@ function AdminTelegramScreen({ ctx }) {
                 // Ref для вставки переменной в позицию курсора
                 const taRef = React.createRef();
                 return (
-                  <div key={key} className="rounded-lg overflow-hidden" style={{ border: `1px solid ${enabled ? '#E5E7EB' : '#F1F5F9'}`, opacity: enabled ? 1 : 0.6 }}>
+                  <div key={key} className="rounded-lg overflow-hidden" style={{ border: `1px solid ${enabled ? 'var(--mc-border)' : '#F1F5F9'}`, opacity: enabled ? 1 : 0.6 }}>
                     {/* Заголовок строки */}
                     <div className="flex items-center gap-2 p-2.5" style={{ background: enabled ? 'white' : '#F8FAFC' }}>
                       {/* Toggle вкл/выкл */}
@@ -11046,7 +11042,7 @@ function AdminTelegramScreen({ ctx }) {
 
                       {/* Название и key */}
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate" style={{ color: '#1A1814' }}>{label}</div>
+                        <div className="text-sm font-medium truncate" style={{ color: 'var(--mc-text)' }}>{label}</div>
                         <div className="text-[10px] mono-font" style={{ color: '#A8A8AE' }}>{key}</div>
                       </div>
 
@@ -11057,14 +11053,14 @@ function AdminTelegramScreen({ ctx }) {
                         placeholder="ID темы"
                         disabled={!enabled}
                         className="w-24 px-2 py-1.5 rounded-lg text-sm text-center mono-font disabled:opacity-40"
-                        style={{ border: '1px solid #E5E7EB', background: enabled ? 'white' : '#F8FAFC' }}
+                        style={{ border: '1px solid var(--mc-border)', background: enabled ? 'white' : '#F8FAFC' }}
                       />
 
                       {/* Кнопка раскрытия шаблона */}
                       <button
                         onClick={() => toggleTemplate(key)}
                         className="flex-shrink-0 p-1.5 rounded-lg"
-                        style={{ background: isExpanded ? '#EAF4F6' : '#F5F7F8', color: '#64748B' }}
+                        style={{ background: isExpanded ? '#EAF4F6' : 'var(--mc-active-item)', color: 'var(--mc-muted)' }}
                         title="Редактировать шаблон"
                       >
                         <ChevronDown size={14} style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
@@ -11075,12 +11071,12 @@ function AdminTelegramScreen({ ctx }) {
                     {isExpanded && (
                       <div className="p-2.5 space-y-2" style={{ borderTop: '1px solid #F1F5F9', background: '#FAFBFC' }}>
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-semibold" style={{ color: '#64748B' }}>Шаблон сообщения</span>
+                          <span className="text-[11px] font-semibold" style={{ color: 'var(--mc-muted)' }}>Шаблон сообщения</span>
                           {templateVal && (
                             <button
                               onClick={() => resetTemplate(key)}
                               className="text-[10px] px-2 py-0.5 rounded"
-                              style={{ color: '#64748B', background: '#F1F5F9' }}
+                              style={{ color: 'var(--mc-muted)', background: '#F1F5F9' }}
                             >
                               Сбросить к дефолту
                             </button>
@@ -11092,7 +11088,7 @@ function AdminTelegramScreen({ ctx }) {
                           onChange={e => updateTemplate(key, e.target.value)}
                           rows={Math.max(3, displayTpl.split('\n').length + 1)}
                           className="w-full px-2.5 py-2 rounded-lg outline-none mono-font text-xs"
-                          style={{ border: '1px solid #E5E7EB', background: 'white', resize: 'vertical', lineHeight: 1.5 }}
+                          style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)', resize: 'vertical', lineHeight: 1.5 }}
                           placeholder={defaultTpl}
                         />
                         {/* Чипы переменных */}
@@ -11137,7 +11133,7 @@ function AdminTelegramScreen({ ctx }) {
             onClick={handleTest}
             disabled={testSending}
             className="px-4 py-3 rounded-lg font-semibold disabled:opacity-50"
-            style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}
+            style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}
           >
             {testSending ? '…' : 'Тест'}
           </button>
@@ -11145,27 +11141,27 @@ function AdminTelegramScreen({ ctx }) {
       </div>
 
       <div className="mt-6">
-        <h2 className="display-font text-xl mb-3" style={{ color: '#1A1814' }}>Журнал отправлений</h2>
+        <h2 className="display-font text-xl mb-3" style={{ color: 'var(--mc-text)' }}>Журнал отправлений</h2>
         {recentLog.length === 0 ? (
           <Empty icon={Send} title="Журнал пуст" subtitle="Здесь появятся записи о том, какие сообщения и куда были бы отправлены" />
         ) : (
           <div className="space-y-2">
             {recentLog.map(entry => (
-              <div key={entry.id} className="bg-white rounded-xl p-3" style={{ border: '1px solid #E5E7EB' }}>
+              <div key={entry.id} className="bg-white rounded-xl p-3" style={{ border: '1px solid var(--mc-border)' }}>
                 <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: '#F5F7F8', color: '#64748B' }}>{entry.event}</span>
+                    <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>{entry.event}</span>
                     <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{
                       background: entry.disabled ? '#F1F5F9' : entry.configured ? '#D1FAE5' : '#FEE2E2',
                       color: entry.disabled ? '#64748B' : entry.configured ? '#166534' : '#991B1B',
                     }}>
                       {entry.disabled ? '○ отключено' : entry.configured ? '✓ отправлено' : '✗ не настроено'}
                     </span>
-                    <span className="text-xs" style={{ color: '#64748B' }}>→ {entry.target}</span>
+                    <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>→ {entry.target}</span>
                   </div>
                   <span className="text-xs" style={{ color: '#A8A8AE' }}>{fmtDateTime(entry.at)}</span>
                 </div>
-                <pre className="text-xs whitespace-pre-wrap mono-font" style={{ color: '#1A1814' }}>{entry.message}</pre>
+                <pre className="text-xs whitespace-pre-wrap mono-font" style={{ color: 'var(--mc-text)' }}>{entry.message}</pre>
               </div>
             ))}
           </div>
@@ -11243,7 +11239,7 @@ function GrindListScreen({ ctx }) {
         ].map(t => (
           <button key={t.id} onClick={() => setFilter(t.id)}
             className="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold"
-            style={{ background: filter === t.id ? '#1A1814' : '#F5F7F8', color: filter === t.id ? 'white' : '#64748B' }}>
+            style={{ background: filter === t.id  ? '#297b8a' : 'var(--mc-active-item)', color: filter === t.id ? 'white' : '#64748B' }}>
             {t.label} · {t.count}
           </button>
         ))}
@@ -11257,18 +11253,18 @@ function GrindListScreen({ ctx }) {
           {myGrinds.map(g => (
             <button key={g.id} onClick={() => navigate({ name: 'grind_detail', grindId: g.id })}
               className="w-full text-left bg-white rounded-xl p-3.5 hover:bg-gray-50 transition-colors"
-              style={{ border: '1px solid #E5E7EB' }}>
+              style={{ border: '1px solid var(--mc-border)' }}>
               <div className="flex items-start justify-between gap-2 mb-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="mono-font text-xs font-bold" style={{ color: '#1A1814' }}>{g.number}</span>
+                  <span className="mono-font text-xs font-bold" style={{ color: 'var(--mc-text)' }}>{g.number}</span>
                   <GrindStatusBadge status={g.status} />
                   {g.order_1c && <span className="text-xs" style={{ color: '#94a3b8' }}>{g.order_1c}</span>}
                 </div>
                 <ChevronRight size={16} style={{ color: '#A8A8AE', flexShrink: 0, marginTop: 2 }} />
               </div>
               {g.client_name && <div className="text-xs font-semibold mb-0.5" style={{ color: '#297b8a' }}>{g.client_name}</div>}
-              <div className="font-semibold text-sm mb-1" style={{ color: '#1A1814' }}>{g.product_name}</div>
-              <div className="flex items-center gap-2 text-xs flex-wrap" style={{ color: '#64748B' }}>
+              <div className="font-semibold text-sm mb-1" style={{ color: 'var(--mc-text)' }}>{g.product_name}</div>
+              <div className="flex items-center gap-2 text-xs flex-wrap" style={{ color: 'var(--mc-muted)' }}>
                 <span>{g.quantity} {g.unit}</span>
                 <span>·</span>
                 <span>{g.grind_type === 'custom' ? (g.grind_custom || 'свой помол') : (GRIND_TYPES[g.grind_type]?.label || g.grind_type)}</span>
@@ -11407,7 +11403,7 @@ function CreateGrindScreen({ ctx }) {
 
   const det = (field) => detected.has(field);
   const fieldStyle = (field) => ({
-    border: `1px solid ${det(field) ? '#297b8a' : '#E5E7EB'}`,
+    border: `1px solid ${det(field) ? '#297b8a' : 'var(--mc-border)'}`,
     background: det(field) ? '#F0F9FB' : 'white',
   });
 
@@ -11425,13 +11421,13 @@ function CreateGrindScreen({ ctx }) {
               value={rawText}
               onChange={e => handleTextChange(e.target.value)}
               className="w-full px-3 py-2 rounded-lg outline-none text-sm resize-none"
-              style={{ border: '1px solid #E5E7EB' }}
+              style={{ border: '1px solid var(--mc-border)' }}
               autoFocus
             />
             {rawText && (
               <button onClick={() => { setRawText(''); setForm(emptyForm()); setDetected(new Set()); }}
                 className="absolute top-2 right-2 text-xs px-2 py-1 rounded"
-                style={{ background: '#F5F7F8', color: '#64748B' }}>× Очистить</button>
+                style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>× Очистить</button>
             )}
           </div>
           {detected.size > 0 && (
@@ -11455,7 +11451,7 @@ function CreateGrindScreen({ ctx }) {
             {['from_list','manual'].map(m => (
               <button key={m} onClick={() => update({ product_mode: m, product_id: '', product_name: '' })}
                 className="flex-1 py-1.5 rounded-lg text-sm font-semibold"
-                style={{ background: form.product_mode === m ? '#297b8a' : '#F5F7F8', color: form.product_mode === m ? 'white' : '#64748B' }}>
+                style={{ background: form.product_mode === m ? '#297b8a' : 'var(--mc-active-item)', color: form.product_mode === m ? 'white' : '#64748B' }}>
                 {m === 'from_list' ? 'Из прайса' : 'Вручную'}
               </button>
             ))}
@@ -11471,7 +11467,7 @@ function CreateGrindScreen({ ctx }) {
             <input type="text" placeholder="Название кофе"
               value={form.product_name} onChange={e => update({ product_name: e.target.value })}
               className="w-full px-3 py-2.5 rounded-lg outline-none"
-              style={{ border: '1px solid #E5E7EB' }} />
+              style={{ border: '1px solid var(--mc-border)' }} />
           )}
         </Card>
 
@@ -11484,7 +11480,7 @@ function CreateGrindScreen({ ctx }) {
               style={fieldStyle('quantity')} />
             <select value={form.unit} onChange={e => update({ unit: e.target.value })}
               className="px-3 py-2.5 rounded-lg outline-none bg-white"
-              style={{ border: '1px solid #E5E7EB' }}>
+              style={{ border: '1px solid var(--mc-border)' }}>
               <option value="кг">кг</option>
               <option value="г">г</option>
               <option value="шт">шт</option>
@@ -11500,9 +11496,9 @@ function CreateGrindScreen({ ctx }) {
               <button key={key} onClick={() => update({ grind_type: key })}
                 className="py-2 px-1 rounded-lg text-xs font-semibold text-center"
                 style={{
-                  background: form.grind_type === key ? (det('grind_type') ? '#297b8a' : '#297b8a') : '#F5F7F8',
-                  color:      form.grind_type === key ? 'white' : '#1A1814',
-                  border:     form.grind_type === key ? '1px solid #297b8a' : '1px solid #E5E7EB',
+                  background: form.grind_type === key ? (det('grind_type') ? '#297b8a' : '#297b8a') : 'var(--mc-active-item)',
+                  color:      form.grind_type === key ? 'white' : 'var(--mc-text)',
+                  border:     form.grind_type === key ? '1px solid #297b8a' : '1px solid var(--mc-border)',
                 }}>
                 {val.label}
               </button>
@@ -11512,7 +11508,7 @@ function CreateGrindScreen({ ctx }) {
             <input type="text" placeholder="Опишите свой вариант"
               value={form.grind_custom} onChange={e => update({ grind_custom: e.target.value })}
               className="w-full mt-2 px-3 py-2.5 rounded-lg outline-none"
-              style={{ border: '1px solid #E5E7EB' }} />
+              style={{ border: '1px solid var(--mc-border)' }} />
           )}
         </Card>
 
@@ -11529,7 +11525,7 @@ function CreateGrindScreen({ ctx }) {
           <textarea rows={2} placeholder="Особые пожелания, срочность..."
             value={form.comment} onChange={e => update({ comment: e.target.value })}
             className="w-full px-3 py-2 rounded-lg outline-none text-sm resize-none"
-            style={{ border: '1px solid #E5E7EB' }} />
+            style={{ border: '1px solid var(--mc-border)' }} />
         </Card>
 
         <button onClick={handleSubmit}
@@ -11579,35 +11575,35 @@ function GrindDetailScreen({ ctx, grindId }) {
 
       <div className="space-y-3">
         <Card title="Кофе">
-          <div className="font-semibold text-base mb-1" style={{ color: '#1A1814' }}>{g.product_name}</div>
-          <div className="text-sm" style={{ color: '#64748B' }}>
+          <div className="font-semibold text-base mb-1" style={{ color: 'var(--mc-text)' }}>{g.product_name}</div>
+          <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
             {g.quantity} {g.unit}{g.product_id ? ` · ID ${g.product_id}` : ''}
           </div>
         </Card>
 
         <Card title="Помол">
-          <div className="font-semibold" style={{ color: '#1A1814' }}>
+          <div className="font-semibold" style={{ color: 'var(--mc-text)' }}>
             {g.grind_type === 'custom' ? g.grind_custom : (GRIND_TYPES[g.grind_type]?.label || g.grind_type)}
           </div>
         </Card>
 
         {(g.client_name || g.order_1c) && (
           <Card title="Клиент / заказ">
-            {g.client_name && <div className="font-semibold text-sm mb-1" style={{ color: '#1A1814' }}>{g.client_name}</div>}
-            {g.order_1c    && <div className="text-sm mono-font" style={{ color: '#64748B' }}>1С: {g.order_1c}</div>}
+            {g.client_name && <div className="font-semibold text-sm mb-1" style={{ color: 'var(--mc-text)' }}>{g.client_name}</div>}
+            {g.order_1c    && <div className="text-sm mono-font" style={{ color: 'var(--mc-muted)' }}>1С: {g.order_1c}</div>}
           </Card>
         )}
 
         {g.comment && (
           <Card title="Комментарий">
-            <div className="text-sm" style={{ color: '#1A1814' }}>{g.comment}</div>
+            <div className="text-sm" style={{ color: 'var(--mc-text)' }}>{g.comment}</div>
           </Card>
         )}
 
         <Card title="Стороны">
-          <div className="text-sm space-y-1" style={{ color: '#64748B' }}>
-            <div>Создал: <strong style={{ color: '#1A1814' }}>{getUserName(db, g.created_by)}</strong> · {fmtDateTime(g.created_at)}</div>
-            {g.warehouse_user_id && <div>Мелет: <strong style={{ color: '#1A1814' }}>{getUserName(db, g.warehouse_user_id)}</strong></div>}
+          <div className="text-sm space-y-1" style={{ color: 'var(--mc-muted)' }}>
+            <div>Создал: <strong style={{ color: 'var(--mc-text)' }}>{getUserName(db, g.created_by)}</strong> · {fmtDateTime(g.created_at)}</div>
+            {g.warehouse_user_id && <div>Мелет: <strong style={{ color: 'var(--mc-text)' }}>{getUserName(db, g.warehouse_user_id)}</strong></div>}
             {g.ready_at    && <div>Готово: {fmtDateTime(g.ready_at)}</div>}
             {g.completed_at && <div>Завершено: {fmtDateTime(g.completed_at)}</div>}
           </div>
@@ -11638,9 +11634,9 @@ function GrindDetailScreen({ ctx, grindId }) {
             <textarea rows={3} placeholder="Причина отмены (необязательно)"
               value={cancelReason} onChange={e => setCancelReason(e.target.value)}
               className="w-full px-3 py-2 rounded-lg outline-none"
-              style={{ border: '1px solid #E5E7EB' }} />
+              style={{ border: '1px solid var(--mc-border)' }} />
             <div className="flex gap-2">
-              <button onClick={() => setCancelModal(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#64748B' }}>
+              <button onClick={() => setCancelModal(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
                 Не отменять
               </button>
               <button onClick={handleCancel} className="flex-1 py-2.5 rounded-lg font-semibold text-white" style={{ background: '#EB5757' }}>
@@ -11725,7 +11721,7 @@ function AdminProductsScreen({ ctx }) {
             <button
               onClick={() => setImportModal(true)}
               className="px-3 py-2 rounded-lg font-semibold flex items-center gap-1.5 text-sm"
-              style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}
+              style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}
             >
               <Download size={14} style={{ transform: 'rotate(180deg)' }} /> Импорт
             </button>
@@ -11742,12 +11738,12 @@ function AdminProductsScreen({ ctx }) {
       />
 
       {/* Поиск + фильтры */}
-      <div className="bg-white rounded-xl p-3 mb-4" style={{ border: '1px solid #E5E7EB' }}>
+      <div className="bg-white rounded-xl p-3 mb-4" style={{ border: '1px solid var(--mc-border)' }}>
         <div className="relative mb-3">
           <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#A8A8AE' }} />
           <input
             className="w-full pl-9 pr-3 py-2 rounded-lg outline-none"
-            style={{ border: '1px solid #E5E7EB' }}
+            style={{ border: '1px solid var(--mc-border)' }}
             placeholder="Поиск по названию или ID…"
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -11759,13 +11755,13 @@ function AdminProductsScreen({ ctx }) {
               key={c}
               onClick={() => setActiveCat(c)}
               className="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold"
-              style={{ background: activeCat === c ? '#1A1814' : '#F5F7F8', color: activeCat === c ? 'white' : '#64748B' }}
+              style={{ background: activeCat === c ? '#297b8a' : 'var(--mc-active-item)', color: activeCat === c ? 'white' : 'var(--mc-muted)' }}
             >
               {c}
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color: '#64748B' }}>
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color: 'var(--mc-muted)' }}>
           <input
             type="checkbox"
             checked={showInactive}
@@ -11777,7 +11773,7 @@ function AdminProductsScreen({ ctx }) {
       </div>
 
       {/* Список */}
-      <div className="bg-white rounded-xl overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
+      <div className="bg-white rounded-xl overflow-hidden" style={{ border: '1px solid var(--mc-border)' }}>
         {filtered.length === 0 ? (
           <Empty icon={Package} title="Товаров не найдено" subtitle="Поменяй фильтр или добавь новую позицию" />
         ) : (
@@ -11789,14 +11785,14 @@ function AdminProductsScreen({ ctx }) {
             >
               {/* ID и категория */}
               <div className="flex-shrink-0 w-12 text-center">
-                <div className="mono-font text-xs font-bold" style={{ color: '#1A1814' }}>{p.id}</div>
+                <div className="mono-font text-xs font-bold" style={{ color: 'var(--mc-text)' }}>{p.id}</div>
               </div>
               {/* Основная инфа */}
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold truncate" style={{ color: '#1A1814' }}>{p.name}</div>
+                <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>{p.name}</div>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[10px] rounded-full px-2 py-0.5 font-semibold" style={{ background: '#F5F7F8', color: '#64748B' }}>{p.cat}</span>
-                  <span className="text-xs" style={{ color: '#64748B' }}>{fmtNum(p.price)} ₸ / {p.unit}</span>
+                  <span className="text-[10px] rounded-full px-2 py-0.5 font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>{p.cat}</span>
+                  <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>{fmtNum(p.price)} ₸ / {p.unit}</span>
                 </div>
               </div>
               {/* Действия */}
@@ -11813,7 +11809,7 @@ function AdminProductsScreen({ ctx }) {
                   onClick={() => setEditModal({ product: p })}
                   className="p-2 rounded-lg"
                   title="Редактировать"
-                  style={{ color: '#64748B' }}
+                  style={{ color: 'var(--mc-muted)' }}
                 >
                   <Settings size={16} />
                 </button>
@@ -11913,12 +11909,12 @@ function ProductImportModal({ onImport, onClose, showToast }) {
   return (
     <Modal onClose={onClose} title="Импорт товаров">
       <div className="space-y-3">
-        <div className="text-sm" style={{ color: '#64748B' }}>
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
           Скопируй прайс-лист из Excel или Google Sheets и вставь сюда. Колонки: <strong>Название</strong> · <strong>Категория</strong> · <strong>Единица</strong> · <strong>Цена</strong>.
           Разделитель — таб (как при копировании из Excel) или точка с запятой.
         </div>
 
-        <div className="rounded-lg p-3 text-xs mono-font" style={{ background: '#F5F7F8', color: '#64748B' }}>
+        <div className="rounded-lg p-3 text-xs mono-font" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
           Crema Classico	Кофе зерно	кг	14990<br/>
           Espresso Italia	Кофе зерно	кг	13990<br/>
           Сироп Карамель	Сиропы	шт	1800
@@ -11930,7 +11926,7 @@ function ProductImportModal({ onImport, onClose, showToast }) {
           placeholder="Вставь сюда строки прайс-листа..."
           rows={10}
           className="w-full px-3 py-2 rounded-lg outline-none mono-font text-sm"
-          style={{ border: '1px solid #E5E7EB', resize: 'vertical' }}
+          style={{ border: '1px solid var(--mc-border)', resize: 'vertical' }}
         />
 
         {text.trim() && (
@@ -11952,7 +11948,7 @@ function ProductImportModal({ onImport, onClose, showToast }) {
         )}
 
         <div className="flex gap-2 pt-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
             Отмена
           </button>
           <button
@@ -11985,31 +11981,31 @@ function ProductEditModal({ product, existingCats, onSave, onClose }) {
       <div className="space-y-3">
         {!isNew && (
           <div>
-            <label className="text-xs font-semibold mb-1 block" style={{ color: '#64748B' }}>ID товара</label>
+            <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>ID товара</label>
             <input
               type="text"
               value={form.id}
               disabled
               className="w-full px-3 py-2.5 rounded-lg outline-none mono-font"
-              style={{ border: '1px solid #E5E7EB', background: '#F5F7F8', color: '#64748B' }}
+              style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}
             />
           </div>
         )}
 
         <div>
-          <label className="text-xs font-semibold mb-1 block" style={{ color: '#64748B' }}>Название *</label>
+          <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Название *</label>
           <input
             type="text"
             value={form.name}
             onChange={e => update({ name: e.target.value })}
             placeholder="Например: Crema Classico, для эспрессо"
             className="w-full px-3 py-2.5 rounded-lg outline-none"
-            style={{ border: '1px solid #E5E7EB' }}
+            style={{ border: '1px solid var(--mc-border)' }}
           />
         </div>
 
         <div>
-          <label className="text-xs font-semibold mb-1 block" style={{ color: '#64748B' }}>Категория *</label>
+          <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Категория *</label>
           {existingCats.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-2">
               {existingCats.map(c => (
@@ -12019,7 +12015,7 @@ function ProductEditModal({ product, existingCats, onSave, onClose }) {
                   onClick={() => update({ cat: c })}
                   className="text-xs px-2.5 py-1 rounded-full"
                   style={{
-                    background: form.cat === c ? '#297b8a' : '#F5F7F8',
+                    background: form.cat === c ? '#297b8a' : 'var(--mc-active-item)',
                     color: form.cat === c ? 'white' : '#64748B',
                     fontWeight: form.cat === c ? 600 : 500,
                   }}
@@ -12035,18 +12031,18 @@ function ProductEditModal({ product, existingCats, onSave, onClose }) {
             onChange={e => update({ cat: e.target.value })}
             placeholder="или впиши новую категорию"
             className="w-full px-3 py-2.5 rounded-lg outline-none"
-            style={{ border: '1px solid #E5E7EB' }}
+            style={{ border: '1px solid var(--mc-border)' }}
           />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-semibold mb-1 block" style={{ color: '#64748B' }}>Единица *</label>
+            <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Единица *</label>
             <select
               value={form.unit}
               onChange={e => update({ unit: e.target.value })}
               className="w-full px-3 py-2.5 rounded-lg outline-none bg-white"
-              style={{ border: '1px solid #E5E7EB' }}
+              style={{ border: '1px solid var(--mc-border)' }}
             >
               <option value="шт">шт</option>
               <option value="кг">кг</option>
@@ -12056,7 +12052,7 @@ function ProductEditModal({ product, existingCats, onSave, onClose }) {
             </select>
           </div>
           <div>
-            <label className="text-xs font-semibold mb-1 block" style={{ color: '#64748B' }}>Цена, ₸ *</label>
+            <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Цена, ₸ *</label>
             <input
               type="number"
               inputMode="numeric"
@@ -12064,7 +12060,7 @@ function ProductEditModal({ product, existingCats, onSave, onClose }) {
               onChange={e => update({ price: e.target.value })}
               placeholder="11990"
               className="w-full px-3 py-2.5 rounded-lg outline-none"
-              style={{ border: '1px solid #E5E7EB' }}
+              style={{ border: '1px solid var(--mc-border)' }}
             />
           </div>
         </div>
@@ -12073,7 +12069,7 @@ function ProductEditModal({ product, existingCats, onSave, onClose }) {
           <button
             onClick={onClose}
             className="flex-1 py-2.5 rounded-lg font-semibold"
-            style={{ background: '#F5F7F8', color: '#64748B' }}
+            style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}
           >
             Отмена
           </button>
@@ -12127,7 +12123,7 @@ function NotificationsScreen({ ctx }) {
         action={
           <div className="flex gap-2 items-center">
             {unread.length > 0 && (
-              <button onClick={markAllNotificationsRead} className="text-xs px-3 py-2 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+              <button onClick={markAllNotificationsRead} className="text-xs px-3 py-2 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
                 Прочитать все
               </button>
             )}
@@ -12142,11 +12138,11 @@ function NotificationsScreen({ ctx }) {
 
       <div className="flex gap-1.5 mb-4">
         <button onClick={() => setShowRead(false)} className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
-          style={{ background: !showRead ? '#1A1814' : '#F5F7F8', color: !showRead ? 'white' : '#64748B' }}>
+          style={{ background: !showRead  ? '#297b8a' : 'var(--mc-active-item)', color: !showRead ? 'white' : '#64748B' }}>
           Новые ({unread.length})
         </button>
         <button onClick={() => setShowRead(true)} className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
-          style={{ background: showRead ? '#1A1814' : '#F5F7F8', color: showRead ? 'white' : '#64748B' }}>
+          style={{ background: showRead  ? '#297b8a' : 'var(--mc-active-item)', color: showRead ? 'white' : '#64748B' }}>
           Все ({all.length})
         </button>
       </div>
@@ -12168,20 +12164,20 @@ function NotificationsScreen({ ctx }) {
                 onClick={() => handleClick(n)}
                 className="w-full text-left rounded-xl p-4 flex items-start gap-3 transition-colors hover:opacity-90"
                 style={{
-                  border: '1px solid #E5E7EB',
+                  border: '1px solid var(--mc-border)',
                   background: isUnread ? '#F0F9FF' : 'white',
                   opacity: isUnread ? 1 : 0.7,
                 }}
               >
-                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: isUnread ? '#3390EC' : '#F5F7F8', color: isUnread ? 'white' : '#64748B' }}>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: isUnread ? '#3390EC' : 'var(--mc-active-item)', color: isUnread ? 'white' : '#64748B' }}>
                   <Bell size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm flex items-center gap-2" style={{ color: '#1A1814' }}>
+                  <div className="font-semibold text-sm flex items-center gap-2" style={{ color: 'var(--mc-text)' }}>
                     <span>{n.title}</span>
                     {isUnread && <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#3390EC' }} />}
                   </div>
-                  <div className="text-sm" style={{ color: '#64748B' }}>{n.body}</div>
+                  <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>{n.body}</div>
                   <div className="text-xs mt-1 flex items-center justify-between" style={{ color: '#A8A8AE' }}>
                     <span>{fmtDateTime(n.at)}</span>
                     {hasLink && <span style={{ color: '#3390EC' }}>Открыть →</span>}
@@ -12233,7 +12229,7 @@ function FeedbackScreen({ ctx }) {
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Что не работает или что улучшить?..."
             className="w-full rounded-lg p-3 border resize-none"
-            style={{ borderColor: '#E5E7EB', minHeight: 120 }}
+            style={{ borderColor: 'var(--mc-border)', minHeight: 120 }}
           />
           <div className="flex gap-2">
             <button
@@ -12249,14 +12245,14 @@ function FeedbackScreen({ ctx }) {
               type="button"
               onClick={goBack}
               className="px-4 py-2.5 rounded-lg font-semibold"
-              style={{ background: '#F5F7F8', color: '#1A1814' }}
+              style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}
             >
               Отмена
             </button>
           </div>
         </form>
       </Card>
-      <div className="mt-4 p-3 rounded-lg text-xs" style={{ background: '#F0F9FA', color: '#1A1814' }}>
+      <div className="mt-4 p-3 rounded-lg text-xs" style={{ background: '#F0F9FA', color: 'var(--mc-text)' }}>
         💬 Ваше имя и время отправки сохраняются автоматически. Спасибо за обратную связь!
       </div>
     </div>
@@ -12294,19 +12290,19 @@ function AdminFeedbackScreen({ ctx }) {
           {feedbacks.map(fb => {
             const author = db.users.find(u => u.id === fb.sender_id);
             return (
-              <div key={fb.id} className="bg-white rounded-xl p-4" style={{ border: '1px solid #E5E7EB' }}>
+              <div key={fb.id} className="bg-white rounded-xl p-4" style={{ border: '1px solid var(--mc-border)' }}>
                 <div className="flex items-start gap-3">
                   <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-sm" style={{ background: '#297b8a' }}>
                     {author?.first_name?.[0]}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm" style={{ color: '#1A1814' }}>
+                    <div className="font-semibold text-sm" style={{ color: 'var(--mc-text)' }}>
                       {author ? `${author.first_name} ${author.last_name}` : 'Неизвестный пользователь'}
                     </div>
-                    <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>
+                    <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>
                       {fmtDateTime(fb.at)}
                     </div>
-                    <div className="text-sm mt-2" style={{ color: '#1A1814' }}>
+                    <div className="text-sm mt-2" style={{ color: 'var(--mc-text)' }}>
                       {fb.message}
                     </div>
                   </div>
@@ -12329,8 +12325,8 @@ function Modal({ children, onClose, title }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col anim-slide" onClick={e => e.stopPropagation()}>
         <div className="px-5 pt-5 pb-3 flex items-center justify-between flex-shrink-0">
-          <div className="font-bold display-font text-lg" style={{ color: '#1A1814' }}>{title}</div>
-          <button onClick={onClose} style={{ color: '#64748B' }}><X size={20} /></button>
+          <div className="font-bold display-font text-lg" style={{ color: 'var(--mc-text)' }}>{title}</div>
+          <button onClick={onClose} style={{ color: 'var(--mc-muted)' }}><X size={20} /></button>
         </div>
         <div className="px-5 pb-5 overflow-y-auto">{children}</div>
       </div>
@@ -12562,15 +12558,15 @@ function AdminErrorReportsScreen({ ctx }) {
 
       <div className="flex gap-1.5 mb-4">
         <button onClick={() => setFilter('unresolved')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
-          style={{ background: filter === 'unresolved' ? '#1A1814' : '#F5F7F8', color: filter === 'unresolved' ? 'white' : '#64748B' }}>
+          style={{ background: filter === 'unresolved'  ? '#297b8a' : 'var(--mc-active-item)', color: filter === 'unresolved' ? 'white' : '#64748B' }}>
           Новые ({counts.unresolved})
         </button>
         <button onClick={() => setFilter('resolved')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
-          style={{ background: filter === 'resolved' ? '#1A1814' : '#F5F7F8', color: filter === 'resolved' ? 'white' : '#64748B' }}>
+          style={{ background: filter === 'resolved'  ? '#297b8a' : 'var(--mc-active-item)', color: filter === 'resolved' ? 'white' : '#64748B' }}>
           Решённые ({counts.resolved})
         </button>
         <button onClick={() => setFilter('all')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
-          style={{ background: filter === 'all' ? '#1A1814' : '#F5F7F8', color: filter === 'all' ? 'white' : '#64748B' }}>
+          style={{ background: filter === 'all'  ? '#297b8a' : 'var(--mc-active-item)', color: filter === 'all' ? 'white' : '#64748B' }}>
           Все ({counts.all})
         </button>
       </div>
@@ -12585,7 +12581,7 @@ function AdminErrorReportsScreen({ ctx }) {
             const expanded = expandedId === r.id;
             const kindLabel = { sync: '⚙️ Sync', manual: '✋ Ручной', crash: '💥 Крэш' }[r.kind] || r.kind;
             return (
-              <div key={r.id} className="bg-white rounded-xl p-4" style={{ border: r.resolved ? '1px solid #E5E7EB' : '1px solid #FCA5A5', opacity: r.resolved ? 0.6 : 1 }}>
+              <div key={r.id} className="bg-white rounded-xl p-4" style={{ border: r.resolved ? '1px solid var(--mc-border)' : '1px solid #FCA5A5', opacity: r.resolved ? 0.6 : 1 }}>
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -12593,27 +12589,27 @@ function AdminErrorReportsScreen({ ctx }) {
                         {kindLabel}
                       </span>
                       {r.source && (
-                        <span className="text-[10px] mono-font px-1.5 py-0.5 rounded" style={{ background: '#F5F7F8', color: '#64748B' }}>
+                        <span className="text-[10px] mono-font px-1.5 py-0.5 rounded" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
                           {r.source}
                         </span>
                       )}
-                      <span className="text-xs" style={{ color: '#64748B' }}>
+                      <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                         {fmtDateTime(r.at)} · {r.reporter_name || '—'}
                       </span>
                     </div>
-                    <div className="text-sm font-semibold break-words" style={{ color: '#1A1814' }}>{r.message}</div>
+                    <div className="text-sm font-semibold break-words" style={{ color: 'var(--mc-text)' }}>{r.message}</div>
                     {r.route_name && (
                       <div className="text-xs mt-1" style={{ color: '#A8A8AE' }}>Экран: <span className="mono-font">{r.route_name}</span></div>
                     )}
                     {expanded && r.details && (
-                      <pre className="text-[11px] mono-font mt-2 p-2 rounded overflow-x-auto" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+                      <pre className="text-[11px] mono-font mt-2 p-2 rounded overflow-x-auto" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
                         {JSON.stringify(r.details, null, 2)}
                       </pre>
                     )}
                   </div>
                   <div className="flex flex-col gap-1.5 flex-shrink-0">
                     {r.details && (
-                      <button onClick={() => setExpandedId(expanded ? null : r.id)} className="text-xs px-2 py-1 rounded" style={{ background: '#F5F7F8', color: '#64748B' }}>
+                      <button onClick={() => setExpandedId(expanded ? null : r.id)} className="text-xs px-2 py-1 rounded" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
                         {expanded ? 'Скрыть' : 'Детали'}
                       </button>
                     )}
@@ -12719,7 +12715,7 @@ function AdminServiceScreen({ ctx }) {
 
       {/* Умная очистка тестовых */}
       <Card title="Умная очистка тестовых">
-        <div className="text-sm mb-3" style={{ color: '#64748B' }}>
+        <div className="text-sm mb-3" style={{ color: 'var(--mc-muted)' }}>
           Найдёт и удалит все записи во всех разделах, содержащие слова «тест», «test» или «проверка» в названии, имени клиента, описании, причине, адресе или комментарии.
         </div>
         <button
@@ -12733,15 +12729,15 @@ function AdminServiceScreen({ ctx }) {
 
       {/* Массовая очистка по разделам */}
       <div className="mt-4">
-        <div className="text-xs uppercase font-bold mb-2" style={{ color: '#64748B', letterSpacing: '0.08em' }}>Полная очистка по разделам</div>
+        <div className="text-xs uppercase font-bold mb-2" style={{ color: 'var(--mc-muted)', letterSpacing: '0.08em' }}>Полная очистка по разделам</div>
         <div className="space-y-2">
           {tiles.map(t => (
-            <div key={t.kind} className="bg-white rounded-xl p-4 flex items-center justify-between" style={{ border: '1px solid #E5E7EB' }}>
+            <div key={t.kind} className="bg-white rounded-xl p-4 flex items-center justify-between" style={{ border: '1px solid var(--mc-border)' }}>
               <div className="flex items-center gap-3">
                 <div className="text-2xl font-bold mono-font" style={{ color: t.color }}>{t.count}</div>
                 <div>
-                  <div className="font-semibold" style={{ color: '#1A1814' }}>{t.label}</div>
-                  <div className="text-xs" style={{ color: '#64748B' }}>удалить все записи</div>
+                  <div className="font-semibold" style={{ color: 'var(--mc-text)' }}>{t.label}</div>
+                  <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>удалить все записи</div>
                 </div>
               </div>
               <button
@@ -12804,11 +12800,11 @@ function AdminCategoriesScreen({ ctx }) {
       ) : (
         <div className="space-y-2">
           {categories.map(c => (
-            <div key={c.name} className="bg-white rounded-xl p-4" style={{ border: '1px solid #E5E7EB' }}>
+            <div key={c.name} className="bg-white rounded-xl p-4" style={{ border: '1px solid var(--mc-border)' }}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold" style={{ color: '#1A1814' }}>{c.name}</div>
-                  <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>
+                  <div className="font-semibold" style={{ color: 'var(--mc-text)' }}>{c.name}</div>
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>
                     {c.count} {c.count === 1 ? 'товар' : 'товаров'}
                     {c.active < c.count && <span> · активных {c.active}</span>}
                   </div>
@@ -12816,7 +12812,7 @@ function AdminCategoriesScreen({ ctx }) {
                 <button
                   onClick={() => setRenameModal({ oldName: c.name })}
                   className="text-xs px-3 py-1.5 rounded-lg font-semibold"
-                  style={{ background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB' }}
+                  style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}
                 >
                   <Edit3 size={12} className="inline mr-1" /> Переименовать
                 </button>
@@ -12826,7 +12822,7 @@ function AdminCategoriesScreen({ ctx }) {
         </div>
       )}
 
-      <div className="mt-4 rounded-xl p-3 text-xs" style={{ background: '#F5F7F8', color: '#64748B' }}>
+      <div className="mt-4 rounded-xl p-3 text-xs" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
         💡 Категории создаются автоматически когда у товара заполнено поле «Категория». Если хочешь создать пустую категорию заранее — добавь её здесь, и она появится в выпадающем списке при добавлении нового товара.
       </div>
 
@@ -12862,7 +12858,7 @@ function NewCategoryModal({ onClose, onCreate }) {
   return (
     <Modal onClose={onClose} title="Новая категория">
       <div className="space-y-3">
-        <div className="text-sm" style={{ color: '#64748B' }}>
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
           Имя категории. Будет доступно в выпадающем списке при создании товара.
         </div>
         <input
@@ -12871,10 +12867,10 @@ function NewCategoryModal({ onClose, onCreate }) {
           onChange={e => setName(e.target.value)}
           placeholder="Например: Аксессуары"
           className="w-full px-3 py-2.5 rounded-lg outline-none"
-          style={{ border: '1px solid #E5E7EB' }}
+          style={{ border: '1px solid var(--mc-border)' }}
         />
         <div className="flex gap-2 pt-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
             Отмена
           </button>
           <button
@@ -12896,7 +12892,7 @@ function RenameCategoryModal({ oldName, onClose, onRename }) {
   return (
     <Modal onClose={onClose} title="Переименовать категорию">
       <div className="space-y-3">
-        <div className="text-sm" style={{ color: '#64748B' }}>
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
           Все товары из категории <strong>«{oldName}»</strong> будут перемещены в новую.
         </div>
         <input
@@ -12904,10 +12900,10 @@ function RenameCategoryModal({ oldName, onClose, onRename }) {
           value={name}
           onChange={e => setName(e.target.value)}
           className="w-full px-3 py-2.5 rounded-lg outline-none"
-          style={{ border: '1px solid #E5E7EB' }}
+          style={{ border: '1px solid var(--mc-border)' }}
         />
         <div className="flex gap-2 pt-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: '#F5F7F8', color: '#1A1814' }}>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
             Отмена
           </button>
           <button
