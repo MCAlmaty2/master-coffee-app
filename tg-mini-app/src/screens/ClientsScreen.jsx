@@ -185,6 +185,7 @@ export function ClientDetailScreen({ ctx, clientId }) {
   const { db, navigate, currentUser, setOrderDraft, showToast } = ctx;
   const client = (db.clients || []).find(c => c.id === clientId);
   const orders = useMemo(() => client ? getClientOrders(client, db.orders) : [], [client, db.orders]);
+  const [addrPickerOpen, setAddrPickerOpen] = useState(false);
 
   if (!client) return <div style={{ padding: 24, color: '#94a3b8', textAlign: 'center' }}>Клиент не найден</div>;
 
@@ -211,13 +212,27 @@ export function ClientDetailScreen({ ctx, clientId }) {
     product_id: pi.product_id || '',
   }));
 
-  const handleCreateOrder = () => {
+  // Все доступные адреса клиента
+  const allAddresses = useMemo(() => {
+    const result = [];
+    if (client.address) result.push({ label: 'Основной', address: client.address });
+    (client.addresses || []).forEach(a => { if (a.address?.trim()) result.push(a); });
+    return result;
+  }, [client]);
+
+  const startOrder = (selectedAddress) => {
     setOrderDraft(d => ({
       ...d,
       ...clientFields,
+      ...(selectedAddress !== undefined ? { address: selectedAddress } : {}),
       ...(preferredAsItems.length > 0 ? { items: preferredAsItems } : {}),
     }));
     navigate({ name: 'create_order' });
+  };
+
+  const handleCreateOrder = () => {
+    if (allAddresses.length > 1) { setAddrPickerOpen(true); return; }
+    startOrder();
   };
 
   const handleRepeatOrder = () => {
@@ -254,6 +269,9 @@ export function ClientDetailScreen({ ctx, clientId }) {
         <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Контакты</div>
         <FieldRow label="Телефон"        value={client.phone} />
         <FieldRow label="Адрес"          value={client.address} />
+        {(client.addresses || []).filter(a => a.address?.trim()).map((a, i) => (
+          <FieldRow key={i} label={a.label || `Адрес ${i + 2}`} value={a.address} />
+        ))}
         {client.type === 'legal' && <FieldRow label="БИН/ИИН"       value={client.bin} />}
         {client.type === 'legal' && <FieldRow label="Контактное лицо" value={client.contact_person} />}
         {client.notes && <FieldRow label="Заметки" value={client.notes} />}
@@ -311,6 +329,26 @@ export function ClientDetailScreen({ ctx, clientId }) {
           + ещё {orders.length - 8} заказов
         </div>
       )}
+
+      {/* Выбор адреса для нового заказа */}
+      {addrPickerOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 9999, display: 'flex', alignItems: 'flex-end' }}
+          onClick={e => { if (e.target === e.currentTarget) setAddrPickerOpen(false); }}>
+          <div style={{ background: '#fff', width: '100%', borderRadius: '20px 20px 0 0', padding: '16px 16px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: '#1A1814' }}>Выберите адрес доставки</div>
+              <button onClick={() => setAddrPickerOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
+            </div>
+            {allAddresses.map((a, i) => (
+              <button key={i} onClick={() => { setAddrPickerOpen(false); startOrder(a.address); }}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%', background: '#F5F7F8', border: '1px solid #E5E7EB', borderRadius: 10, padding: '10px 14px', marginBottom: 8, textAlign: 'left', cursor: 'pointer' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#297b8a', marginBottom: 2 }}>{a.label}</span>
+                <span style={{ fontSize: 13, color: '#1A1814' }}>{a.address}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -348,7 +386,7 @@ function OrderHistoryRow({ order: o, onClick }) {
 const emptyClient = {
   type: 'legal', name: '', bin: '', address: '', phone: '',
   contact_person: '', bank: '', kbe: '', bik: '',
-  account_number: '', notes: '', preferred_items: [],
+  account_number: '', notes: '', preferred_items: [], addresses: [],
 };
 
 export function ClientEditScreen({ ctx, clientId }) {
@@ -390,6 +428,7 @@ export function ClientEditScreen({ ctx, clientId }) {
         account_number:  form.account_number.trim() || null,
         notes:           form.notes.trim()          || null,
         preferred_items: form.preferred_items || [],
+        addresses:       (form.addresses || []).filter(a => a.address?.trim()),
         created_by:     currentUser.id,
         updated_at:     now,
         ...(!existing && { created_at: now }),
@@ -489,6 +528,51 @@ export function ClientEditScreen({ ctx, clientId }) {
           </div>
         ))}
         <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>Эти товары автоматически подставятся в новый заказ</div>
+      </div>
+
+      {/* Адреса доставки */}
+      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: .5 }}>Доп. адреса</div>
+          <button onClick={() => upd({ addresses: [...(form.addresses || []), { label: '', address: '' }] })}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#F0F9FA', color: '#297b8a', border: '1px solid #b0dce5', borderRadius: 7, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>
+            <Plus size={11} /> Добавить
+          </button>
+        </div>
+        {(form.addresses || []).length === 0 && (
+          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: '8px 0' }}>
+            {form.address ? `Основной: ${form.address}` : 'Нет дополнительных адресов'}
+          </div>
+        )}
+        {(form.addresses || []).map((addr, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '110px 1fr auto', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+            <input
+              value={addr.label || ''}
+              onChange={e => {
+                const items = [...(form.addresses || [])];
+                items[i] = { ...items[i], label: e.target.value };
+                upd({ addresses: items });
+              }}
+              placeholder="Офис, Склад…"
+              style={{ padding: '7px 8px', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: 'inherit' }}
+            />
+            <input
+              value={addr.address || ''}
+              onChange={e => {
+                const items = [...(form.addresses || [])];
+                items[i] = { ...items[i], address: e.target.value };
+                upd({ addresses: items });
+              }}
+              placeholder="г. Алматы, ул. Абая 150"
+              style={{ padding: '7px 8px', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: 'inherit' }}
+            />
+            <button onClick={() => upd({ addresses: (form.addresses || []).filter((_, j) => j !== i) })}
+              style={{ padding: 6, background: '#FEE2E2', border: 'none', borderRadius: 7, cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
+              <X size={13} />
+            </button>
+          </div>
+        ))}
+        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>Метка (Офис, Склад) + адрес. При создании заказа можно выбрать любой.</div>
       </div>
 
       <button onClick={handleSave} disabled={saving}

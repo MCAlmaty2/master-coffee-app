@@ -65,10 +65,59 @@ function shiftMonth(monthISO, n) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-// Цвет отдела из db.roleDefinitions
-function getDeptColor(db, dept) {
-  const def = db?.roleDefinitions?.find(r => r.key === dept);
-  return def?.color || '#297b8a';
+// Палитра уникальных цветов для выездных сотрудников (12 цветов)
+const FIELD_USER_COLORS = [
+  '#297b8a', '#7C3AED', '#DB2777', '#059669',
+  '#D97706', '#2563EB', '#DC2626', '#0891B2',
+  '#65A30D', '#9333EA', '#C2410C', '#0369A1',
+];
+
+// Уникальный цвет задачи по исполнителю (детерминировано по порядку создания)
+function getUserTaskColor(userId, db) {
+  if (!userId || !db?.users) return '#297b8a';
+  const fieldUsers = (db.users || [])
+    .filter(u => FIELD_ROLES.includes(u.role))
+    .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+  const idx = fieldUsers.findIndex(u => u.id === userId);
+  return FIELD_USER_COLORS[Math.max(0, idx) % FIELD_USER_COLORS.length];
+}
+
+// ── Алгоритм Google Calendar: раскладка событий без перекрытия ────────────
+function timeToMin(t) {
+  if (!t) return 9 * 60;
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function computeEventLayout(tasks) {
+  if (!tasks.length) return [];
+  const sorted = [...tasks].sort((a, b) => {
+    const diff = timeToMin(a.visit_time) - timeToMin(b.visit_time);
+    return diff !== 0 ? diff : (b.duration_min || 60) - (a.duration_min || 60);
+  });
+  const placed = [];
+  for (const t of sorted) {
+    const start = timeToMin(t.visit_time || '09:00');
+    const end   = start + (t.duration_min || 60);
+    const overlapping = placed.filter(p => {
+      const pS = timeToMin(p.task.visit_time || '09:00');
+      return start < pS + (p.task.duration_min || 60) && end > pS;
+    });
+    const usedCols = new Set(overlapping.map(p => p.col));
+    let col = 0;
+    while (usedCols.has(col)) col++;
+    placed.push({ task: t, col });
+  }
+  return placed.map(p => {
+    const pS = timeToMin(p.task.visit_time || '09:00');
+    const pE = pS + (p.task.duration_min || 60);
+    const cluster = placed.filter(q => {
+      const qS = timeToMin(q.task.visit_time || '09:00');
+      return pS < qS + (q.task.duration_min || 60) && pE > qS;
+    });
+    const totalCols = Math.max(...cluster.map(q => q.col)) + 1;
+    return { task: p.task, col: p.col, totalCols };
+  });
 }
 
 // Проверка видимости задачи
@@ -168,22 +217,34 @@ function NowLine({ nowY }) {
 }
 
 /* ── КАРТОЧКА СОБЫТИЯ (в Day и Week) ─────────────────────────────────────────── */
-function EventCard({ task: t, db, currentUser, mode, navigate, compact }) {
+function EventCard({ task: t, db, currentUser, mode, navigate, compact, colIdx = 0, totalCols = 1 }) {
   const top    = timeToY(t.visit_time || '09:00');
   const height = Math.max(compact ? 24 : 38, (t.duration_min || 60) / 60 * HOUR_PX - 2);
-  const color  = getDeptColor(db, t.department);
+  const color  = getUserTaskColor(t.assignee_id, db);
   const show   = canSeeTask(t, currentUser, mode);
   const assignee = db.users?.find(u => u.id === t.assignee_id);
+
+  const colW   = 100 / totalCols;
+  const leftPct = colIdx * colW;
+
+  const kindLabel = t.kind === 'internal' ? 'Внутренняя'
+    : t.kind === 'install'  ? `⚙️ ${t.client_name}`
+    : t.kind === 'tasting'  ? `🍵 ${t.client_name}`
+    : t.client_name;
 
   return (
     <div
       onClick={e => { e.stopPropagation(); show && navigate({ name: 'task_detail', taskId: t.id }); }}
       style={{
-        position: 'absolute', top, left: 2, right: 2, height,
-        background: show ? `${color}20` : '#E5E7EB',
+        position: 'absolute', top,
+        left:   `calc(${leftPct}% + 2px)`,
+        width:  `calc(${colW}% - 4px)`,
+        height,
+        background: show ? `${color}22` : '#E5E7EB',
         borderLeft: `3px solid ${show ? color : '#94A3B8'}`,
         borderRadius: 5, padding: compact ? '2px 4px' : '3px 6px',
         overflow: 'hidden', cursor: show ? 'pointer' : 'default', zIndex: 2,
+        boxSizing: 'border-box',
       }}
     >
       <div style={{ fontSize: 9, fontWeight: 700, color: show ? color : '#64748B', lineHeight: 1 }}>
@@ -192,7 +253,7 @@ function EventCard({ task: t, db, currentUser, mode, navigate, compact }) {
       {show ? (
         <>
           <div style={{ fontSize: compact ? 10 : 11, fontWeight: 600, color: '#1A1814', lineHeight: 1.2, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-            {t.kind === 'internal' ? 'Внутренняя' : t.kind === 'install' ? `⚙️ ${t.client_name}` : t.client_name}
+            {kindLabel}
           </div>
           {!compact && height > 50 && assignee && (
             <div style={{ fontSize: 9, color: '#64748B', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
@@ -268,6 +329,7 @@ function WeekCalendarView({ tasks, weekStart, ctx, mode, onSlotClick }) {
         {days.map(d => {
           const isToday  = d === todayStr;
           const dayTasks = tasks.filter(t => t.visit_date === d && t.status !== 'done');
+          const layout   = computeEventLayout(dayTasks);
           return (
             <div key={d}
               style={{ position: 'relative', borderLeft: '1px solid #F1F5F9', background: isToday ? '#FAFFFD' : 'transparent' }}
@@ -275,8 +337,9 @@ function WeekCalendarView({ tasks, weekStart, ctx, mode, onSlotClick }) {
             >
               <HourGrid />
               {isToday && <NowLine nowY={nowY} />}
-              {dayTasks.map(t => (
-                <EventCard key={t.id} task={t} db={db} currentUser={currentUser} mode={mode} navigate={navigate} compact />
+              {layout.map(({ task: t, col, totalCols }) => (
+                <EventCard key={t.id} task={t} db={db} currentUser={currentUser} mode={mode}
+                  navigate={navigate} compact colIdx={col} totalCols={totalCols} />
               ))}
             </div>
           );
@@ -333,7 +396,8 @@ function MonthCalendarView({ tasks, monthISO, ctx, onDayClick }) {
                 {dateNum}
               </div>
               {dayTasks.slice(0, 3).map(t => {
-                const color = getDeptColor(db, t.department);
+                const color = getUserTaskColor(t.assignee_id, db);
+                const prefix = t.kind === 'tasting' ? '🍵' : t.kind === 'install' ? '⚙️' : '';
                 return (
                   <div key={t.id}
                     onClick={e => { e.stopPropagation(); navigate({ name: 'task_detail', taskId: t.id }); }}
@@ -342,7 +406,7 @@ function MonthCalendarView({ tasks, monthISO, ctx, onDayClick }) {
                       background: color, color: 'white', overflow: 'hidden',
                       whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontWeight: 500,
                     }}>
-                    {t.visit_time}{t.visit_time_end ? `–${t.visit_time_end}` : ''} {t.kind === 'internal' ? 'Внутр.' : t.kind === 'install' ? `⚙️${(t.client_name||'').split(' ')[0]}` : (t.client_name || '').split(' ')[0] || '—'}
+                    {t.visit_time}{t.visit_time_end ? `–${t.visit_time_end}` : ''} {t.kind === 'internal' ? 'Внутр.' : `${prefix}${(t.client_name||'').split(' ')[0] || '—'}`}
                   </div>
                 );
               })}
@@ -388,21 +452,30 @@ function DayCalendarView({ tasks, date, ctx, mode, onSlotClick }) {
         <div style={{ position: 'relative', borderLeft: '1px solid #F1F5F9' }} onClick={handleClick}>
           <HourGrid />
           {isToday && <NowLine nowY={nowY} />}
-          {dayTasks.map(t => {
+          {computeEventLayout(dayTasks).map(({ task: t, col, totalCols }) => {
             const top    = timeToY(t.visit_time || '09:00');
             const height = Math.max(40, (t.duration_min || 60) / 60 * HOUR_PX - 2);
-            const color  = getDeptColor(db, t.department);
+            const color  = getUserTaskColor(t.assignee_id, db);
             const show   = canSeeTask(t, currentUser, mode);
             const assignee = db.users?.find(u => u.id === t.assignee_id);
+            const colW   = 100 / totalCols;
+            const leftPct = col * colW;
+            const kindLabel = t.kind === 'internal' ? 'Внутренняя'
+              : t.kind === 'install' ? `⚙️ ${t.client_name}`
+              : t.kind === 'tasting' ? `🍵 ${t.client_name}`
+              : t.client_name;
             return (
               <div key={t.id}
                 onClick={e => { e.stopPropagation(); show && navigate({ name: 'task_detail', taskId: t.id }); }}
                 style={{
-                  position: 'absolute', top, left: 8, right: 8, height,
+                  position: 'absolute', top, height,
+                  left:  `calc(${leftPct}% + 4px)`,
+                  width: `calc(${colW}% - 8px)`,
                   background: show ? `${color}18` : '#E5E7EB',
                   borderLeft: `4px solid ${show ? color : '#94A3B8'}`,
                   borderRadius: 6, padding: '4px 8px', overflow: 'hidden',
                   cursor: show ? 'pointer' : 'default', zIndex: 2,
+                  boxSizing: 'border-box',
                 }}>
                 <div style={{ fontSize: 9, fontWeight: 700, color: show ? color : '#64748B' }}>
                   {t.visit_time}{t.visit_time_end ? `–${t.visit_time_end}` : ` · ${t.duration_min || 60} мин`}
@@ -410,7 +483,7 @@ function DayCalendarView({ tasks, date, ctx, mode, onSlotClick }) {
                 {show ? (
                   <>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1814', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                      {t.kind === 'internal' ? 'Внутренняя' : t.kind === 'install' ? `⚙️ ${t.client_name}` : t.client_name}
+                      {kindLabel}
                     </div>
                     {height > 60 && (
                       <div style={{ fontSize: 11, color: '#64748B', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
@@ -494,24 +567,31 @@ export function FieldCalendarScreen({ ctx }) {
         onNew={() => navigate({ name: 'create_task' })}
       />
 
-      {/* Фильтр по сотруднику */}
+      {/* Фильтр по сотруднику — цвет чипа соответствует цвету задач исполнителя */}
       <div className="flex gap-1.5 overflow-x-auto pb-1 mb-4">
         {[
-          { id: 'all',         label: 'Все сотрудники' },
-          { id: 'barista',     label: 'Бариста' },
-          { id: 'technician',  label: 'Техники' },
-          ...fieldUsers.map(u => ({ id: u.id, label: `${u.first_name} ${u.last_name[0]}.` })),
-        ].map(f => (
-          <button key={f.id} onClick={() => setFilter(f.id)}
-            className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
-            style={{
-              background: filter === f.id ? '#297b8a' : 'white',
-              color:      filter === f.id ? 'white' : '#64748B',
-              border:     filter === f.id ? '1px solid #297b8a' : '1px solid #E5E7EB',
-            }}>
-            {f.label}
-          </button>
-        ))}
+          { id: 'all',        label: 'Все сотрудники', color: '#297b8a' },
+          { id: 'barista',    label: 'Бариста',        color: '#297b8a' },
+          { id: 'technician', label: 'Техники',        color: '#297b8a' },
+          ...fieldUsers.map(u => ({
+            id:    u.id,
+            label: `${u.first_name} ${u.last_name[0]}.`,
+            color: getUserTaskColor(u.id, db),
+          })),
+        ].map(f => {
+          const active = filter === f.id;
+          return (
+            <button key={f.id} onClick={() => setFilter(f.id)}
+              className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
+              style={{
+                background: active ? f.color : 'white',
+                color:      active ? 'white' : '#64748B',
+                border:     active ? `1px solid ${f.color}` : '1px solid #E5E7EB',
+              }}>
+              {f.label}
+            </button>
+          );
+        })}
       </div>
 
       {view === 'week' && (

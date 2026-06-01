@@ -641,6 +641,9 @@ const DEFAULT_TG_TEMPLATES = {
   new_task_barista:
     '☕ Задача {{task_number}}\nКлиент: {{client}}\nАдрес: {{address}}\nТел: {{phone}}\nПроблема: {{problem}}\nИсполнитель: {{assignee}}{{date_time}}',
 
+  new_task_tasting:
+    '🍵 Дегустация {{task_number}}\nЗаведение: {{client}}\nКонтакт: {{contact}}\nТел: {{phone}}\nАдрес: {{address}}\nПредпочтения: {{preferences}}\nИсполнитель: {{assignee}}\nКогда: {{date_time}}',
+
   task_done:
     '✅ Задача {{task_number}} выполнена\nКлиент: {{client}}\nИтог: {{summary}}',
 
@@ -680,6 +683,7 @@ const TG_TEMPLATE_VARS = {
   storage_shipped_pickup: ['order_number', 'doc_no', 'client', 'pickup_code', 'total'],
   new_task_technician:    ['task_number', 'client', 'address', 'phone', 'problem', 'assignee', 'date_time'],
   new_task_barista:       ['task_number', 'client', 'address', 'phone', 'problem', 'assignee', 'date_time'],
+  new_task_tasting:       ['task_number', 'client', 'contact', 'phone', 'address', 'preferences', 'assignee', 'date_time'],
   task_done:              ['task_number', 'client', 'summary'],
   writeoff_new:           ['wo_number', 'manager', 'items_count', 'reason'],
   writeoff_approved:      ['wo_number', 'approver', 'creator', 'items', 'reason'],
@@ -931,7 +935,7 @@ function App() {
     doc_no: '',
     raw_text: '',
   };
-  const emptyTaskDraft = { kind: 'visit', department: 'barista', assignee_id: '', client_name: '', address: '', phone: '', problem: '', visit_date: '', visit_time: '', visit_time_end: '', duration_min: 60 };
+  const emptyTaskDraft = { kind: 'visit', department: 'barista', assignee_id: '', client_name: '', address: '', phone: '', problem: '', visit_date: '', visit_time: '', visit_time_end: '', duration_min: 60, tasting_location: 'school', tasting_contact: '', coffee_preferences: '' };
   const [orderDraft, setOrderDraft] = useState(emptyOrderDraft);
   const [quickDraft, setQuickDraft] = useState(emptyQuickDraft);
   const [taskDraft, setTaskDraft] = useState(emptyTaskDraft);
@@ -1713,14 +1717,21 @@ function App() {
       department: data.department, // 'barista' | 'technician'
       assignee_id: data.assignee_id, // обязательно — конкретный исполнитель
       client_name: data.client_name.trim(),
-      address: data.address.trim(),
+      address: (data.kind === 'tasting' && (data.tasting_location || 'school') === 'school')
+        ? 'ШКОЛА БАРИСТА'
+        : data.address.trim(),
       phone: normalizePhone(data.phone) || data.phone,
-      problem: data.problem.trim(),
+      problem: data.kind === 'tasting' ? 'Дегустация' : data.problem.trim(),
       visit_date: data.visit_date || null,        // YYYY-MM-DD
       visit_time: data.visit_time || null,          // HH:MM начало
       visit_time_end: data.visit_time_end || null, // HH:MM конец
       duration_min: data.duration_min || 60,       // длительность в минутах
       done_summary: null,
+      meta: data.kind === 'tasting' ? {
+        tasting_location: data.tasting_location || 'school',
+        contact_name: (data.tasting_contact || '').trim(),
+        coffee_preferences: (data.coffee_preferences || '').trim(),
+      } : {},
       status: hasTime ? 'in_work' : 'new',
       created_at: new Date().toISOString(),
       created_by: currentUser.id,
@@ -1740,8 +1751,19 @@ function App() {
           link_kind: 'task', link_id: task.id,
         }));
       }
-      const tgEvent = data.department === 'barista' ? 'new_task_barista' : 'new_task_technician';
-      const tgEntry = makeTgLogEntry(d, tgEvent, {
+      const tgEvent = data.kind === 'tasting'
+        ? 'new_task_tasting'
+        : (data.department === 'barista' ? 'new_task_barista' : 'new_task_technician');
+      const tgEntry = makeTgLogEntry(d, tgEvent, data.kind === 'tasting' ? {
+        task_number: task.task_number,
+        client: task.client_name,
+        contact: task.meta?.contact_name || '—',
+        phone: task.phone || '—',
+        address: task.address,
+        preferences: task.meta?.coffee_preferences || '—',
+        assignee: getUserName(d, data.assignee_id),
+        date_time: hasTime ? `${data.visit_date} ${data.visit_time}` : '—',
+      } : {
         task_number: task.task_number,
         client: task.client_name,
         address: task.address,
@@ -3665,6 +3687,17 @@ function PinLoginScreen({ hasUrlToken, loginViaPin }) {
    ОБОЛОЧКА ПРИЛОЖЕНИЯ
    ═════════════════════════════════════════════════════════════════════════ */
 
+// Экраны, управляющие своим layout самостоятельно (teal-шапка + серый фон до края экрана).
+// На мобильных AppShell убирает внешние отступы для них — иначе выглядят как "открытка в рамке".
+const FULL_BLEED_ROUTES = new Set([
+  'delivery_registries',
+  'delivery_new_registry',
+  'delivery_registry_detail',
+  'delivery_failed_queue',
+  'courier_registry',
+  'courier_order',
+]);
+
 function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
   const { currentUser, effectiveRole, actAs, setActAs, route, navigate, logout, db } = ctx;
   const role = effectiveRole;
@@ -3856,7 +3889,13 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
 
       {/* Main */}
       <main className="flex-1 min-w-0 lg:pt-0 pt-14">
-        <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
+        {/* Экраны доставки и курьера имеют собственный полноэкранный layout —
+            на мобильных убираем внешние отступы, чтобы они не выглядели "открыткой в рамке".
+            На десктопе (lg) оступ p-8 оставляем для читаемости. */}
+        <div className={FULL_BLEED_ROUTES.has(route.name)
+          ? 'lg:max-w-5xl lg:mx-auto lg:p-8'
+          : 'max-w-5xl mx-auto p-4 sm:p-6 lg:p-8'
+        }>
           <ScreenErrorBoundary
             routeKey={JSON.stringify(ctx.route)}
             onGoHome={() => { ctx.navigate({ name: 'home' }); }}
@@ -6095,6 +6134,10 @@ function CreateQuickScreen({ ctx }) {
     const det = new Set();
     const lowerText = text.toLowerCase();
 
+    // Фасовка и Помол — для одиночного товара (применяются в fallback-секции)
+    const fasovkaMatch = text.match(/фасовка[:\s]+(\d+(?:[.,]\d+)?)\s*(кг|г|гр)/i);
+    const pomolLineMatch = text.match(/помол[:\s]+([^\n]+)/i);
+
     // Способ получения — больше шаблонов
     if (/самовывоз|сам\s+забер|сам\s+возьм|со\s+склада|забер[уё]м\s+сами|забор\s+со|pickup/i.test(text)) {
       result.delivery_method = 'pickup';
@@ -6179,7 +6222,7 @@ function CreateQuickScreen({ ctx }) {
       result.address = addrLineMatch[1].trim().replace(/[,;]$/, '');
       det.add('address');
     } else {
-      const cityLineMatch = text.match(/г\.?\s*Алматы[^\n]*|г\.?\s*Астана[^\n]*|г\.?\s*Шымкент[^\n]*|ул\.?\s*[А-ЯЁа-яё][^\n,;]+/i);
+      const cityLineMatch = text.match(/г\.?\s*Алматы[^\n]*|г\.?\s*Астана[^\n]*|г\.?\s*Шымкент[^\n]*|ул\.?\s*[А-ЯЁа-яё][^\n,;]+|мкр\.?\s*[\wА-ЯЁа-яё][^\n,;]*|микрорайон[^\n,;]+/i);
       if (cityLineMatch) {
         result.address = cityLineMatch[0].trim().replace(/[,;]$/, '');
         det.add('address');
@@ -6344,6 +6387,30 @@ function CreateQuickScreen({ ctx }) {
           det.add('items');
         }
       }
+    }
+
+    // ── Применить Фасовку и Помол к единственному товару ─────────────────────
+    if (result.items.length === 1) {
+      const item0 = result.items[0];
+      let patched = { ...item0 };
+      if (fasovkaMatch && !item0.quantity) {
+        let qty = Number(fasovkaMatch[1].replace(',', '.'));
+        let unit = /^(гр|г)/.test(fasovkaMatch[2].toLowerCase()) ? 'г' : 'кг';
+        if (qty > 0 && qty < 1) { qty = Math.round(qty * 1000); unit = 'г'; }
+        patched = { ...patched, quantity: String(qty), unit };
+      }
+      if (pomolLineMatch) {
+        const rawGrind = pomolLineMatch[1].trim();
+        let grind_type = 'custom', grind_custom = '';
+        if      (/турк/i.test(rawGrind))                          grind_type = 'turka';
+        else if (/v.?60/i.test(rawGrind))                         grind_type = 'v60';
+        else if (/фильтр|filter|пуров/i.test(rawGrind))           grind_type = 'filter';
+        else if (/френч|french|press/i.test(rawGrind))            grind_type = 'french';
+        else if (/эспрессо|espresso|рожков/i.test(rawGrind))      grind_type = 'espresso';
+        else grind_custom = rawGrind;
+        patched = { ...patched, needs_grind: true, grind_type, ...(grind_custom ? { grind_custom } : {}) };
+      }
+      result.items = [patched];
     }
 
     return { result, det };
@@ -7808,18 +7875,26 @@ function CreateTaskScreen({ ctx }) {
   // Кандидаты на исполнителя — пользователи активные с ролью соответствующего отдела
   const assignees = db.users.filter(u => u.active && u.role === form.department);
 
+  const isInstall  = !isFieldWorker && form.kind === 'install';
+  const isTasting  = !isFieldWorker && form.kind === 'tasting';
+
   const handleSubmit = async () => {
     const e = {};
     if (!form.department) e.department = 'Выберите отдел';
     if (!form.assignee_id) e.assignee_id = 'Выберите исполнителя';
-    // Поля клиента валидируем только для обычной (выездной) задачи
-    if (!isInternal) {
+    if (isTasting) {
+      if (!form.client_name || form.client_name.trim().length < 2) e.client_name = 'Укажите наименование заведения';
+      if ((form.tasting_location || 'school') === 'offsite' && (!form.address || form.address.trim().length < 4)) {
+        e.address = 'Укажите адрес выездной дегустации';
+      }
+      if (!form.visit_date || !form.visit_time) e.visit_time = 'Для дегустации дата и время обязательны';
+    } else if (!isInternal) {
+      // Поля клиента валидируем только для обычной (выездной) задачи
       if (!form.client_name || form.client_name.trim().length < 2) e.client_name = 'Укажите клиента';
       if (!form.address || form.address.trim().length < 4) e.address = 'Укажите адрес';
       if (!form.phone || !normalizePhone(form.phone)) e.phone = 'Некорректный номер';
     }
-    if (!form.problem || form.problem.trim().length < 5) e.problem = 'Опишите задачу подробнее';
-    const isInstall = !isFieldWorker && form.kind === 'install';
+    if (!isTasting && (!form.problem || form.problem.trim().length < 5)) e.problem = 'Опишите задачу подробнее';
     // Время визита: правила зависят от типа задачи
     if (isInternal) {
       if (!form.visit_date || !form.visit_time) {
@@ -7842,20 +7917,20 @@ function CreateTaskScreen({ ctx }) {
     }
     const payload = isInternal
       ? { ...form, kind: 'internal', client_name: 'Внутренняя задача', address: '—', phone: '—' }
-      : { ...form, kind: isInstall ? 'install' : 'visit' };
+      : isTasting
+        ? { ...form, kind: 'tasting', department: 'barista' }
+        : { ...form, kind: isInstall ? 'install' : 'visit' };
     const t = await createTask(payload);
     showToast(`Задача ${t.task_number} ${form.visit_date ? 'запланирована' : 'создана'}`);
     resetTaskDraft();
     goBack();
   };
 
-  const isInstall = !isFieldWorker && form.kind === 'install';
-
   return (
     <div>
       <PageHeader
         title={isFieldWorker ? 'Запланировать в календарь' : 'Поставить задачу'}
-        subtitle={isFieldWorker ? 'Себе в календарь' : isInstall ? 'Установка оборудования у клиента' : 'Бариста или техник едет к клиенту'}
+        subtitle={isFieldWorker ? 'Себе в календарь' : isTasting ? 'Дегустация для клиента' : isInstall ? 'Установка оборудования у клиента' : 'Бариста или техник едет к клиенту'}
         onBack={goBack}
       />
 
@@ -7864,18 +7939,20 @@ function CreateTaskScreen({ ctx }) {
           {/* Тип задачи — только для менеджеров (не выездных специалистов) */}
           {!isFieldWorker && !isSelfAssign && (
             <Card title="Тип задачи">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {[
-                  { v: 'visit',   label: 'Выезд к клиенту',       icon: Truck },
-                  { v: 'install', label: 'Установка оборудования', icon: Settings },
+                  { v: 'visit',    label: 'Выезд',        icon: Truck },
+                  { v: 'install',  label: 'Установка',    icon: Settings },
+                  { v: 'tasting',  label: 'Дегустация',   icon: Coffee },
                 ].map(opt => {
                   const Icon = opt.icon;
                   const active = (form.kind || 'visit') === opt.v;
                   return (
-                    <button key={opt.v} onClick={() => update({ kind: opt.v })}
-                      className="rounded-lg p-3 flex items-center justify-center gap-2 font-semibold text-sm"
+                    <button key={opt.v}
+                      onClick={() => update({ kind: opt.v, ...(opt.v === 'tasting' ? { department: 'barista' } : {}) })}
+                      className="rounded-lg p-3 flex flex-col items-center justify-center gap-1 font-semibold text-xs"
                       style={{ background: active ? '#297b8a' : '#F5F7F8', color: active ? 'white' : '#1A1814' }}>
-                      <Icon size={15} /> {opt.label}
+                      <Icon size={16} /> {opt.label}
                     </button>
                   );
                 })}
@@ -7883,6 +7960,11 @@ function CreateTaskScreen({ ctx }) {
               {isInstall && (
                 <div className="mt-2 text-xs p-2.5 rounded-lg" style={{ background: '#FEF3C7', color: '#92400E' }}>
                   ⚙️ Для установки оборудования дата и время обязательны — клиент ждёт в конкретный час.
+                </div>
+              )}
+              {isTasting && (
+                <div className="mt-2 text-xs p-2.5 rounded-lg" style={{ background: '#F0FDF4', color: '#166534' }}>
+                  🍵 Для дегустации дата и время обязательны. Отдел автоматически — Бариста.
                 </div>
               )}
             </Card>
@@ -7935,8 +8017,8 @@ function CreateTaskScreen({ ctx }) {
                   ].map(opt => {
                     const Icon = opt.icon;
                     const active = form.department === opt.v;
-                    // Выездник не может менять департамент со своего
-                    const disabled = isFieldWorker && opt.v !== effectiveRole;
+                    // Выездник не может менять департамент со своего; дегустация всегда барист
+                    const disabled = (isFieldWorker && opt.v !== effectiveRole) || (isTasting && opt.v !== 'barista');
                     return (
                       <button key={opt.v} onClick={() => !disabled && update({ department: opt.v, assignee_id: isFieldWorker ? currentUser.id : '' })}
                         disabled={disabled}
@@ -7981,32 +8063,34 @@ function CreateTaskScreen({ ctx }) {
             </Card>
           )}
 
-          <Card title={isInternal ? 'Когда' : isInstall ? 'Дата и время установки' : 'Дата визита'}>
+          <Card title={isInternal ? 'Когда' : (isInstall || isTasting) ? 'Дата и время' : 'Дата визита'}>
             <div className="space-y-3">
               <div className="text-xs p-3 rounded-lg" style={{ background: '#EAF4F6', color: '#1A1814' }}>
                 {isInternal
                   ? 'Дата и время обязательны — это блокирует слот в календаре.'
                   : isInstall
                     ? 'Для установки оборудования дата и время обязательны — это согласованный визит.'
-                    : 'Укажите дату если она известна. Точное время назначит исполнитель самостоятельно.'}
+                    : isTasting
+                      ? 'Для дегустации дата и время обязательны — бариста готовится заранее.'
+                      : 'Укажите дату если она известна. Точное время назначит исполнитель самостоятельно.'}
               </div>
               {/* Дата */}
               <div>
                 <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>
-                  Дата{(isInternal || isInstall) ? ' *' : ' (необязательно)'}
+                  Дата{(isInternal || isInstall || isTasting) ? ' *' : ' (необязательно)'}
                 </label>
                 <input type="date" value={form.visit_date || ''} onChange={e => update({ visit_date: e.target.value })}
                   className="w-full px-3 py-2.5 rounded-lg outline-none"
                   style={{ border: `1px solid ${errors.visit_date ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }} />
                 {errors.visit_date && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.visit_date}</div>}
               </div>
-              {/* Время С → По — только для internal/install/field worker */}
-              {(isInternal || isInstall || isFieldWorker) && (
+              {/* Время С → По — для internal/install/tasting/field worker */}
+              {(isInternal || isInstall || isTasting || isFieldWorker) && (
                 <>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>
-                        С{(isInternal || isInstall) ? ' *' : ''}
+                        С{(isInternal || isInstall || isTasting) ? ' *' : ''}
                       </label>
                       <input type="time" value={form.visit_time || ''}
                         onChange={e => {
@@ -8055,7 +8139,7 @@ function CreateTaskScreen({ ctx }) {
             </div>
           </Card>
 
-          {!isInternal && (
+          {!isInternal && !isTasting && (
             <Card title="Информация о клиенте">
               <div className="space-y-3">
                 <SiteInput label="Наименование компании или клиента" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Coffee Boom Almaty" />
@@ -8065,19 +8149,59 @@ function CreateTaskScreen({ ctx }) {
             </Card>
           )}
 
-          <Card title={isInternal ? 'Описание задачи' : 'Суть проблемы'}>
-            <div>
-              <textarea value={form.problem || ''} onChange={e => update({ problem: e.target.value })} rows={4}
-                className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: `1px solid ${errors.problem ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }}
-                placeholder={isInternal ? 'Забрать запчасти со склада, обучение нового сотрудника...' : 'Кофемашина не варит эспрессо, шумит компрессор...'} />
-              {errors.problem && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.problem}</div>}
-            </div>
-          </Card>
+          {isTasting && (
+            <Card title="Информация о дегустации">
+              <div className="space-y-3">
+                <SiteInput label="Наименование заведения *" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Coffee House, кафе «Уют»..." />
+                <SiteInput label="Контактное лицо" value={form.tasting_contact || ''} onChange={v => update({ tasting_contact: v })} placeholder="Иванов Иван" />
+                <SiteInput label="Телефон" value={form.phone} onChange={v => update({ phone: v })} placeholder="+7 777 ..." />
+                <div>
+                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#64748B' }}>Тип дегустации</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { v: 'school',  label: '🏫 В школе бариста' },
+                      { v: 'offsite', label: '🚗 Выездная' },
+                    ].map(opt => (
+                      <button key={opt.v} onClick={() => update({ tasting_location: opt.v })}
+                        className="rounded-lg p-2.5 text-sm font-semibold"
+                        style={{ background: (form.tasting_location || 'school') === opt.v ? '#297b8a' : '#F5F7F8', color: (form.tasting_location || 'school') === opt.v ? 'white' : '#1A1814' }}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {(form.tasting_location || 'school') === 'offsite' && (
+                  <SiteInput label="Адрес выездной дегустации *" value={form.address} onChange={v => update({ address: v })} error={errors.address} placeholder="г. Алматы, ул. Абая 150" />
+                )}
+              </div>
+            </Card>
+          )}
+
+          {isTasting && (
+            <Card title="Предпочтения клиента">
+              <textarea value={form.coffee_preferences || ''} onChange={e => update({ coffee_preferences: e.target.value })} rows={3}
+                className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid #E5E7EB', fontSize: 15, resize: 'none' }}
+                placeholder="Какой кофе предпочитает клиент, особые пожелания..." />
+            </Card>
+          )}
+
+          {!isTasting && (
+            <Card title={isInternal ? 'Описание задачи' : 'Суть проблемы'}>
+              <div>
+                <textarea value={form.problem || ''} onChange={e => update({ problem: e.target.value })} rows={4}
+                  className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: `1px solid ${errors.problem ? '#EB5757' : '#E5E7EB'}`, fontSize: 15 }}
+                  placeholder={isInternal ? 'Забрать запчасти со склада, обучение нового сотрудника...' : 'Кофемашина не варит эспрессо, шумит компрессор...'} />
+                {errors.problem && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.problem}</div>}
+              </div>
+            </Card>
+          )}
         </div>
 
         <div className="space-y-4">
           <Card title="Сводка">
             {isInternal && <FieldRow label="Тип" value="Внутренняя задача" />}
+            {isTasting && <FieldRow label="Тип" value="🍵 Дегустация" />}
+            {isTasting && <FieldRow label="Место" value={(form.tasting_location || 'school') === 'school' ? 'В школе бариста' : 'Выездная'} />}
             <FieldRow label="Отдел" value={ROLES[form.department]?.label} />
             {form.assignee_id && <FieldRow label="Исполнитель" value={getUserName(db, form.assignee_id) + (form.assignee_id === currentUser.id ? ' (я)' : '')} />}
             {form.visit_date && form.visit_time && (
@@ -8085,13 +8209,14 @@ function CreateTaskScreen({ ctx }) {
                 `${fmtDate(form.visit_date)} ${form.visit_time}${form.visit_time_end ? `–${form.visit_time_end}` : ` · ${form.duration_min} мин`}`
               } />
             )}
-            {!isInternal && form.client_name && <FieldRow label="Клиент" value={form.client_name} />}
+            {!isInternal && !isTasting && form.client_name && <FieldRow label="Клиент" value={form.client_name} />}
+            {isTasting && form.client_name && <FieldRow label="Заведение" value={form.client_name} />}
             {!isInternal && form.address && <FieldRow label="Адрес" value={form.address} />}
-            {!isInternal && form.phone && <FieldRow label="Телефон" value={form.phone} />}
+            {!isInternal && !isTasting && form.phone && <FieldRow label="Телефон" value={form.phone} />}
           </Card>
 
           <button onClick={handleSubmit} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#297b8a' }}>
-            {isInternal ? 'Заблокировать слот' : (form.visit_date && form.visit_time ? 'Запланировать визит' : 'Назначить задачу')}
+            {isInternal ? 'Заблокировать слот' : isTasting ? 'Назначить дегустацию' : (form.visit_date && form.visit_time ? 'Запланировать визит' : 'Назначить задачу')}
           </button>
         </div>
       </div>
@@ -8140,7 +8265,7 @@ function TaskDetailScreen({ ctx, taskId }) {
 
   return (
     <div>
-      <PageHeader title={task.task_number} subtitle={`${ROLES[task.department].label} · ${s.label}`} onBack={goBack} />
+      <PageHeader title={task.task_number} subtitle={`${task.kind === 'tasting' ? '🍵 Дегустация · ' : task.kind === 'install' ? '⚙️ Установка · ' : ''}${ROLES[task.department].label} · ${s.label}`} onBack={goBack} />
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
@@ -8148,15 +8273,26 @@ function TaskDetailScreen({ ctx, taskId }) {
             <TaskTimeline status={task.status} />
           </Card>
 
-          <Card title="Клиент">
+          <Card title={task.kind === 'tasting' ? 'Заведение' : 'Клиент'}>
             <FieldRow label="Наименование" value={<strong style={{ color: '#1A1814' }}>{task.client_name}</strong>} />
             <FieldRow label="Адрес" value={task.address} />
             <FieldRow label="Телефон" value={task.phone} />
+            {task.kind === 'tasting' && task.meta?.contact_name && (
+              <FieldRow label="Контактное лицо" value={task.meta.contact_name} />
+            )}
+            {task.kind === 'tasting' && task.meta?.tasting_location && (
+              <FieldRow label="Тип дегустации" value={task.meta.tasting_location === 'school' ? '🏫 В школе бариста' : '🚗 Выездная'} />
+            )}
+            {task.kind === 'tasting' && task.meta?.coffee_preferences && (
+              <FieldRow label="Предпочтения" value={task.meta.coffee_preferences} />
+            )}
           </Card>
 
-          <Card title="Суть проблемы">
-            <div className="text-sm whitespace-pre-wrap" style={{ color: '#1A1814' }}>{task.problem}</div>
-          </Card>
+          {task.kind !== 'tasting' && (
+            <Card title="Суть проблемы">
+              <div className="text-sm whitespace-pre-wrap" style={{ color: '#1A1814' }}>{task.problem}</div>
+            </Card>
+          )}
 
           {task.done_summary && (
             <Card title="Что сделано">
@@ -11087,11 +11223,19 @@ function CreateGrindScreen({ ctx }) {
     }
 
     // Степень помола
-    if      (/турк/i.test(text))                   { upd.grind_type = 'turka';   det.add('grind_type'); }
-    else if (/v.?60/i.test(text))                  { upd.grind_type = 'v60';     det.add('grind_type'); }
-    else if (/фильтр|filter|пуров/i.test(text))    { upd.grind_type = 'filter';  det.add('grind_type'); }
-    else if (/френч|french|press/i.test(text))     { upd.grind_type = 'french';  det.add('grind_type'); }
-    else if (/эспрессо|espresso/i.test(text))      { upd.grind_type = 'espresso';det.add('grind_type'); }
+    if      (/турк/i.test(text))                           { upd.grind_type = 'turka';    det.add('grind_type'); }
+    else if (/v.?60/i.test(text))                          { upd.grind_type = 'v60';      det.add('grind_type'); }
+    else if (/фильтр|filter|пуров/i.test(text))            { upd.grind_type = 'filter';   det.add('grind_type'); }
+    else if (/френч|french|press/i.test(text))             { upd.grind_type = 'french';   det.add('grind_type'); }
+    else if (/эспрессо|espresso|рожков\w*/i.test(text))    { upd.grind_type = 'espresso'; det.add('grind_type'); }
+    else {
+      const pomolM = text.match(/помол[:\s]+([^\n]+)/i);
+      if (pomolM) {
+        upd.grind_type = 'custom';
+        upd.grind_custom = pomolM[1].trim();
+        det.add('grind_type');
+      }
+    }
 
     // Контрагент: строка с ТОО/ИП/АО, или метка "Клиент:"
     const mClient = text.match(/(?:Клиент|Контрагент|Организация)\s*:\s*([^\n,]+)/i)
@@ -11099,6 +11243,18 @@ function CreateGrindScreen({ ctx }) {
     if (mClient) {
       upd.client_name = mClient[1].trim().replace(/^[-–:]\s*/, '');
       det.add('client_name');
+    }
+
+    // Физ. лицо: первая строка вида «Фамилия Имя» без цифр и без ключей компании
+    if (!upd.client_name) {
+      const firstLine = text.split('\n').find(l => l.trim());
+      if (firstLine) {
+        const personM = firstLine.trim().match(/^([А-ЯЁ][а-яё]{1,})\s+([А-ЯЁ][а-яё]{1,})(?:\s+[А-ЯЁ][а-яё]{1,})?$/);
+        if (personM && !/ТОО|ИП|АО|ООО|\d/i.test(firstLine)) {
+          upd.client_name = firstLine.trim();
+          det.add('client_name');
+        }
+      }
     }
 
     // Кофе: fuzzy-match по каталогу

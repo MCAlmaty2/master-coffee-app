@@ -4,7 +4,7 @@
 // Курьер:   пул заказов (взять себе), мои заказы, отметить доставку
 // ═══════════════════════════════════════════════════════════════════════════
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ChevronLeft, Plus, Upload, CheckCircle2, XCircle,
   Truck, Package, ChevronRight, Phone,
@@ -477,13 +477,16 @@ export function DeliveryNewRegistryScreen({ ctx }) {
 
 export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
   const { db, navigate, currentUser, showToast, setDb } = ctx;
-  const [closingId,      setClosingId]      = useState(null);
-  const [closeComment,   setCloseComment]   = useState('');
-  const [closingSaving,  setClosingSaving]  = useState(false);
-  const [confirmDelete,  setConfirmDelete]  = useState(false);
-  const [deleting,       setDeleting]       = useState(false);
+  const [closingId,       setClosingId]       = useState(null);
+  const [closeComment,    setCloseComment]    = useState('');
+  const [closingSaving,   setClosingSaving]   = useState(false);
+  const [confirmDelete,   setConfirmDelete]   = useState(false);
+  const [deleting,        setDeleting]        = useState(false);
+  const [confirmArchive,  setConfirmArchive]  = useState(false);
+  const [archiving,       setArchiving]       = useState(false);
 
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin    = currentUser?.role === 'admin';
+  const canArchive = isAdmin || currentUser?.role === 'director';
 
   const handleDeleteRegistry = async () => {
     setDeleting(true);
@@ -525,6 +528,23 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
     setCloseComment('');
     setClosingSaving(false);
     showToast('Заказ закрыт');
+  };
+
+  const handleArchiveRegistry = async () => {
+    setArchiving(true);
+    const { error } = await supabase
+      .from('delivery_registries')
+      .update({ status: 'archived' })
+      .eq('id', registryId);
+    if (error) { showToast('Ошибка архивации: ' + error.message); setArchiving(false); return; }
+    setDb(d => ({
+      ...d,
+      deliveryRegistries: d.deliveryRegistries.map(r =>
+        r.id === registryId ? { ...r, status: 'archived' } : r
+      ),
+    }));
+    showToast('Реестр перемещён в архив');
+    navigate({ name: 'delivery_registries' });
   };
 
   const reg    = (db.deliveryRegistries || []).find(r => r.id === registryId);
@@ -579,6 +599,40 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
         )}
 
         <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Все заказы ({orders.length})</div>
+
+        {/* ── Архивировать реестр (admin / director, только активный) ── */}
+        {canArchive && reg.status === 'active' && (
+          <div style={{ marginBottom: 10 }}>
+            {!confirmArchive ? (
+              <button
+                onClick={() => setConfirmArchive(true)}
+                style={{ width: '100%', padding: 11, background: '#FFFBEB', color: '#92400E', border: '1px solid #FDE68A', borderRadius: 12, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                📦 Архивировать реестр
+              </button>
+            ) : (
+              <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '12px 14px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#92400E', marginBottom: 4 }}>Архивировать {reg.number}?</div>
+                <div style={{ fontSize: 11, color: '#78350F', marginBottom: 12 }}>
+                  Реестр будет перемещён в архив. Заказы останутся в базе.
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => setConfirmArchive(false)}
+                    style={{ flex: 1, padding: 9, background: '#fff', color: '#64748b', border: '1px solid #E5E7EB', borderRadius: 9, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                    Отмена
+                  </button>
+                  <button
+                    onClick={handleArchiveRegistry}
+                    disabled={archiving}
+                    style={{ flex: 1, padding: 9, background: archiving ? '#CBD5E1' : '#D97706', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: archiving ? 'not-allowed' : 'pointer' }}>
+                    {archiving ? '⏳ Архивация...' : '📦 Да, в архив'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Удалить реестр (только admin) ── */}
         {isAdmin && (
           <div style={{ marginBottom: 10 }}>
@@ -760,25 +814,69 @@ export function DeliveryFailedQueueScreen({ ctx, registryId }) {
 
 export function CourierRegistryScreen({ ctx }) {
   const { db, navigate, currentUser, showToast, setDb } = ctx;
-  const [tab, setTab] = useState('free');
+  const [tab, setTab]               = useState('free');
+  const [selectedRegId, setSelectedRegId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const activeReg = (db.deliveryRegistries || []).find(r => r.status === 'active');
-  if (!activeReg) {
+  // Fetch fresh data on mount — courier may have app open before registry upload
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ data: regs }, { data: orders }] = await Promise.all([
+          supabase.from('delivery_registries').select('*'),
+          supabase.from('delivery_orders').select('*'),
+        ]);
+        if (cancelled) return;
+        if (regs)   setDb(d => ({ ...d, deliveryRegistries: regs }));
+        if (orders) setDb(d => ({ ...d, deliveryOrders: orders }));
+      } catch (_) { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const [{ data: regs }, { data: orders }] = await Promise.all([
+        supabase.from('delivery_registries').select('*'),
+        supabase.from('delivery_orders').select('*'),
+      ]);
+      if (regs)   setDb(d => ({ ...d, deliveryRegistries: regs }));
+      if (orders) setDb(d => ({ ...d, deliveryOrders: orders }));
+      showToast('Данные обновлены', 'success');
+    } catch (_) { showToast('Ошибка обновления', 'error'); }
+    setRefreshing(false);
+  };
+
+  // All active registries newest-first
+  const activeRegs = (db.deliveryRegistries || [])
+    .filter(r => r.status === 'active')
+    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+
+  if (activeRegs.length === 0) {
     return (
       <div style={{ background: '#F5F7F8', minHeight: '100vh' }}>
         <ScreenHeader title="🚚 Реестр доставок" subtitle="Нет активных реестров" />
         <div style={{ padding: 48, textAlign: 'center', color: '#94a3b8' }}>
           <Truck size={40} style={{ margin: '0 auto 12px', opacity: .3 }} />
-          <div>Активных реестров пока нет</div>
+          <div style={{ marginBottom: 16 }}>Активных реестров пока нет</div>
+          <button onClick={handleRefresh} disabled={refreshing}
+            style={{ padding: '8px 20px', background: '#297b8a', color: '#fff', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: refreshing ? .6 : 1 }}>
+            {refreshing ? 'Обновление...' : '🔄 Обновить'}
+          </button>
         </div>
       </div>
     );
   }
 
-  const allOrders     = (db.deliveryOrders || []).filter(o => o.registry_id === activeReg.id);
-  const freeOrders    = allOrders.filter(o => o.status === 'pending' && !o.courier_id);
-  const myOrders      = allOrders.filter(o => o.courier_id === currentUser.id);
-  const othersOrders  = allOrders.filter(o => o.courier_id && o.courier_id !== currentUser.id && o.status !== 'delivered');
+  // Selected registry — default to newest
+  const reg = activeRegs.find(r => r.id === selectedRegId) || activeRegs[0];
+
+  const allOrders    = (db.deliveryOrders || []).filter(o => o.registry_id === reg.id);
+  const freeOrders   = allOrders.filter(o => o.status === 'pending' && !o.courier_id);
+  const myOrders     = allOrders.filter(o => o.courier_id === currentUser.id);
+  const othersOrders = allOrders.filter(o => o.courier_id && o.courier_id !== currentUser.id && o.status !== 'delivered');
 
   const takeOrder = async (orderId) => {
     const { error } = await supabase.from('delivery_orders')
@@ -790,13 +888,43 @@ export function CourierRegistryScreen({ ctx }) {
     showToast('Заказ добавлен в ваш список', 'success');
   };
 
-  const tabs = [['free', `Свободные (${freeOrders.length})`], ['mine', `Мои (${myOrders.length})`], ['others', `Чужие (${othersOrders.length})`]];
+  const tabs = [
+    ['free',   `Свободные (${freeOrders.length})`],
+    ['mine',   `Мои (${myOrders.length})`],
+    ['others', `Чужие (${othersOrders.length})`],
+  ];
 
   return (
     <div style={{ background: '#F5F7F8', minHeight: '100vh' }}>
-      <ScreenHeader title={`${activeReg.number} · ${SHIFT_LABEL[activeReg.shift]}`} subtitle="Выберите заказы для доставки" />
+      <ScreenHeader
+        title="🚚 Реестры доставок"
+        subtitle={activeRegs.length > 1 ? `${activeRegs.length} активных реестра` : `${reg.number} · ${SHIFT_LABEL[reg.shift]}`}
+      />
 
-      <div style={{ display: 'flex', background: '#fff', borderBottom: '1px solid #F1F5F9' }}>
+      {/* Registry selector pills — shown only when multiple active registries exist */}
+      {activeRegs.length > 1 && (
+        <div style={{ background: '#fff', borderBottom: '1px solid #F1F5F9', padding: '8px 12px', display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          {activeRegs.map(r => {
+            const isActive = reg.id === r.id;
+            const regOrders = (db.deliveryOrders || []).filter(o => o.registry_id === r.id);
+            const freeCnt   = regOrders.filter(o => o.status === 'pending' && !o.courier_id).length;
+            return (
+              <button key={r.id}
+                onClick={() => { setSelectedRegId(r.id); setTab('free'); }}
+                style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                  border: `2px solid ${isActive ? '#297b8a' : '#E5E7EB'}`,
+                  background: isActive ? '#297b8a' : '#F5F7F8',
+                  color: isActive ? '#fff' : '#64748b' }}>
+                {r.number} · {SHIFT_LABEL[r.shift]}
+                {freeCnt > 0 && <span style={{ marginLeft: 6, background: isActive ? 'rgba(255,255,255,.25)' : '#FEF9EE', color: isActive ? '#fff' : '#92400E', borderRadius: 8, padding: '1px 5px', fontSize: 9 }}>{freeCnt}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Tab bar */}
+      <div style={{ display: 'flex', background: '#fff', borderBottom: '1px solid #F1F5F9', alignItems: 'center' }}>
         {tabs.map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
             style={{ flex: 1, padding: '9px 2px', fontSize: 10, fontWeight: 600,
@@ -806,6 +934,11 @@ export function CourierRegistryScreen({ ctx }) {
             {l}
           </button>
         ))}
+        <button onClick={handleRefresh} disabled={refreshing}
+          style={{ flexShrink: 0, padding: '6px 10px', fontSize: 10, color: '#297b8a', background: 'none', border: 'none', cursor: 'pointer', opacity: refreshing ? .4 : 1 }}
+          title="Обновить данные">
+          🔄
+        </button>
       </div>
 
       {tab === 'free' && (
@@ -865,13 +998,21 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
 
   const isDone = ['delivered', 'failed'].includes(order.status);
 
-  const finishRegistry = async (regId, updatedOrderId, newStatus) => {
-    const regOrders = (db.deliveryOrders || []).filter(o => o.registry_id === regId && o.id !== updatedOrderId);
-    const allDone   = regOrders.every(o => ['delivered', 'failed'].includes(o.status));
+  const finishRegistry = async (regId, updatedOrderId) => {
+    // Bug fix: query Supabase directly — local db.deliveryOrders may be stale
+    // or incomplete (vacuous truth: [].every() === true → registry closed prematurely).
+    const { data: remoteOrders, error: fetchErr } = await supabase
+      .from('delivery_orders')
+      .select('id, status')
+      .eq('registry_id', regId)
+      .neq('id', updatedOrderId);
+    if (fetchErr) return; // can't confirm, leave registry open
+    if (!remoteOrders || remoteOrders.length === 0) return; // no other orders → nothing to check
+    const allDone = remoteOrders.every(o => ['delivered', 'failed'].includes(o.status));
     if (!allDone) return;
     const now = new Date().toISOString();
     await supabase.from('delivery_registries').update({ status: 'completed', completed_at: now }).eq('id', regId);
-    setDb(d => ({ ...d, deliveryRegistries: d.deliveryRegistries.map(r => r.id === regId ? { ...r, status: 'completed', completed_at: now } : r) }));
+    setDb(d => ({ ...d, deliveryRegistries: (d.deliveryRegistries || []).map(r => r.id === regId ? { ...r, status: 'completed', completed_at: now } : r) }));
     showToast('🎉 Реестр полностью доставлен!', 'success');
   };
 
@@ -1003,21 +1144,34 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
 
 export function CourierDeliveryWidget({ ctx }) {
   const { db, navigate, currentUser } = ctx;
-  const activeReg = (db.deliveryRegistries || []).find(r => r.status === 'active');
-  if (!activeReg) return null;
 
-  const myOrders  = (db.deliveryOrders || []).filter(o => o.registry_id === activeReg.id && o.courier_id === currentUser.id);
+  // All active registries — support multiple simultaneously
+  const activeRegs = (db.deliveryRegistries || [])
+    .filter(r => r.status === 'active')
+    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  if (activeRegs.length === 0) return null;
+
+  const activeRegIds = new Set(activeRegs.map(r => r.id));
+  // Aggregate my orders across ALL active registries
+  const myOrders  = (db.deliveryOrders || []).filter(o => activeRegIds.has(o.registry_id) && o.courier_id === currentUser.id);
   const done      = myOrders.filter(o => o.status === 'delivered').length;
   const cash      = myOrders.filter(o => o.cash_received).reduce((s, o) => s + (Number(o.cash_amount) || 0), 0);
   const pct       = myOrders.length > 0 ? Math.round((done / myOrders.length) * 100) : 0;
   const nextOrder = myOrders.find(o => o.status === 'assigned');
 
+  const widgetTitle = activeRegs.length > 1
+    ? `${activeRegs.length} активных реестра`
+    : 'Активный реестр';
+  const widgetSubtitle = activeRegs.length > 1
+    ? activeRegs.map(r => r.number).join(' · ')
+    : `${activeRegs[0].number} ${SHIFT_LABEL[activeRegs[0].shift]}`;
+
   return (
     <div style={{ margin: '12px 12px 0' }}>
       <div onClick={() => navigate({ name: 'courier_registry' })}
         style={{ background: 'linear-gradient(135deg, #297b8a 0%, #1d5a67 100%)', borderRadius: 16, padding: 16, color: '#fff', cursor: 'pointer' }}>
-        <div style={{ fontSize: 10, opacity: .75, marginBottom: 2 }}>Активный реестр</div>
-        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>{activeReg.number} {SHIFT_LABEL[activeReg.shift]}</div>
+        <div style={{ fontSize: 10, opacity: .75, marginBottom: 2 }}>{widgetTitle}</div>
+        <div style={{ fontSize: activeRegs.length > 1 ? 14 : 18, fontWeight: 800, marginBottom: 6 }}>{widgetSubtitle}</div>
         <div style={{ height: 8, background: 'rgba(255,255,255,.2)', borderRadius: 4, marginBottom: 6, overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${pct}%`, background: '#fff', borderRadius: 4 }} />
         </div>

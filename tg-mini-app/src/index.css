@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Предотвращаем автомасштабирование текста на iOS (иначе шрифты могут плыть) */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 /* Сбрасываем дефолтные отступы и фиксим скролл внутри Telegram */
 html, body, #root {
   margin: 0;
@@ -11,10 +17,26 @@ html, body, #root {
   background: #FFFFFF;
   /* Запрещаем pull-to-refresh, чтобы случайный свайп не перезагружал миниапп */
   overscroll-behavior-y: none;
+  /* Сглаживание шрифтов */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Подхватываем тему Telegram, если хост её прокинул через CSS-переменные */
 body {
   color: var(--tg-theme-text-color, #1A1814);
   background-color: var(--tg-theme-bg-color, #FFFFFF);
+}
+
+/* Убираем синий flash при тапе на мобильных */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── iOS: запрещаем авто-зум при фокусе на input (срабатывает при font-size < 16px)
+   Устанавливаем базовый размер; компонентные стили могут переопределить его вверх. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+select,
+textarea {
+  font-size: 16px;
 }
