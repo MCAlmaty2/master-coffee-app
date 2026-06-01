@@ -14,19 +14,29 @@
   --mc-sidebar-bg:   #ffffff;
   --mc-tile-bg:      #ffffff;
   --mc-active-item:  #f5f7f8;
+  /* Календарь */
+  --mc-cal-bg:       #ffffff;
+  --mc-cal-grid:     #e8f0f2;
+  --mc-cal-today:    #f0fbf8;
+  --mc-cal-header:   #f8fafc;
 }
 
 [data-theme="dark"] {
   --mc-bg:           #0f1923;
-  --mc-surface:      #1e293b;
+  --mc-surface:      #1a2535;
   --mc-surface-2:    #162333;
-  --mc-text:         #f1f5f9;
-  --mc-muted:        #94a3b8;
-  --mc-border:       #1e3248;
+  --mc-text:         #e2e8f0;
+  --mc-muted:        #8ca3b8;
+  --mc-border:       #243b52;
   --mc-border-light: #1e3248;
   --mc-sidebar-bg:   #0d1a24;
-  --mc-tile-bg:      #1e293b;
+  --mc-tile-bg:      #1a2535;
   --mc-active-item:  #1e3a4a;
+  /* Календарь */
+  --mc-cal-bg:       #131f2e;
+  --mc-cal-grid:     #1e3248;
+  --mc-cal-today:    #1a3040;
+  --mc-cal-header:   #0f1923;
 }
 
 /* ── Предотвращаем автомасштабирование текста на iOS (иначе шрифты могут плыть) */

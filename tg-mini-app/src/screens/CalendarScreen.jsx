@@ -150,22 +150,22 @@ function CalendarNavBar({ view, setView, label, onPrev, onNext, onToday, onNew, 
       <div className="flex items-center gap-1">
         <button onClick={onPrev}
           className="p-2 rounded-lg bg-white"
-          style={{ border: '1px solid #E5E7EB' }}>
+          style={{ border: '1px solid var(--mc-border)' }}>
           <ChevronLeft size={15} />
         </button>
         <button onClick={onToday}
           className="px-3 py-2 rounded-lg text-sm font-semibold"
-          style={{ background: '#EAF4F6', color: '#297b8a' }}>
+          style={{ background: 'var(--mc-cal-today)', color: '#297b8a' }}>
           Сегодня
         </button>
         <button onClick={onNext}
           className="p-2 rounded-lg bg-white"
-          style={{ border: '1px solid #E5E7EB' }}>
+          style={{ border: '1px solid var(--mc-border)' }}>
           <ChevronRight size={15} />
         </button>
       </div>
 
-      <div className="text-sm font-semibold flex-1" style={{ color: '#1A1814' }}>{label}</div>
+      <div className="text-sm font-semibold flex-1" style={{ color: 'var(--mc-text)' }}>{label}</div>
 
       {onNew && (
         <button onClick={onNew}
@@ -175,13 +175,13 @@ function CalendarNavBar({ view, setView, label, onPrev, onNext, onToday, onNew, 
         </button>
       )}
 
-      <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
+      <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--mc-border)' }}>
         {[['day', 'День'], ['week', 'Неделя'], ...(!hideMonth ? [['month', 'Месяц']] : [])].map(([v, lbl]) => (
           <button key={v} onClick={() => setView(v)}
             className="px-3 py-1.5 text-xs font-semibold"
             style={{
-              background: view === v ? '#297b8a' : 'white',
-              color: view === v ? 'white' : '#64748B',
+              background: view === v ? '#297b8a' : 'var(--mc-surface)',
+              color: view === v ? 'white' : 'var(--mc-muted)',
             }}>
             {lbl}
           </button>
@@ -197,8 +197,8 @@ function HourGrid() {
     <>
       {HOURS.map((_, i) => (
         <React.Fragment key={i}>
-          <div style={{ position: 'absolute', top: i * HOUR_PX, left: 0, right: 0, borderTop: '1px solid #F1F5F9' }} />
-          <div style={{ position: 'absolute', top: i * HOUR_PX + HOUR_PX / 2, left: 0, right: 0, borderTop: '1px dashed #FAFCFD' }} />
+          <div style={{ position: 'absolute', top: i * HOUR_PX, left: 0, right: 0, borderTop: '1px solid var(--mc-border-light)' }} />
+          <div style={{ position: 'absolute', top: i * HOUR_PX + HOUR_PX / 2, left: 0, right: 0, borderTop: '1px dashed var(--mc-cal-grid)' }} />
         </React.Fragment>
       ))}
     </>
@@ -240,29 +240,29 @@ function EventCard({ task: t, db, currentUser, mode, navigate, compact, colIdx =
         left:   `calc(${leftPct}% + 2px)`,
         width:  `calc(${colW}% - 4px)`,
         height,
-        background: show ? `${color}22` : '#E5E7EB',
-        borderLeft: `3px solid ${show ? color : '#94A3B8'}`,
+        background: show ? `${color}22` : 'var(--mc-border)',
+        borderLeft: `3px solid ${show ? color : 'var(--mc-muted)'}`,
         borderRadius: 5, padding: compact ? '2px 4px' : '3px 6px',
         overflow: 'hidden', cursor: show ? 'pointer' : 'default', zIndex: 2,
         boxSizing: 'border-box',
       }}
     >
-      <div style={{ fontSize: 9, fontWeight: 700, color: show ? color : '#64748B', lineHeight: 1 }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: show ? color : 'var(--mc-muted)', lineHeight: 1 }}>
         {t.visit_time}{t.visit_time_end ? `–${t.visit_time_end}` : ''}
       </div>
       {show ? (
         <>
-          <div style={{ fontSize: compact ? 10 : 11, fontWeight: 600, color: '#1A1814', lineHeight: 1.2, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: compact ? 10 : 11, fontWeight: 600, color: 'var(--mc-text)', lineHeight: 1.2, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
             {kindLabel}
           </div>
           {!compact && height > 50 && assignee && (
-            <div style={{ fontSize: 9, color: '#64748B', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+            <div style={{ fontSize: 9, color: 'var(--mc-muted)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
               {assignee.first_name[0]}.{assignee.last_name[0]}.
             </div>
           )}
         </>
       ) : (
-        <div style={{ fontSize: 9, color: '#94A3B8', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+        <div style={{ fontSize: 9, color: 'var(--mc-muted)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
           занят · {assignee?.first_name?.[0]}.{assignee?.last_name?.[0]}.
         </div>
       )}
@@ -287,9 +287,9 @@ function WeekCalendarView({ tasks, weekStart, ctx, mode, onSlotClick }) {
   };
 
   return (
-    <div className="bg-white rounded-xl overflow-x-auto" style={{ border: '1px solid #E5E7EB' }}>
+    <div className="bg-white rounded-xl overflow-x-auto" style={{ border: '1px solid var(--mc-border)' }}>
       {/* Шапка с днями */}
-      <div style={{ display: 'grid', gridTemplateColumns: `48px repeat(7, minmax(80px, 1fr))`, borderBottom: '1px solid #E5E7EB' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `48px repeat(7, minmax(80px, 1fr))`, borderBottom: '1px solid var(--mc-border)' }}>
         <div />
         {days.map(d => {
           const obj     = new Date(d + 'T00:00');
@@ -297,7 +297,7 @@ function WeekCalendarView({ tasks, weekStart, ctx, mode, onSlotClick }) {
           return (
             <div key={d} style={{ padding: '8px 4px', textAlign: 'center', cursor: onSlotClick ? 'pointer' : 'default' }}
               onClick={() => onSlotClick && onSlotClick(d, null)}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', letterSpacing: '.4px', textTransform: 'uppercase', marginBottom: 4 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--mc-muted)', letterSpacing: '.4px', textTransform: 'uppercase', marginBottom: 4 }}>
                 {DAY_SHORT[obj.getDay()]}
               </div>
               <div style={{
@@ -305,7 +305,7 @@ function WeekCalendarView({ tasks, weekStart, ctx, mode, onSlotClick }) {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 14, fontWeight: 700,
                 background: isToday ? '#297b8a' : 'transparent',
-                color: isToday ? 'white' : '#1A1814',
+                color: isToday ? 'white' : 'var(--mc-text)',
               }}>
                 {obj.getDate()}
               </div>
@@ -319,7 +319,7 @@ function WeekCalendarView({ tasks, weekStart, ctx, mode, onSlotClick }) {
         {/* Метки часов */}
         <div style={{ position: 'relative' }}>
           {HOURS.map((h, i) => (
-            <div key={h} style={{ position: 'absolute', top: i * HOUR_PX - 7, right: 6, fontSize: 10, fontWeight: 500, color: '#94A3B8', whiteSpace: 'nowrap' }}>
+            <div key={h} style={{ position: 'absolute', top: i * HOUR_PX - 7, right: 6, fontSize: 10, fontWeight: 500, color: 'var(--mc-muted)', whiteSpace: 'nowrap' }}>
               {String(h).padStart(2, '0')}:00
             </div>
           ))}
@@ -332,7 +332,7 @@ function WeekCalendarView({ tasks, weekStart, ctx, mode, onSlotClick }) {
           const layout   = computeEventLayout(dayTasks);
           return (
             <div key={d}
-              style={{ position: 'relative', borderLeft: '1px solid #F1F5F9', background: isToday ? '#FAFFFD' : 'transparent' }}
+              style={{ position: 'relative', borderLeft: '1px solid var(--mc-border-light)', background: isToday ? 'var(--mc-cal-today)' : 'transparent' }}
               onClick={e => handleColClick(e, d)}
             >
               <HourGrid />
@@ -363,11 +363,11 @@ function MonthCalendarView({ tasks, monthISO, ctx, onDayClick }) {
   });
 
   return (
-    <div className="bg-white rounded-xl overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
+    <div className="bg-white rounded-xl overflow-hidden" style={{ border: '1px solid var(--mc-border)' }}>
       {/* Заголовки дней недели */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #E5E7EB' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid var(--mc-border)' }}>
         {['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d => (
-          <div key={d} style={{ padding: '8px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#94A3B8' }}>{d}</div>
+          <div key={d} style={{ padding: '8px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: 'var(--mc-muted)' }}>{d}</div>
         ))}
       </div>
 
@@ -382,16 +382,16 @@ function MonthCalendarView({ tasks, monthISO, ctx, onDayClick }) {
             <div key={d}
               onClick={() => onDayClick(d)}
               className="transition-colors"
-              style={{ minHeight: 80, padding: '4px 6px', borderRight: '1px solid #F1F5F9', borderBottom: '1px solid #F1F5F9', cursor: 'pointer', background: 'white' }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#F8FAFC'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'white'; }}
+              style={{ minHeight: 80, padding: '4px 6px', borderRight: '1px solid var(--mc-border-light)', borderBottom: '1px solid var(--mc-border-light)', cursor: 'pointer', background: 'var(--mc-surface)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--mc-active-item)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--mc-surface)'; }}
             >
               <div style={{
                 width: 24, height: 24, borderRadius: '50%', marginBottom: 3,
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 12, fontWeight: 600,
                 background: isToday ? '#297b8a' : 'transparent',
-                color: isToday ? 'white' : inMonth ? '#1A1814' : '#D1D5DB',
+                color: isToday ? 'white' : inMonth ? 'var(--mc-text)' : 'var(--mc-border)',
               }}>
                 {dateNum}
               </div>
@@ -411,7 +411,7 @@ function MonthCalendarView({ tasks, monthISO, ctx, onDayClick }) {
                 );
               })}
               {dayTasks.length > 3 && (
-                <div style={{ fontSize: 10, color: '#94A3B8', padding: '0 2px' }}>+{dayTasks.length - 3} ещё</div>
+                <div style={{ fontSize: 10, color: 'var(--mc-muted)', padding: '0 2px' }}>+{dayTasks.length - 3} ещё</div>
               )}
             </div>
           );
@@ -437,19 +437,19 @@ function DayCalendarView({ tasks, date, ctx, mode, onSlotClick }) {
   };
 
   return (
-    <div className="bg-white rounded-xl overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
+    <div className="bg-white rounded-xl overflow-hidden" style={{ border: '1px solid var(--mc-border)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '48px 1fr', height: TOTAL_H }}>
         {/* Метки часов */}
         <div style={{ position: 'relative' }}>
           {HOURS.map((h, i) => (
-            <div key={h} style={{ position: 'absolute', top: i * HOUR_PX - 7, right: 6, fontSize: 10, fontWeight: 500, color: '#94A3B8', whiteSpace: 'nowrap' }}>
+            <div key={h} style={{ position: 'absolute', top: i * HOUR_PX - 7, right: 6, fontSize: 10, fontWeight: 500, color: 'var(--mc-muted)', whiteSpace: 'nowrap' }}>
               {String(h).padStart(2, '0')}:00
             </div>
           ))}
         </div>
 
         {/* Колонка событий */}
-        <div style={{ position: 'relative', borderLeft: '1px solid #F1F5F9' }} onClick={handleClick}>
+        <div style={{ position: 'relative', borderLeft: '1px solid var(--mc-border-light)' }} onClick={handleClick}>
           <HourGrid />
           {isToday && <NowLine nowY={nowY} />}
           {computeEventLayout(dayTasks).map(({ task: t, col, totalCols }) => {
@@ -471,29 +471,29 @@ function DayCalendarView({ tasks, date, ctx, mode, onSlotClick }) {
                   position: 'absolute', top, height,
                   left:  `calc(${leftPct}% + 4px)`,
                   width: `calc(${colW}% - 8px)`,
-                  background: show ? `${color}18` : '#E5E7EB',
-                  borderLeft: `4px solid ${show ? color : '#94A3B8'}`,
+                  background: show ? `${color}18` : 'var(--mc-border)',
+                  borderLeft: `4px solid ${show ? color : 'var(--mc-muted)'}`,
                   borderRadius: 6, padding: '4px 8px', overflow: 'hidden',
                   cursor: show ? 'pointer' : 'default', zIndex: 2,
                   boxSizing: 'border-box',
                 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: show ? color : '#64748B' }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: show ? color : 'var(--mc-muted)' }}>
                   {t.visit_time}{t.visit_time_end ? `–${t.visit_time_end}` : ` · ${t.duration_min || 60} мин`}
                 </div>
                 {show ? (
                   <>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1814', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--mc-text)', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                       {kindLabel}
                     </div>
                     {height > 60 && (
-                      <div style={{ fontSize: 11, color: '#64748B', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                      <div style={{ fontSize: 11, color: 'var(--mc-muted)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                         {assignee ? `${assignee.first_name} ${assignee.last_name}` : ''}
                         {t.problem ? ` · ${t.problem.slice(0, 50)}` : ''}
                       </div>
                     )}
                   </>
                 ) : (
-                  <div style={{ fontSize: 11, color: '#94A3B8' }}>
+                  <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>
                     занят · {assignee?.first_name?.[0]}.{assignee?.last_name?.[0]}.
                   </div>
                 )}
@@ -555,8 +555,8 @@ export function FieldCalendarScreen({ ctx }) {
   return (
     <div>
       <div className="mb-1">
-        <h1 className="display-font text-xl font-bold" style={{ color: '#1A1814' }}>Календарь выездных</h1>
-        <p className="text-sm mt-0.5" style={{ color: '#64748B' }}>
+        <h1 className="display-font text-xl font-bold" style={{ color: 'var(--mc-text)' }}>Календарь выездных</h1>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--mc-muted)' }}>
           Свои поставленные и назначенные — с деталями. Чужие — только занятые слоты.
         </p>
       </div>
@@ -585,8 +585,8 @@ export function FieldCalendarScreen({ ctx }) {
               className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
               style={{
                 background: active ? f.color : 'white',
-                color:      active ? 'white' : '#64748B',
-                border:     active ? `1px solid ${f.color}` : '1px solid #E5E7EB',
+                color:      active ? 'white' : 'var(--mc-muted)',
+                border:     active ? `1px solid ${f.color}` : '1px solid var(--mc-border)',
               }}>
               {f.label}
             </button>
@@ -645,8 +645,8 @@ export function FieldHome({ ctx }) {
   return (
     <div>
       <div className="mb-1">
-        <h1 className="display-font text-xl font-bold" style={{ color: '#1A1814' }}>Мой календарь</h1>
-        <p className="text-sm mt-0.5" style={{ color: '#64748B' }}>
+        <h1 className="display-font text-xl font-bold" style={{ color: 'var(--mc-text)' }}>Мой календарь</h1>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--mc-muted)' }}>
           {todayCount} задач сегодня
           {unscheduled.length > 0 ? ` · ${unscheduled.length} без времени` : ''}
         </p>
@@ -671,7 +671,7 @@ export function FieldHome({ ctx }) {
       {/* Задачи без времени */}
       {unscheduled.length > 0 && (
         <div className="mt-6">
-          <h2 className="text-base font-bold mb-3" style={{ color: '#1A1814' }}>
+          <h2 className="text-base font-bold mb-3" style={{ color: 'var(--mc-text)' }}>
             Без времени ({unscheduled.length})
           </h2>
           <div className="space-y-2">
@@ -679,15 +679,15 @@ export function FieldHome({ ctx }) {
               <button key={t.id}
                 onClick={() => navigate({ name: 'task_detail', taskId: t.id })}
                 className="w-full text-left bg-white rounded-xl p-3"
-                style={{ border: '1px solid #E5E7EB' }}>
+                style={{ border: '1px solid var(--mc-border)' }}>
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="font-bold text-sm" style={{ color: '#3390EC' }}>{t.task_number}</span>
-                  <span className="font-semibold text-sm truncate" style={{ color: '#1A1814' }}>
+                  <span className="font-semibold text-sm truncate" style={{ color: 'var(--mc-text)' }}>
                     {t.kind === 'internal' ? 'Внутренняя задача' : t.kind === 'install' ? `⚙️ Установка — ${t.client_name}` : t.client_name}
                   </span>
                 </div>
                 {t.problem && (
-                  <div className="text-xs truncate" style={{ color: '#64748B' }}>
+                  <div className="text-xs truncate" style={{ color: 'var(--mc-muted)' }}>
                     {t.problem.slice(0, 70)}
                   </div>
                 )}
