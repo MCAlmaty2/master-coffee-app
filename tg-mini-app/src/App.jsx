@@ -918,6 +918,17 @@ function App() {
   const [errors, setErrors] = useState([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Тема: light / dark
+  const [theme, setTheme] = useState(() => localStorage.getItem('mc-theme') || 'light');
+  const toggleTheme = () => setTheme(t => {
+    const next = t === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('mc-theme', next);
+    return next;
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
   // Состояние подключения к Supabase: loading / ready / error
   const [bootStatus, setBootStatus] = useState({ phase: 'loading', error: null });
 
@@ -2968,6 +2979,7 @@ function App() {
     taskDraft, setTaskDraft, resetTaskDraft,
     generateWebToken,
     loginViaPin, setPinForUser, resetPinForUser,
+    theme, toggleTheme,
   };
 
   // ─── Интеграция с Telegram Mini App ───
@@ -3369,55 +3381,114 @@ function BootSplash({ title, subtitle, isError }) {
     );
   }
 
-  // Loading state — анимация pour-over кофе
+  // Loading state — эспрессо-машина
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={{ background: '#FFFFFF' }}>
-      {/* Coffee scene */}
-      <div style={{ position: 'relative', width: 180, height: 230, marginBottom: 28, flexShrink: 0 }}>
+    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6"
+         style={{ background: 'linear-gradient(160deg, #0a1520 0%, #0f1923 60%, #0d1e2a 100%)' }}>
 
-        {/* Pour-over filter */}
-        <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 90, height: 60 }}>
-          <svg viewBox="0 0 90 60" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-            <line x1="12" y1="56" x2="22" y2="14" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round"/>
-            <line x1="78" y1="56" x2="68" y2="14" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round"/>
-            <line x1="10" y1="56" x2="80" y2="56" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round"/>
-            <path d="M22 10 L68 10 L52 44 L38 44 Z" fill="#ede9e4" stroke="#c8bdb5" strokeWidth="1.5" strokeLinejoin="round"/>
-            <path d="M26 13 L64 13 L50 41 L40 41 Z" fill="#faf8f6"/>
-            <ellipse cx="45" cy="34" rx="7" ry="4.5" fill="#7B4F2E" opacity="0.65"/>
-            <ellipse cx="45" cy="32" rx="5" ry="3" fill="#5a3218" opacity="0.5"/>
-            <rect x="42" y="44" width="6" height="9" rx="3" fill="#c8bdb5"/>
-          </svg>
-        </div>
+      {/* Espresso machine SVG */}
+      <div style={{ marginBottom: 28, flexShrink: 0 }}>
+        <svg viewBox="0 0 200 225" xmlns="http://www.w3.org/2000/svg" style={{ width: 200, height: 225, overflow: 'visible' }}>
+          {/* Machine body */}
+          <rect x="18" y="55" width="144" height="118" rx="13" fill="#1a2f3c" stroke="#2d5a6a" strokeWidth="2"/>
+          {/* Top panel */}
+          <rect x="18" y="48" width="144" height="22" rx="8" fill="#1a2f3c" stroke="#2d5a6a" strokeWidth="1.5"/>
+          {/* Drip tray shelf */}
+          <rect x="28" y="173" width="124" height="7" rx="3" fill="#243b47" stroke="#2d5a6a" strokeWidth="1"/>
+          {/* Drip tray grid lines */}
+          <line x1="45" y1="174" x2="45" y2="179" stroke="#1a2f3c" strokeWidth="1"/>
+          <line x1="62" y1="174" x2="62" y2="179" stroke="#1a2f3c" strokeWidth="1"/>
+          <line x1="79" y1="174" x2="79" y2="179" stroke="#1a2f3c" strokeWidth="1"/>
+          <line x1="96" y1="174" x2="96" y2="179" stroke="#1a2f3c" strokeWidth="1"/>
+          <line x1="113" y1="174" x2="113" y2="179" stroke="#1a2f3c" strokeWidth="1"/>
+          <line x1="130" y1="174" x2="130" y2="179" stroke="#1a2f3c" strokeWidth="1"/>
+          <line x1="147" y1="174" x2="147" y2="179" stroke="#1a2f3c" strokeWidth="1"/>
 
-        {/* Drip stream */}
-        <div className="boot-drip-stream" style={{ position: 'absolute', top: 57, left: '50%', transform: 'translateX(-50%)', width: 3, borderRadius: 2, background: 'linear-gradient(to bottom, #5a3218, transparent)' }} />
-        <div className="boot-drip-drop" style={{ position: 'absolute', top: 57, left: '50%', transform: 'translateX(-50%)', width: 6, height: 8, background: '#5a3218', borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%' }} />
+          {/* Pressure gauge */}
+          <circle cx="50" cy="96" r="21" fill="#0f1923" stroke="#2d5a6a" strokeWidth="1.5"/>
+          <circle cx="50" cy="96" r="16" fill="#0a1520"/>
+          <text x="50" y="87" textAnchor="middle" fill="#2d5a6a" fontSize="7" fontFamily="monospace">9</text>
+          <text x="50" y="110" textAnchor="middle" fill="#2d5a6a" fontSize="7" fontFamily="monospace">1</text>
+          <text x="37" y="99" textAnchor="middle" fill="#2d5a6a" fontSize="7" fontFamily="monospace">3</text>
+          <text x="63" y="99" textAnchor="middle" fill="#2d5a6a" fontSize="7" fontFamily="monospace">15</text>
+          {/* Gauge needle */}
+          <g>
+            <animateTransform attributeName="transform" type="rotate"
+              values="-22 50 96;20 50 96;-22 50 96" dur="4s" repeatCount="indefinite"/>
+            <line x1="50" y1="96" x2="50" y2="82" stroke="#e05252" strokeWidth="1.8" strokeLinecap="round"/>
+          </g>
+          <circle cx="50" cy="96" r="2.5" fill="#2d5a6a"/>
 
-        {/* Mug */}
-        <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 140, height: 148 }}>
-          {/* Steam */}
-          <div className="boot-steam-group" style={{ position: 'absolute', top: -38, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 10 }}>
-            <div className="boot-steam boot-steam-1" style={{ width: 3, height: 22, background: 'linear-gradient(to top, #94a3b8, transparent)', borderRadius: 2 }} />
-            <div className="boot-steam boot-steam-2" style={{ width: 3, height: 30, background: 'linear-gradient(to top, #94a3b8, transparent)', borderRadius: 2 }} />
-            <div className="boot-steam boot-steam-3" style={{ width: 3, height: 18, background: 'linear-gradient(to top, #94a3b8, transparent)', borderRadius: 2 }} />
-          </div>
-          {/* Mug body */}
-          <div style={{ position: 'relative', width: 118, height: 130, margin: '0 auto', background: '#f8fafc', border: '3px solid #cbd5e1', borderRadius: '6px 6px 22px 22px', overflow: 'hidden' }}>
-            <div className="boot-mug-fill" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(to bottom, #7B3F1E 0%, #4A2008 50%, #2D1204 100%)', borderRadius: '0 0 19px 19px' }} />
-            <div className="boot-mug-crema" style={{ position: 'absolute', left: 4, right: 4, height: 9, background: 'linear-gradient(90deg, #b87333, #d4956a, #c8813a, #d4956a, #b87333)', borderRadius: 5, opacity: 0 }} />
-          </div>
-          {/* Handle */}
-          <div style={{ position: 'absolute', right: 0, top: 24, width: 24, height: 50, border: '4px solid #cbd5e1', borderLeft: 'none', borderRadius: '0 22px 22px 0' }} />
-        </div>
+          {/* Group-head buttons row */}
+          <rect x="90" y="68" width="58" height="22" rx="6" fill="#1a2f3c" stroke="#2d5a6a" strokeWidth="1"/>
+          <circle cx="105" cy="79" r="7" fill="#243b47" stroke="#2d5a6a" strokeWidth="1"/>
+          <circle cx="130" cy="79" r="7" fill="#243b47" stroke="#2d5a6a" strokeWidth="1"/>
+          {/* Power LED */}
+          <circle cx="105" cy="79" r="4" fill="#297b8a">
+            <animate attributeName="opacity" values=".4;.85;.4" dur="2.5s" repeatCount="indefinite"/>
+          </circle>
+          {/* Brew LED green */}
+          <circle cx="130" cy="79" r="4" fill="#22c55e">
+            <animate attributeName="opacity" values=".35;1;.35" dur="1.8s" repeatCount="indefinite"/>
+          </circle>
+
+          {/* Steam wand — right side */}
+          <rect x="152" y="66" width="7" height="50" rx="3.5" fill="#243b47" stroke="#2d5a6a" strokeWidth="1"/>
+          <rect x="149" y="113" width="13" height="9" rx="4" fill="#297b8a"/>
+          {/* Steam puff 1 */}
+          <ellipse cx="168" cy="110" rx="5" ry="3.5" fill="rgba(200,230,235,0.5)">
+            <animate attributeName="opacity" values="0;0.5;0" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+            <animate attributeName="cy" values="110;96;82" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+            <animate attributeName="rx" values="5;8;5" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+          </ellipse>
+          {/* Steam puff 2 */}
+          <ellipse cx="165" cy="108" rx="4" ry="2.5" fill="rgba(200,230,235,0.4)">
+            <animate attributeName="opacity" values="0;0.4;0" dur="1.6s" begin="0.55s" repeatCount="indefinite"/>
+            <animate attributeName="cy" values="108;92;76" dur="1.6s" begin="0.55s" repeatCount="indefinite"/>
+            <animate attributeName="rx" values="4;7;4" dur="1.6s" begin="0.55s" repeatCount="indefinite"/>
+          </ellipse>
+
+          {/* Group head */}
+          <rect x="58" y="138" width="84" height="24" rx="6" fill="#243b47" stroke="#2d5a6a" strokeWidth="1.5"/>
+          {/* Portafilter handle */}
+          <rect x="68" y="162" width="64" height="13" rx="5" fill="#297b8a"/>
+          {/* Portafilter spout left */}
+          <line x1="86" y1="175" x2="82" y2="192" stroke="#4a9eac" strokeWidth="2.5" strokeLinecap="round">
+            <animate attributeName="opacity" values="1;0.5;1" dur="0.9s" repeatCount="indefinite"/>
+          </line>
+          {/* Portafilter spout right */}
+          <line x1="114" y1="175" x2="118" y2="192" stroke="#4a9eac" strokeWidth="2.5" strokeLinecap="round">
+            <animate attributeName="opacity" values="1;0.5;1" dur="0.9s" begin="0.18s" repeatCount="indefinite"/>
+          </line>
+
+          {/* Cup + saucer */}
+          <ellipse cx="100" cy="212" rx="26" ry="4.5" fill="#1e3a4a"/>
+          {/* Cup trapezoid */}
+          <path d="M78 193 L80 208 Q100 213 120 208 L122 193 Z" fill="#f1f5f9"/>
+          {/* Coffee fill — animates up */}
+          <clipPath id="espCupClip">
+            <path d="M78 193 L80 208 Q100 213 120 208 L122 193 Z"/>
+          </clipPath>
+          <rect x="78" y="193" width="44" height="20" fill="#4a2408" clipPath="url(#espCupClip)">
+            <animate attributeName="height" values="0;20" dur="2.2s" fill="freeze" repeatCount="1"/>
+            <animate attributeName="y" values="213;193" dur="2.2s" fill="freeze" repeatCount="1"/>
+          </rect>
+          {/* Crema */}
+          <ellipse cx="100" cy="194" rx="19" ry="2.5" fill="#b87333" opacity="0">
+            <animate attributeName="opacity" values="0;0.85" dur="1s" begin="1.8s" fill="freeze" repeatCount="1"/>
+          </ellipse>
+        </svg>
       </div>
 
-      <h1 className="display-font text-xl mb-1 text-center" style={{ color: '#1A1814' }}>{title}</h1>
-      <div className="text-sm mb-6 text-center" style={{ color: '#94a3b8' }}>Готовим ваш кофе ☕</div>
+      <h1 style={{ color: 'white', fontWeight: 700, fontSize: 18, marginBottom: 4, textAlign: 'center', letterSpacing: '-0.02em' }}>{title}</h1>
+      <div style={{ color: '#64a8b4', fontSize: 13, marginBottom: 28, textAlign: 'center' }}>Готовим ваш кофе ☕</div>
 
       {/* Логотип-пилюля */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: '#f8fafc', borderRadius: 999, border: '1px solid #e2e8f0' }}>
-        <img src="/logo-symbol.png" alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} />
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.5px', color: '#297b8a', textTransform: 'uppercase' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 18px',
+                    background: 'rgba(255,255,255,0.06)', borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.1)' }}>
+        <img src="/logo-symbol.png" alt="" style={{ width: 20, height: 20, objectFit: 'contain', filter: 'brightness(3)' }} />
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.5px', color: '#4a9eac', textTransform: 'uppercase' }}>
           Master Coffee Roasters
         </span>
       </div>
@@ -3699,7 +3770,7 @@ const FULL_BLEED_ROUTES = new Set([
 ]);
 
 function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
-  const { currentUser, effectiveRole, actAs, setActAs, route, navigate, logout, db } = ctx;
+  const { currentUser, effectiveRole, actAs, setActAs, route, navigate, logout, db, theme, toggleTheme } = ctx;
   const role = effectiveRole;
   const isManager = MANAGER_ROLES.includes(role);
 
@@ -3792,7 +3863,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
   return (
     <div className="flex min-h-screen">
       {/* Sidebar Desktop */}
-      <aside className="hidden lg:flex flex-col w-64 flex-shrink-0 sticky top-0 h-screen" style={{ background: 'white', borderRight: '1px solid #E5E7EB' }}>
+      <aside className="hidden lg:flex flex-col w-64 flex-shrink-0 sticky top-0 h-screen" style={{ background: 'var(--mc-sidebar-bg)', borderRight: '1px solid var(--mc-border)' }}>
         <div className="p-5">
           <img src="/logo-hor.png" alt="Master Coffee Roasters"
                style={{ height: 36, objectFit: 'contain', objectPosition: 'left' }} />
@@ -3820,13 +3891,14 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
           ))}
         </nav>
 
-        <div className="p-3 border-t" style={{ borderColor: '#F1F5F9' }}>
+        <div className="p-3 border-t" style={{ borderColor: 'var(--mc-border-light)' }}>
+          <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
           <UserChip user={currentUser} onLogout={logout} db={db} onClick={() => navigate({ name: 'home' })} />
         </div>
       </aside>
 
       {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 border-b" style={{ background: 'white', borderColor: '#E5E7EB' }}>
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 border-b" style={{ background: 'var(--mc-sidebar-bg)', borderColor: 'var(--mc-border)' }}>
         <div className="flex items-center gap-2 min-w-0">
           <button onClick={() => setMobileMenuOpen(true)} className="p-1 -ml-1 flex-shrink-0"><Menu size={22} /></button>
           <img src="/logo-hor.png" alt="Master Coffee Roasters"
@@ -3854,7 +3926,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={() => setMobileMenuOpen(false)}>
-          <aside className="w-72 max-w-[80%] h-full flex flex-col overflow-y-auto" style={{ background: 'white' }} onClick={e => e.stopPropagation()}>
+          <aside className="w-72 max-w-[80%] h-full flex flex-col overflow-y-auto" style={{ background: 'var(--mc-sidebar-bg)' }} onClick={e => e.stopPropagation()}>
             <div className="p-5 flex items-center justify-between flex-shrink-0">
               <img src="/logo-hor.png" alt="Master Coffee Roasters"
                    style={{ height: 30, objectFit: 'contain' }} />
@@ -3880,7 +3952,8 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
                 </div>
               ))}
             </nav>
-            <div className="p-3 border-t flex-shrink-0" style={{ borderColor: '#F1F5F9' }}>
+            <div className="p-3 border-t flex-shrink-0" style={{ borderColor: 'var(--mc-border-light)' }}>
+              <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
               <UserChip user={currentUser} onLogout={logout} db={db} onClick={() => navigate({ name: 'home' })} />
             </div>
           </aside>
@@ -3951,14 +4024,43 @@ function ActAsSwitcher({ ctx }) {
   );
 }
 
+function ThemeToggle({ theme, toggleTheme }) {
+  const isDark = theme === 'dark';
+  return (
+    <button
+      onClick={toggleTheme}
+      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 text-left transition"
+      style={{ background: 'transparent', color: 'var(--mc-muted)' }}
+    >
+      <span style={{ fontSize: 15, lineHeight: 1 }}>{isDark ? '🌙' : '☀️'}</span>
+      <span style={{ fontSize: 13, fontWeight: 500, flex: 1, color: 'var(--mc-muted)' }}>
+        {isDark ? 'Тёмная тема' : 'Светлая тема'}
+      </span>
+      <div style={{
+        width: 36, height: 20, borderRadius: 10,
+        background: isDark ? '#297b8a' : '#cbd5e1',
+        position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+      }}>
+        <div style={{
+          position: 'absolute', top: 3,
+          left: isDark ? 18 : 3,
+          width: 14, height: 14, borderRadius: '50%',
+          background: 'white', transition: 'left 0.2s',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }} />
+      </div>
+    </button>
+  );
+}
+
 function SidebarItem({ icon: Icon, label, active, badge, onClick }) {
   return (
     <button
       onClick={onClick}
       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 text-left transition"
       style={{
-        background: active ? '#F5F7F8' : 'transparent',
-        color: active ? '#1A1814' : '#64748B',
+        background: active ? 'var(--mc-active-item)' : 'transparent',
+        color: active ? 'var(--mc-text)' : 'var(--mc-muted)',
         fontWeight: active ? 600 : 500,
       }}
     >
@@ -3972,7 +4074,7 @@ function SidebarItem({ icon: Icon, label, active, badge, onClick }) {
 function UserChip({ user, onLogout, db, onClick }) {
   const r = roleOf(db, user.role);
   return (
-    <div className="flex items-center gap-2.5 p-2 rounded-lg" style={{ background: '#F5F7F8' }}>
+    <div className="flex items-center gap-2.5 p-2 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
       <button
         onClick={onClick}
         className="flex items-center gap-2.5 flex-1 min-w-0 text-left p-0 hover:opacity-80"
@@ -3985,8 +4087,8 @@ function UserChip({ user, onLogout, db, onClick }) {
           }
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold truncate" style={{ color: '#1A1814' }}>{user.first_name} {user.last_name}</div>
-          <div className="text-[11px] truncate" style={{ color: '#64748B' }}>{r.label}</div>
+          <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>{user.first_name} {user.last_name}</div>
+          <div className="text-[11px] truncate" style={{ color: 'var(--mc-muted)' }}>{r.label}</div>
         </div>
       </button>
       <button onClick={onLogout} className="p-2 rounded hover:bg-white" title="Выйти"><LogOut size={15} style={{ color: '#64748B' }} /></button>
@@ -4660,22 +4762,23 @@ function DashboardHome({ ctx, title }) {
             <button
               key={i}
               onClick={t.go}
-              className="rounded-xl p-4 bg-white text-left transition hover:shadow-md flex flex-col gap-2"
+              className="rounded-xl p-4 text-left transition hover:shadow-md flex flex-col gap-2"
               style={{
-                border: t.highlight ? `1.5px solid ${t.color}` : '1px solid #E5E7EB',
-                background: t.highlight ? `${t.color}08` : 'white',
+                background: 'var(--mc-tile-bg)',
+                border: '1px solid var(--mc-border)',
+                borderLeft: `4px solid ${t.color}`,
+                ...(t.highlight ? { boxShadow: `0 0 0 1px ${t.color}40` } : {}),
               }}
             >
               <div className="flex items-start justify-between">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${t.color}15`, color: t.color }}>
-                  <Icon size={18} />
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${t.color}18`, color: t.color }}>
+                  <Icon size={16} />
                 </div>
-                <ChevronRight size={16} style={{ color: '#A8A8AE' }} />
+                <div className="text-2xl font-bold leading-none" style={{ color: t.color }}>{t.value}</div>
               </div>
               <div>
-                <div className="text-3xl font-bold leading-none mb-1" style={{ color: t.color }}>{t.value}</div>
-                <div className="text-sm font-semibold" style={{ color: '#1A1814' }}>{t.label}</div>
-                <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>{t.hint}</div>
+                <div className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>{t.label}</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>{t.hint}</div>
               </div>
             </button>
           );
@@ -12302,54 +12405,7 @@ function GlobalStyles() {
       }
       .splash-hint { animation: splashHintPulse 2s ease-in-out infinite; }
 
-      /* ── BootSplash: coffee cup animation ── */
-      @keyframes bootFillUp {
-        0%   { height: 0%;  }
-        60%  { height: 76%; }
-        70%  { height: 73%; }
-        80%  { height: 77%; }
-        100% { height: 76%; }
-      }
-      .boot-mug-fill { animation: bootFillUp 3.2s cubic-bezier(.4,0,.2,1) infinite; }
-
-      @keyframes bootCremaRise {
-        0%, 50% { opacity: 0; bottom: 0%; }
-        60%  { bottom: calc(76% - 9px); opacity: 1; }
-        100% { bottom: calc(76% - 9px); opacity: 1; }
-      }
-      .boot-mug-crema { position: absolute; left: 4px; right: 4px; animation: bootCremaRise 3.2s cubic-bezier(.4,0,.2,1) infinite; }
-
-      @keyframes bootDripGrow {
-        0%   { height: 0;   opacity: 0; }
-        10%  { height: 26px; opacity: 1; }
-        65%  { height: 26px; opacity: 1; }
-        80%  { height: 0;   opacity: 0; }
-        100% { height: 0;   opacity: 0; }
-      }
-      .boot-drip-stream { animation: bootDripGrow 3.2s ease-in-out infinite; }
-
-      @keyframes bootDropFall {
-        0%, 65%  { opacity: 0; transform: translateX(-50%) translateY(0); }
-        70%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-        90%  { opacity: 0; transform: translateX(-50%) translateY(58px); }
-        100% { opacity: 0; }
-      }
-      .boot-drip-drop { animation: bootDropFall 3.2s ease-in infinite; }
-
-      @keyframes bootSteamFade {
-        0%, 60%  { opacity: 0; }
-        75%, 95% { opacity: 1; }
-        100%     { opacity: 0; }
-      }
-      .boot-steam-group { animation: bootSteamFade 3.2s ease infinite; }
-
-      @keyframes bootSteamRise {
-        0%   { transform: translateY(0) scaleX(1);    opacity: 0.8; }
-        100% { transform: translateY(-16px) scaleX(0.4); opacity: 0; }
-      }
-      .boot-steam   { animation: bootSteamRise 1.4s ease-in-out infinite; }
-      .boot-steam-2 { animation-delay: 0.45s; }
-      .boot-steam-3 { animation-delay: 0.2s; }
+      /* ── BootSplash: espresso machine — анимации в SVG inline ── */
 
       /* Прокрутка swipe-кнопки */
       .swipe-track {

@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── CSS-переменные для тем ── */
+:root {
+  --mc-bg:           #ffffff;
+  --mc-surface:      #ffffff;
+  --mc-surface-2:    #f8fafc;
+  --mc-text:         #1a1814;
+  --mc-muted:        #64748b;
+  --mc-border:       #e5e7eb;
+  --mc-border-light: #f1f5f9;
+  --mc-sidebar-bg:   #ffffff;
+  --mc-tile-bg:      #ffffff;
+  --mc-active-item:  #f5f7f8;
+}
+
+[data-theme="dark"] {
+  --mc-bg:           #0f1923;
+  --mc-surface:      #1e293b;
+  --mc-surface-2:    #162333;
+  --mc-text:         #f1f5f9;
+  --mc-muted:        #94a3b8;
+  --mc-border:       #1e3248;
+  --mc-border-light: #1e3248;
+  --mc-sidebar-bg:   #0d1a24;
+  --mc-tile-bg:      #1e293b;
+  --mc-active-item:  #1e3a4a;
+}
+
 /* ── Предотвращаем автомасштабирование текста на iOS (иначе шрифты могут плыть) */
 html {
   -webkit-text-size-adjust: 100%;
@@ -14,19 +41,28 @@ html, body, #root {
   padding: 0;
   min-height: 100vh;
   min-height: 100dvh; /* динамическая высота viewport — важно для Telegram */
-  background: #FFFFFF;
+  background: var(--mc-bg);
   /* Запрещаем pull-to-refresh, чтобы случайный свайп не перезагружал миниапп */
   overscroll-behavior-y: none;
   /* Сглаживание шрифтов */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Подхватываем тему Telegram, если хост её прокинул через CSS-переменные */
 body {
-  color: var(--tg-theme-text-color, #1A1814);
-  background-color: var(--tg-theme-bg-color, #FFFFFF);
+  color: var(--mc-text);
+  background-color: var(--mc-bg);
 }
+
+/* Dark mode: ключевые Tailwind-классы */
+[data-theme="dark"] .bg-white { background-color: var(--mc-surface) !important; }
+[data-theme="dark"] .bg-gray-50 { background-color: var(--mc-surface-2) !important; }
+[data-theme="dark"] .border-gray-200,
+[data-theme="dark"] .border-e5e7eb { border-color: var(--mc-border) !important; }
+[data-theme="dark"] .text-gray-500,
+[data-theme="dark"] .text-slate-500 { color: var(--mc-muted) !important; }
 
 /* Убираем синий flash при тапе на мобильных */
 * {
