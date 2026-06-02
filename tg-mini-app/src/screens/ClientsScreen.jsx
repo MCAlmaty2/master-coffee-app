@@ -30,14 +30,14 @@ function SHeader({ title, subtitle, onBack, action }) {
   return (
     <div style={{ marginBottom: 20 }}>
       {onBack && (
-        <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 8, padding: 0 }}>
+        <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--mc-muted)', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 8, padding: 0 }}>
           <ChevronLeft size={15} /> Назад
         </button>
       )}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1814', margin: 0, lineHeight: 1.2 }}>{title}</h1>
-          {subtitle && <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>{subtitle}</div>}
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--mc-text)', margin: 0, lineHeight: 1.2 }}>{title}</h1>
+          {subtitle && <div style={{ fontSize: 12, color: 'var(--mc-muted)', marginTop: 3 }}>{subtitle}</div>}
         </div>
         {action}
       </div>
@@ -57,9 +57,9 @@ function TypeBadge({ type }) {
 function FieldRow({ label, value }) {
   if (!value) return null;
   return (
-    <div style={{ display: 'flex', gap: 8, padding: '5px 0', borderBottom: '1px solid #F5F7F8', fontSize: 12 }}>
-      <span style={{ color: '#94a3b8', minWidth: 120, flexShrink: 0 }}>{label}</span>
-      <span style={{ color: '#1A1814', fontWeight: 500, flex: 1, wordBreak: 'break-word' }}>{value}</span>
+    <div style={{ display: 'flex', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--mc-border-light)', fontSize: 12 }}>
+      <span style={{ color: 'var(--mc-muted)', minWidth: 120, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: 'var(--mc-text)', fontWeight: 500, flex: 1, wordBreak: 'break-word' }}>{value}</span>
     </div>
   );
 }
@@ -117,23 +117,23 @@ export function ClientsScreen({ ctx }) {
 
       {/* Поиск */}
       <div style={{ position: 'relative', marginBottom: 10 }}>
-        <Search size={15} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+        <Search size={15} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--mc-muted)', pointerEvents: 'none' }} />
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Поиск: название, телефон, БИН..."
-          style={{ width: '100%', padding: '10px 36px', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' }} />
+          style={{ width: '100%', padding: '10px 36px', border: '1px solid var(--mc-border)', borderRadius: 10, fontSize: 13, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', boxSizing: 'border-box' }} />
         {search && (
           <button onClick={() => setSearch('')}
-            style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>
+            style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)', lineHeight: 1 }}>
             <X size={14} />
           </button>
         )}
       </div>
 
       {/* Табы */}
-      <div style={{ display: 'flex', border: '1px solid #E5E7EB', borderRadius: 10, marginBottom: 14, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', border: '1px solid var(--mc-border)', borderRadius: 10, marginBottom: 14, overflow: 'hidden' }}>
         {[['all', `Все (${clients.length})`], ['legal', `Юр. (${legalN})`], ['individual', `Физ. (${indivN})`]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
-            style={{ flex: 1, padding: '7px 4px', fontSize: 11, fontWeight: 600, cursor: 'pointer', background: tab === k ? '#297b8a' : '#fff', color: tab === k ? '#fff' : '#64748B', border: 'none' }}>
+            style={{ flex: 1, padding: '7px 4px', fontSize: 11, fontWeight: 600, cursor: 'pointer', background: tab === k ? '#297b8a' : 'var(--mc-surface)', color: tab === k ? '#fff' : 'var(--mc-muted)', border: 'none' }}>
             {l}
           </button>
         ))}
@@ -141,7 +141,7 @@ export function ClientsScreen({ ctx }) {
 
       {/* Список */}
       {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '48px 24px', color: '#94a3b8' }}>
+        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--mc-muted)' }}>
           <Building2 size={36} style={{ margin: '0 auto 12px', opacity: .3 }} />
           <div style={{ fontSize: 14 }}>{search ? 'Ничего не найдено' : 'База клиентов пуста'}</div>
         </div>
@@ -158,21 +158,21 @@ function ClientCard({ client: c, db, onClick }) {
   const last   = orders[0];
   return (
     <button onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '12px 14px', marginBottom: 8, textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 8, textAlign: 'left', cursor: 'pointer', width: '100%' }}>
       <div style={{ width: 38, height: 38, borderRadius: '50%', background: c.type === 'legal' ? '#EFF6FF' : '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {c.type === 'legal' ? <Building2 size={17} color="#1D4ED8" /> : <User size={17} color="#16a34a" />}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 13, color: '#1A1814', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-        <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--mc-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+        <div style={{ fontSize: 11, color: 'var(--mc-muted)', marginTop: 2 }}>
           {c.phone || '—'}
-          {c.bin && <span style={{ marginLeft: 10, color: '#94a3b8' }}>БИН: {c.bin}</span>}
+          {c.bin && <span style={{ marginLeft: 10, color: 'var(--mc-muted)' }}>БИН: {c.bin}</span>}
         </div>
-        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>
+        <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginTop: 1 }}>
           {orders.length > 0 ? `${orders.length} заказов · последний ${fmtDate(last.created_at)}` : 'Заказов пока нет'}
         </div>
       </div>
-      <ChevronRight size={15} color="#CBD5E1" style={{ flexShrink: 0 }} />
+      <ChevronRight size={15} color="var(--mc-muted)" style={{ flexShrink: 0 }} />
     </button>
   );
 }
@@ -187,7 +187,7 @@ export function ClientDetailScreen({ ctx, clientId }) {
   const orders = useMemo(() => client ? getClientOrders(client, db.orders) : [], [client, db.orders]);
   const [addrPickerOpen, setAddrPickerOpen] = useState(false);
 
-  if (!client) return <div style={{ padding: 24, color: '#94a3b8', textAlign: 'center' }}>Клиент не найден</div>;
+  if (!client) return <div style={{ padding: 24, color: 'var(--mc-muted)', textAlign: 'center' }}>Клиент не найден</div>;
 
   const lastOrder = orders[0];
 
@@ -255,7 +255,7 @@ export function ClientDetailScreen({ ctx, clientId }) {
         onBack={() => navigate({ name: 'clients' })}
         action={canManage(currentUser) && (
           <button onClick={() => navigate({ name: 'client_edit', clientId: client.id })}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', background: '#F5F7F8', color: '#1A1814', border: '1px solid #E5E7EB', borderRadius: 9, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)', borderRadius: 9, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
             <Edit2 size={13} /> Изменить
           </button>
         )}
@@ -265,8 +265,8 @@ export function ClientDetailScreen({ ctx, clientId }) {
       <div style={{ marginBottom: 14 }}><TypeBadge type={client.type} /></div>
 
       {/* Основные данные */}
-      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Контакты</div>
+      <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Контакты</div>
         <FieldRow label="Телефон"        value={client.phone} />
         <FieldRow label="Адрес"          value={client.address} />
         {(client.addresses || []).filter(a => a.address?.trim()).map((a, i) => (
@@ -279,8 +279,8 @@ export function ClientDetailScreen({ ctx, clientId }) {
 
       {/* Банк */}
       {client.type === 'legal' && (client.bank || client.bik || client.account_number) && (
-        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Банковские реквизиты</div>
+        <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Банковские реквизиты</div>
           <FieldRow label="Банк"         value={client.bank} />
           <FieldRow label="КБе"          value={client.kbe} />
           <FieldRow label="БИК"          value={client.bik} />
@@ -290,11 +290,11 @@ export function ClientDetailScreen({ ctx, clientId }) {
 
       {/* Предпочтительные товары */}
       {(client.preferred_items || []).length > 0 && (
-        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Закреплённые товары</div>
+        <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Закреплённые товары</div>
           {(client.preferred_items || []).map((pi, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid #F5F7F8', fontSize: 12 }}>
-              <span style={{ color: '#1A1814', fontWeight: 500, flex: 1 }}>{pi.name}{pi.unit ? ` (${pi.unit})` : ''}</span>
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--mc-border-light)', fontSize: 12 }}>
+              <span style={{ color: 'var(--mc-text)', fontWeight: 500, flex: 1 }}>{pi.name}{pi.unit ? ` (${pi.unit})` : ''}</span>
               <span style={{ color: '#297b8a', fontWeight: 700, marginLeft: 12, whiteSpace: 'nowrap' }}>{fmtNum(pi.price)} тг</span>
             </div>
           ))}
@@ -316,16 +316,16 @@ export function ClientDetailScreen({ ctx, clientId }) {
       </div>
 
       {/* История заказов */}
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1814', marginBottom: 10 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--mc-text)', marginBottom: 10 }}>
         История заказов ({orders.length})
       </div>
       {orders.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: 13 }}>Заказов пока нет</div>
+        <div style={{ textAlign: 'center', padding: '24px', color: 'var(--mc-muted)', fontSize: 13 }}>Заказов пока нет</div>
       ) : orders.slice(0, 8).map(o => (
         <OrderHistoryRow key={o.id} order={o} onClick={() => navigate({ name: 'order_detail', orderId: o.id })} />
       ))}
       {orders.length > 8 && (
-        <div style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', marginTop: 8 }}>
+        <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--mc-muted)', marginTop: 8 }}>
           + ещё {orders.length - 8} заказов
         </div>
       )}
@@ -334,16 +334,16 @@ export function ClientDetailScreen({ ctx, clientId }) {
       {addrPickerOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 9999, display: 'flex', alignItems: 'flex-end' }}
           onClick={e => { if (e.target === e.currentTarget) setAddrPickerOpen(false); }}>
-          <div style={{ background: '#fff', width: '100%', borderRadius: '20px 20px 0 0', padding: '16px 16px 24px' }}>
+          <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', padding: '16px 16px 24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#1A1814' }}>Выберите адрес доставки</div>
-              <button onClick={() => setAddrPickerOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--mc-text)' }}>Выберите адрес доставки</div>
+              <button onClick={() => setAddrPickerOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)' }}><X size={20} /></button>
             </div>
             {allAddresses.map((a, i) => (
               <button key={i} onClick={() => { setAddrPickerOpen(false); startOrder(a.address); }}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%', background: '#F5F7F8', border: '1px solid #E5E7EB', borderRadius: 10, padding: '10px 14px', marginBottom: 8, textAlign: 'left', cursor: 'pointer' }}>
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%', background: 'var(--mc-active-item)', border: '1px solid var(--mc-border)', borderRadius: 10, padding: '10px 14px', marginBottom: 8, textAlign: 'left', cursor: 'pointer' }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#297b8a', marginBottom: 2 }}>{a.label}</span>
-                <span style={{ fontSize: 13, color: '#1A1814' }}>{a.address}</span>
+                <span style={{ fontSize: 13, color: 'var(--mc-text)' }}>{a.address}</span>
               </button>
             ))}
           </div>
@@ -366,15 +366,15 @@ function OrderHistoryRow({ order: o, onClick }) {
   const total = (o.items || []).reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.price) || 0), 0);
   return (
     <button onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1px solid #F1F5F9', borderRadius: 10, padding: '10px 12px', marginBottom: 6, textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--mc-surface)', border: '1px solid var(--mc-border-light)', borderRadius: 10, padding: '10px 12px', marginBottom: 6, textAlign: 'left', cursor: 'pointer', width: '100%' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 12, color: '#1A1814' }}>{o.order_number}</div>
-        <div style={{ fontSize: 11, color: '#64748B', marginTop: 1 }}>
+        <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--mc-text)' }}>{o.order_number}</div>
+        <div style={{ fontSize: 11, color: 'var(--mc-muted)', marginTop: 1 }}>
           {fmtDate(o.created_at)} · {(o.items || []).length} поз. · {fmtNum(total)} тг
         </div>
       </div>
       <span style={{ background: s.bg, color: s.color, borderRadius: 7, padding: '2px 8px', fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap' }}>{s.label}</span>
-      <ChevronRight size={14} color="#CBD5E1" style={{ flexShrink: 0 }} />
+      <ChevronRight size={14} color="var(--mc-muted)" style={{ flexShrink: 0 }} />
     </button>
   );
 }
@@ -459,12 +459,12 @@ export function ClientEditScreen({ ctx, clientId }) {
       />
 
       {/* Тип */}
-      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 10 }}>Тип клиента</div>
+      <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 10 }}>Тип клиента</div>
         <div style={{ display: 'flex', gap: 8 }}>
           {[['legal', '🏢 Юр. лицо'], ['individual', '👤 Физ. лицо']].map(([v, l]) => (
             <button key={v} onClick={() => upd({ type: v })}
-              style={{ flex: 1, padding: '9px 4px', background: form.type === v ? '#297b8a' : '#F5F7F8', color: form.type === v ? '#fff' : '#64748B', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+              style={{ flex: 1, padding: '9px 4px', background: form.type === v ? '#297b8a' : 'var(--mc-active-item)', color: form.type === v ? '#fff' : 'var(--mc-muted)', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
               {l}
             </button>
           ))}
@@ -472,8 +472,8 @@ export function ClientEditScreen({ ctx, clientId }) {
       </div>
 
       {/* Основные поля */}
-      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 10 }}>Основное</div>
+      <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 10 }}>Основное</div>
         <EditField label={isLegal ? 'Наименование юр. лица *' : 'ФИО *'} value={form.name} onChange={v => upd({ name: v })} error={errors.name}
           placeholder={isLegal ? 'ТОО "Coffee Boom"' : 'Иванов Иван Иванович'} />
         {isLegal && <EditField label="БИН/ИИН" value={form.bin} onChange={v => upd({ bin: v.replace(/\D/g, '').slice(0, 12) })} error={errors.bin} placeholder="180440019877" />}
@@ -485,8 +485,8 @@ export function ClientEditScreen({ ctx, clientId }) {
 
       {/* Банк */}
       {isLegal && (
-        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 10 }}>Банковские реквизиты</div>
+        <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 10 }}>Банковские реквизиты</div>
           <EditField label="Банк" value={form.bank} onChange={v => upd({ bank: v })} placeholder='АО "Kaspi Bank"' />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <EditField label="КБе" value={form.kbe} onChange={v => upd({ kbe: v.replace(/\D/g, '').slice(0, 2) })} error={errors.kbe} placeholder="16" />
@@ -497,50 +497,50 @@ export function ClientEditScreen({ ctx, clientId }) {
       )}
 
       {/* Закреплённые товары */}
-      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+      <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: .5 }}>Закреплённые товары</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5 }}>Закреплённые товары</div>
           <button onClick={() => upd({ preferred_items: [...(form.preferred_items || []), { name: '', unit: 'кг', price: '' }] })}
             style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#F0F9FA', color: '#297b8a', border: '1px solid #b0dce5', borderRadius: 7, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>
             <Plus size={11} /> Добавить
           </button>
         </div>
         {(form.preferred_items || []).length === 0 && (
-          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: '8px 0' }}>Нет закреплённых товаров</div>
+          <div style={{ fontSize: 12, color: 'var(--mc-muted)', textAlign: 'center', padding: '8px 0' }}>Нет закреплённых товаров</div>
         )}
         {(form.preferred_items || []).map((pi, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 6, marginBottom: 8, alignItems: 'center' }}>
             <input value={pi.name} onChange={e => {
               const items = [...form.preferred_items]; items[i] = { ...items[i], name: e.target.value }; upd({ preferred_items: items });
-            }} placeholder="Название товара" style={{ padding: '7px 9px', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: 'inherit' }} />
+            }} placeholder="Название товара" style={{ padding: '7px 9px', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 12, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', fontFamily: 'inherit' }} />
             <select value={pi.unit || 'кг'} onChange={e => {
               const items = [...form.preferred_items]; items[i] = { ...items[i], unit: e.target.value }; upd({ preferred_items: items });
-            }} style={{ padding: '7px 6px', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 12, outline: 'none', background: '#fff', cursor: 'pointer' }}>
+            }} style={{ padding: '7px 6px', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 12, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', cursor: 'pointer' }}>
               {['кг', 'г', 'шт', 'л', 'уп'].map(u => <option key={u} value={u}>{u}</option>)}
             </select>
             <input type="number" value={pi.price} onChange={e => {
               const items = [...form.preferred_items]; items[i] = { ...items[i], price: e.target.value }; upd({ preferred_items: items });
-            }} placeholder="Цена" style={{ width: 80, padding: '7px 9px', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: 'inherit' }} />
+            }} placeholder="Цена" style={{ width: 80, padding: '7px 9px', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 12, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', fontFamily: 'inherit' }} />
             <button onClick={() => upd({ preferred_items: form.preferred_items.filter((_, j) => j !== i) })}
               style={{ padding: 6, background: '#FEE2E2', border: 'none', borderRadius: 7, cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
               <X size={13} />
             </button>
           </div>
         ))}
-        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>Эти товары автоматически подставятся в новый заказ</div>
+        <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginTop: 4 }}>Эти товары автоматически подставятся в новый заказ</div>
       </div>
 
       {/* Адреса доставки */}
-      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+      <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: .5 }}>Доп. адреса</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5 }}>Доп. адреса</div>
           <button onClick={() => upd({ addresses: [...(form.addresses || []), { label: '', address: '' }] })}
             style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#F0F9FA', color: '#297b8a', border: '1px solid #b0dce5', borderRadius: 7, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>
             <Plus size={11} /> Добавить
           </button>
         </div>
         {(form.addresses || []).length === 0 && (
-          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: '8px 0' }}>
+          <div style={{ fontSize: 12, color: 'var(--mc-muted)', textAlign: 'center', padding: '8px 0' }}>
             {form.address ? `Основной: ${form.address}` : 'Нет дополнительных адресов'}
           </div>
         )}
@@ -554,7 +554,7 @@ export function ClientEditScreen({ ctx, clientId }) {
                 upd({ addresses: items });
               }}
               placeholder="Офис, Склад…"
-              style={{ padding: '7px 8px', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: 'inherit' }}
+              style={{ padding: '7px 8px', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 12, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', fontFamily: 'inherit' }}
             />
             <input
               value={addr.address || ''}
@@ -564,7 +564,7 @@ export function ClientEditScreen({ ctx, clientId }) {
                 upd({ addresses: items });
               }}
               placeholder="г. Алматы, ул. Абая 150"
-              style={{ padding: '7px 8px', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: 'inherit' }}
+              style={{ padding: '7px 8px', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 12, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', fontFamily: 'inherit' }}
             />
             <button onClick={() => upd({ addresses: (form.addresses || []).filter((_, j) => j !== i) })}
               style={{ padding: 6, background: '#FEE2E2', border: 'none', borderRadius: 7, cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
@@ -572,11 +572,11 @@ export function ClientEditScreen({ ctx, clientId }) {
             </button>
           </div>
         ))}
-        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>Метка (Офис, Склад) + адрес. При создании заказа можно выбрать любой.</div>
+        <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginTop: 4 }}>Метка (Офис, Склад) + адрес. При создании заказа можно выбрать любой.</div>
       </div>
 
       <button onClick={handleSave} disabled={saving}
-        style={{ width: '100%', padding: 13, background: saving ? '#CBD5E1' : '#297b8a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: saving ? 'not-allowed' : 'pointer', marginBottom: 16 }}>
+        style={{ width: '100%', padding: 13, background: saving ? 'var(--mc-border)' : '#297b8a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: saving ? 'not-allowed' : 'pointer', marginBottom: 16 }}>
         {saving ? '⏳ Сохранение...' : existing ? '✓ Сохранить изменения' : '+ Добавить клиента'}
       </button>
     </div>
@@ -584,10 +584,10 @@ export function ClientEditScreen({ ctx, clientId }) {
 }
 
 function EditField({ label, value, onChange, error, placeholder, type = 'text', multiline }) {
-  const baseStyle = { width: '100%', padding: '8px 10px', border: `1px solid ${error ? '#FCA5A5' : '#E5E7EB'}`, borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box', marginBottom: 10, fontFamily: 'inherit' };
+  const baseStyle = { width: '100%', padding: '8px 10px', border: `1px solid ${error ? '#FCA5A5' : 'var(--mc-border)'}`, borderRadius: 8, fontSize: 13, outline: 'none', background: 'var(--mc-surface)', boxSizing: 'border-box', marginBottom: 10, fontFamily: 'inherit' };
   return (
     <div>
-      <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 3 }}>{label}</label>
+      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--mc-muted)', display: 'block', marginBottom: 3 }}>{label}</label>
       {multiline
         ? <textarea value={value || ''} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={2} style={{ ...baseStyle, resize: 'vertical' }} />
         : <input type={type} value={value || ''} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={baseStyle} />
@@ -619,36 +619,36 @@ export function ClientPickerModal({ ctx, onSelect, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 9999, display: 'flex', alignItems: 'flex-end' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: '#fff', width: '100%', maxHeight: '80vh', borderRadius: '20px 20px 0 0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--mc-surface)', width: '100%', maxHeight: '80vh', borderRadius: '20px 20px 0 0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Шапка */}
-        <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
+        <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#1A1814' }}>Выбрать клиента</div>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
+            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--mc-text)' }}>Выбрать клиента</div>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)' }}><X size={20} /></button>
           </div>
           <div style={{ position: 'relative' }}>
-            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--mc-muted)', pointerEvents: 'none' }} />
             <input value={search} onChange={e => setSearch(e.target.value)} autoFocus
               placeholder="Поиск по названию, телефону, БИН..."
-              style={{ width: '100%', padding: '9px 10px 9px 32px', border: '1px solid #E5E7EB', borderRadius: 9, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+              style={{ width: '100%', padding: '9px 10px 9px 32px', border: '1px solid var(--mc-border)', borderRadius: 9, fontSize: 13, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', boxSizing: 'border-box' }} />
           </div>
         </div>
 
         {/* Список */}
         <div style={{ overflowY: 'auto', flex: 1, padding: '8px 12px 16px' }}>
           {filtered.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: 13 }}>Ничего не найдено</div>
+            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--mc-muted)', fontSize: 13 }}>Ничего не найдено</div>
           ) : filtered.map(c => (
             <button key={c.id} onClick={() => onSelect(c)}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', background: '#fff', border: '1px solid #F1F5F9', borderRadius: 10, padding: '10px 12px', marginBottom: 6, textAlign: 'left', cursor: 'pointer' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', background: 'var(--mc-surface)', border: '1px solid var(--mc-border-light)', borderRadius: 10, padding: '10px 12px', marginBottom: 6, textAlign: 'left', cursor: 'pointer' }}>
               <div style={{ width: 34, height: 34, borderRadius: '50%', background: c.type === 'legal' ? '#EFF6FF' : '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {c.type === 'legal' ? <Building2 size={15} color="#1D4ED8" /> : <User size={15} color="#16a34a" />}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: '#1A1814', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>{c.phone || '—'}{c.bin ? ` · БИН: ${c.bin}` : ''}{(c.preferred_items||[]).length > 0 ? ` · ${c.preferred_items.length} тов.` : ''}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--mc-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>{c.phone || '—'}{c.bin ? ` · БИН: ${c.bin}` : ''}{(c.preferred_items||[]).length > 0 ? ` · ${c.preferred_items.length} тов.` : ''}</div>
               </div>
-              <Check size={15} color="#CBD5E1" style={{ flexShrink: 0 }} />
+              <Check size={15} color="var(--mc-muted)" style={{ flexShrink: 0 }} />
             </button>
           ))}
         </div>

@@ -1174,7 +1174,8 @@ function App() {
   const showToast = (msg) => {
     const id = uid();
     setToast({ msg, id });
-    setTimeout(() => setToast(t => (t && t.id === id ? null : t)), 2400);
+    const isError = msg && (msg.startsWith('Ошибка') || msg.startsWith('Заполните'));
+    setTimeout(() => setToast(t => (t && t.id === id ? null : t)), isError ? 5000 : 2400);
   };
 
   /**
@@ -2652,8 +2653,8 @@ function App() {
     if (!cat) return { error: 'Укажите категорию' };
     const unit = (data.unit || '').trim();
     if (!unit) return { error: 'Укажите единицу (кг, шт, упак)' };
-    const price = Number(data.price);
-    if (!price || price <= 0) return { error: 'Цена должна быть больше нуля' };
+    const price = Number(data.price) || 0;
+    if (price <= 0 && cat !== 'Запчасти') return { error: 'Цена должна быть больше нуля' };
     // Генерируем id, проверяя уникальность
     const existingIds = new Set((db.products || []).map(p => p.id));
     let newId = data.id?.trim();
@@ -2689,7 +2690,7 @@ function App() {
       if (!name) { errors.push(`Строка ${i + 1}: пустое название`); continue; }
       if (!cat)  { errors.push(`Строка ${i + 1}: пустая категория`); continue; }
       if (!unit) { errors.push(`Строка ${i + 1}: пустая единица`); continue; }
-      if (!price || price <= 0) { errors.push(`Строка ${i + 1}: цена ≤ 0`); continue; }
+      if (price <= 0 && cat !== 'Запчасти') { errors.push(`Строка ${i + 1}: цена ≤ 0`); continue; }
       while (existingIds.has(String(nextN).padStart(3, '0'))) nextN++;
       const newId = String(nextN).padStart(3, '0');
       existingIds.add(newId);
@@ -6029,7 +6030,11 @@ function CreateOrderScreen({ ctx }) {
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>{it.name}</div>
-                      <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>прайс: {fmtNum(it.original_price)} тг / {it.unit}</div>
+                      <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
+                        {it.cat === 'Запчасти' && !Number(it.original_price)
+                          ? `запчасть · укажите цену / ${it.unit}`
+                          : `прайс: ${fmtNum(it.original_price)} тг / ${it.unit}`}
+                      </div>
                     </div>
                     <button onClick={() => removeItem(i)} style={{ color: '#EB5757' }}><Trash2 size={16} /></button>
                   </div>
@@ -6045,7 +6050,7 @@ function CreateOrderScreen({ ctx }) {
                         className="w-full px-2.5 py-1.5 rounded-md text-sm" style={{ border: `1px solid ${itemErr.price ? '#EB5757' : 'var(--mc-border)'}` }} />
                     </div>
                   </div>
-                  {it.price && it.original_price && Number(it.price) !== Number(it.original_price) && (
+                  {it.price && it.original_price && Number(it.price) !== Number(it.original_price) && !(it.cat === 'Запчасти' && !Number(it.original_price)) && (
                     <div className="text-xs mt-1" style={{ color: '#F59E0B' }}>⚠ Цена изменена ({fmtNum(it.original_price)} → {fmtNum(it.price)}). Будет залогировано.</div>
                   )}
                   <div className="text-right text-sm font-bold mt-2" style={{ color: 'var(--mc-text)' }}>
@@ -7199,7 +7204,7 @@ function ProductPickerScreen({ ctx, pickerTarget }) {
 
   const handlePick = (p) => {
     if (pickerTarget === 'order') {
-      setOrderDraft(f => ({ ...f, items: [...f.items, { product_id: p.id, name: p.name, unit: p.unit, price: p.price, original_price: p.price, quantity: 1 }] }));
+      setOrderDraft(f => ({ ...f, items: [...f.items, { product_id: p.id, name: p.name, unit: p.unit, cat: p.cat, price: p.price, original_price: p.price, quantity: 1 }] }));
     } else if (pickerTarget === 'quick') {
       const idx = ctx.route?.quickItemIdx;
       if (idx === undefined || idx === null) {
@@ -7270,7 +7275,10 @@ function ProductPickerScreen({ ctx, pickerTarget }) {
                 <div className="text-sm font-medium" style={{ color: 'var(--mc-text)' }}>{p.name}</div>
                 <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>{p.cat} · {p.unit}</div>
               </div>
-              <div className="text-sm font-bold whitespace-nowrap" style={{ color: 'var(--mc-text)' }}>{fmtNum(p.price)} тг</div>
+              <div className="text-sm font-bold whitespace-nowrap"
+                style={{ color: p.cat === 'Запчасти' && !p.price ? 'var(--mc-muted)' : 'var(--mc-text)' }}>
+                {p.cat === 'Запчасти' && !p.price ? 'по запросу' : `${fmtNum(p.price)} тг`}
+              </div>
             </button>
           ))
         )}
@@ -8794,7 +8802,7 @@ function AdminRolesScreen({ ctx }) {
             return (
               <button key={r.key} onClick={() => setSelectedKey(r.key)}
                 className="w-full text-left p-3 rounded-xl flex items-center gap-3"
-                style={{ background: isCur ? `${r.color}15` : 'white', border: `2px solid ${isCur ? r.color : 'var(--mc-border)'}` }}
+                style={{ background: isCur ? `${r.color}15` : 'var(--mc-surface)', border: `2px solid ${isCur ? r.color : 'var(--mc-border)'}` }}
               >
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: r.color }}>
                   {(r.short || r.label)[0]}
@@ -8807,11 +8815,11 @@ function AdminRolesScreen({ ctx }) {
                 </div>
                 <div className="text-xs text-right flex-shrink-0">
                   <div className="font-bold" style={{ color: 'var(--mc-text)' }}>{(r.permissions || []).length}</div>
-                  <div style={{ color: '#A8A8AE' }}>прав</div>
+                  <div style={{ color: 'var(--mc-muted)' }}>прав</div>
                 </div>
                 <div className="text-xs text-right flex-shrink-0 ml-2">
                   <div className="font-bold" style={{ color: 'var(--mc-text)' }}>{count}</div>
-                  <div style={{ color: '#A8A8AE' }}>польз.</div>
+                  <div style={{ color: 'var(--mc-muted)' }}>польз.</div>
                 </div>
               </button>
             );
@@ -8883,7 +8891,7 @@ function AdminRolesScreen({ ctx }) {
                     <div className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--mc-muted)' }}>{group}</div>
                     <div className="space-y-1">
                       {perms.map(p => (
-                        <label key={p.key} className="flex items-start gap-2 p-2 rounded-lg cursor-pointer hover:bg-gray-50">
+                        <label key={p.key} className="flex items-start gap-2 p-2 rounded-lg cursor-pointer" style={{ transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background='var(--mc-active-item)'} onMouseLeave={e => e.currentTarget.style.background=''}>
                           <input
                             type="checkbox"
                             checked={draft.permissions.includes(p.key)}
@@ -8893,7 +8901,7 @@ function AdminRolesScreen({ ctx }) {
                           />
                           <div className="flex-1 min-w-0">
                             <div className="text-sm" style={{ color: 'var(--mc-text)' }}>{p.label}</div>
-                            <div className="text-[11px] mono-font" style={{ color: '#A8A8AE' }}>{p.key}</div>
+                            <div className="text-[11px] mono-font" style={{ color: 'var(--mc-muted)' }}>{p.key}</div>
                           </div>
                         </label>
                       ))}
@@ -11684,7 +11692,7 @@ function AdminProductsScreen({ ctx }) {
       if (!data.name?.trim()) return showToast('Укажите название');
       if (!data.cat?.trim()) return showToast('Укажите категорию');
       if (!data.unit?.trim()) return showToast('Укажите единицу');
-      if (!price || price <= 0) return showToast('Цена должна быть больше нуля');
+      if (price <= 0 && data.cat?.trim() !== 'Запчасти') return showToast('Цена должна быть больше нуля');
       await updateProduct(productId, {
         name: data.name.trim(),
         cat: data.cat.trim(),
@@ -11792,7 +11800,9 @@ function AdminProductsScreen({ ctx }) {
                 <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>{p.name}</div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-[10px] rounded-full px-2 py-0.5 font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>{p.cat}</span>
-                  <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>{fmtNum(p.price)} ₸ / {p.unit}</span>
+                  <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>
+                    {p.cat === 'Запчасти' && !p.price ? '—' : `${fmtNum(p.price)} ₸`} / {p.unit}
+                  </span>
                 </div>
               </div>
               {/* Действия */}
@@ -12052,16 +12062,23 @@ function ProductEditModal({ product, existingCats, onSave, onClose }) {
             </select>
           </div>
           <div>
-            <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Цена, ₸ *</label>
+            <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>
+              Цена, ₸{form.cat === 'Запчасти' ? ' (необязательно)' : ' *'}
+            </label>
             <input
               type="number"
               inputMode="numeric"
               value={form.price}
               onChange={e => update({ price: e.target.value })}
-              placeholder="11990"
+              placeholder={form.cat === 'Запчасти' ? '0' : '11990'}
               className="w-full px-3 py-2.5 rounded-lg outline-none"
               style={{ border: '1px solid var(--mc-border)' }}
             />
+            {form.cat === 'Запчасти' && (
+              <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>
+                Для запчастей цена не требуется — можно оставить 0
+              </div>
+            )}
           </div>
         </div>
 
@@ -12335,8 +12352,17 @@ function Modal({ children, onClose, title }) {
 }
 
 function Toast({ toast }) {
+  const isError = toast.msg && (toast.msg.startsWith('Ошибка') || toast.msg.startsWith('Заполните'));
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full font-semibold text-sm z-50 anim-slide site-font" style={{ background: '#297b8a', color: 'white', boxShadow: '0 8px 24px rgba(41,123,138,0.4)' }}>
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full font-semibold text-sm anim-slide site-font"
+      style={{
+        background: isError ? '#DC2626' : '#297b8a',
+        color: 'white',
+        boxShadow: isError ? '0 8px 24px rgba(220,38,38,0.4)' : '0 8px 24px rgba(41,123,138,0.4)',
+        zIndex: 99999,
+        maxWidth: '90vw',
+        textAlign: 'center',
+      }}>
       {toast.msg}
     </div>
   );

@@ -135,23 +135,28 @@ async function getNextRegNumber() {
 
 // ─── Общие UI-блоки ──────────────────────────────────────────────────────
 
-function ScreenHeader({ title, subtitle, onBack }) {
+function ScreenHeader({ title, subtitle, onBack, action }) {
   return (
-    <div style={{ background: '#297b8a', padding: '10px 16px 14px', flexShrink: 0 }}>
+    <div style={{ marginBottom: 20 }}>
       {onBack && (
-        <button onClick={onBack} style={{ color: 'rgba(255,255,255,.8)', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4, padding: 0 }}>
-          <ChevronLeft size={14} /> Назад
+        <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--mc-muted)', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 8, padding: 0 }}>
+          <ChevronLeft size={15} /> Назад
         </button>
       )}
-      <div style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>{title}</div>
-      {subtitle && <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 11, marginTop: 2 }}>{subtitle}</div>}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--mc-text)', margin: 0, lineHeight: 1.2 }}>{title}</h1>
+          {subtitle && <div style={{ fontSize: 12, color: 'var(--mc-muted)', marginTop: 3 }}>{subtitle}</div>}
+        </div>
+        {action}
+      </div>
     </div>
   );
 }
 
 function Card({ children, style, onClick }) {
   return (
-    <div onClick={onClick} style={{ background: '#fff', borderRadius: 14, padding: '12px 14px', marginBottom: 10, boxShadow: '0 1px 4px rgba(0,0,0,.06)', ...style }}>
+    <div onClick={onClick} style={{ background: 'var(--mc-surface)', borderRadius: 14, padding: '12px 14px', marginBottom: 10, border: '1px solid var(--mc-border)', ...style }}>
       {children}
     </div>
   );
@@ -160,7 +165,7 @@ function Card({ children, style, onClick }) {
 function StatusBadge({ status, managerDecision }) {
   if (managerDecision === 'admin_closed') {
     return (
-      <span style={{ background: '#F3F4F6', color: '#6B7280', border: '1px solid #D1D5DB', borderRadius: 8, padding: '2px 7px', fontSize: 9, fontWeight: 700, whiteSpace: 'nowrap' }}>
+      <span style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)', border: '1px solid var(--mc-border)', borderRadius: 8, padding: '2px 7px', fontSize: 9, fontWeight: 700, whiteSpace: 'nowrap' }}>
         🔒 Закрыто
       </span>
     );
@@ -176,7 +181,7 @@ function StatusBadge({ status, managerDecision }) {
 function ProgressBar({ done, total }) {
   const pct = total > 0 ? (done / total) * 100 : 0;
   return (
-    <div style={{ height: 6, background: '#E5E7EB', borderRadius: 3, overflow: 'hidden' }}>
+    <div style={{ height: 6, background: 'var(--mc-border)', borderRadius: 3, overflow: 'hidden' }}>
       <div style={{ height: '100%', width: `${pct}%`, background: '#297b8a', borderRadius: 3, transition: 'width .3s' }} />
     </div>
   );
@@ -185,23 +190,23 @@ function ProgressBar({ done, total }) {
 function OrderRow({ order, action, onClick, dim, courierName }) {
   return (
     <div onClick={onClick}
-      style={{ background: '#fff', borderRadius: 12, padding: '10px 12px', marginBottom: 6,
-        opacity: dim ? .55 : 1, cursor: onClick ? 'pointer' : 'default',
-        boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
+      style={{ background: 'var(--mc-surface)', borderRadius: 12, padding: '10px 12px', marginBottom: 6,
+        border: '1px solid var(--mc-border-light)',
+        opacity: dim ? .55 : 1, cursor: onClick ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
-        <div style={{ fontWeight: 700, fontSize: 11, color: '#1A1814', flex: 1, marginRight: 6 }}>{order.client}</div>
+        <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--mc-text)', flex: 1, marginRight: 6 }}>{order.client}</div>
         {courierName
           ? <span style={{ background: '#EFF6FF', color: '#1D4ED8', borderRadius: 8, padding: '2px 7px', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{courierName}</span>
           : <StatusBadge status={order.status} />
         }
       </div>
-      <div style={{ fontSize: 9, color: '#94a3b8' }}>📍 {[order.city, order.address].filter(Boolean).join(' · ')}</div>
+      <div style={{ fontSize: 9, color: 'var(--mc-muted)' }}>📍 {[order.city, order.address].filter(Boolean).join(' · ')}</div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#1A1814' }}>{fmtNum(order.amount)} тг</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--mc-text)' }}>{fmtNum(order.amount)} тг</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {action}
-          {onClick && !action && <ChevronRight size={14} color="#94a3b8" />}
-          {dim && !action && <span style={{ fontSize: 9, color: '#94a3b8' }}>занято</span>}
+          {onClick && !action && <ChevronRight size={14} style={{ color: 'var(--mc-muted)' }} />}
+          {dim && !action && <span style={{ fontSize: 9, color: 'var(--mc-muted)' }}>занято</span>}
         </div>
       </div>
     </div>
@@ -221,10 +226,10 @@ export function DeliveryRegistriesScreen({ ctx }) {
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   return (
-    <div style={{ background: '#F5F7F8', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--mc-bg)' }}>
       <ScreenHeader title="🚚 Доставки" subtitle={`Сегодня, ${new Date().toLocaleDateString('ru-KZ', { day: 'numeric', month: 'long', timeZone: TZ })}`} />
 
-      <div style={{ display: 'flex', background: '#fff', borderBottom: '1px solid #F1F5F9' }}>
+      <div style={{ display: 'flex', background: 'var(--mc-surface)', borderBottom: '1px solid var(--mc-border-light)' }}>
         {[['active', 'Активные'], ['archive', 'Архив']].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
             style={{ flex: 1, padding: '10px 4px', fontSize: 11, fontWeight: 600,
@@ -238,7 +243,7 @@ export function DeliveryRegistriesScreen({ ctx }) {
 
       <div style={{ padding: 12 }}>
         {regs.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '48px 20px', color: '#94a3b8' }}>
+          <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--mc-muted)' }}>
             <Truck size={36} style={{ margin: '0 auto 10px', opacity: .35 }} />
             <div style={{ fontSize: 13 }}>{tab === 'active' ? 'Нет активных реестров' : 'Архив пуст'}</div>
           </div>
@@ -267,18 +272,18 @@ function RegistryCard({ reg, db, onClick }) {
     <Card style={{ cursor: 'pointer' }} onClick={onClick}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#1A1814' }}>{reg.number}</div>
-          <div style={{ fontSize: 10, color: '#64748b' }}>{fmtDate(reg.date)} · {SHIFT_LABEL[reg.shift]}</div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--mc-text)' }}>{reg.number}</div>
+          <div style={{ fontSize: 10, color: 'var(--mc-muted)' }}>{fmtDate(reg.date)} · {SHIFT_LABEL[reg.shift]}</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}>
           {reg.status === 'active'
             ? <span style={{ background: '#D1FAE5', color: '#065F46', borderRadius: 10, padding: '2px 8px', fontSize: 9, fontWeight: 700 }}>● Активен</span>
-            : <span style={{ background: '#F1F5F9', color: '#475569', borderRadius: 10, padding: '2px 8px', fontSize: 9, fontWeight: 700 }}>✓ Завершён</span>}
+            : <span style={{ background: '#F1F5F9', color: 'var(--mc-muted)', borderRadius: 10, padding: '2px 8px', fontSize: 9, fontWeight: 700 }}>✓ Завершён</span>}
           {failed > 0 && <span style={{ background: '#FEE2E2', color: '#991B1B', borderRadius: 10, padding: '2px 8px', fontSize: 9, fontWeight: 700 }}>⚠ {failed} нерастр.</span>}
         </div>
       </div>
       <ProgressBar done={done} total={reg.total_orders || orders.length} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginTop: 4 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--mc-muted)', marginTop: 4 }}>
         <span>{done} / {reg.total_orders || orders.length} доставлено</span>
         {cash > 0 && <span style={{ color: '#16a34a', fontWeight: 700 }}>💵 {fmtNum(cash)} тг нал.</span>}
       </div>
@@ -362,18 +367,18 @@ export function DeliveryNewRegistryScreen({ ctx }) {
   const finalCount = rows ? (skipDupes ? rows.length - duplicates.length : rows.length) : 0;
 
   return (
-    <div style={{ background: '#F5F7F8', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--mc-bg)' }}>
       <ScreenHeader title="Новый реестр" onBack={() => navigate({ name: 'delivery_registries' })} />
       <div style={{ padding: 12 }}>
 
         <Card>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Смена</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Смена</div>
           <div style={{ display: 'flex', gap: 8 }}>
             {[['morning', '☀️ Утренняя'], ['evening', '🌙 Вечерняя']].map(([k, l]) => (
               <button key={k} onClick={() => setShift(k)}
                 style={{ flex: 1, padding: 9, borderRadius: 10, fontSize: 11, fontWeight: 700, cursor: 'pointer',
                   background: shift === k ? '#297b8a' : '#F5F7F8', color: shift === k ? '#fff' : '#94a3b8',
-                  border: `1.5px solid ${shift === k ? '#297b8a' : '#E5E7EB'}` }}>
+                  border: `1.5px solid ${shift === k ? '#297b8a' : 'var(--mc-border)'}` }}>
                 {l}
               </button>
             ))}
@@ -381,11 +386,11 @@ export function DeliveryNewRegistryScreen({ ctx }) {
         </Card>
 
         <Card>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Файл из 1С (.xlsx / .csv)</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Файл из 1С (.xlsx / .csv)</div>
           <div onClick={() => inputRef.current?.click()}
             style={{ border: '2px dashed #CBD5E1', borderRadius: 12, padding: '20px 16px', textAlign: 'center', cursor: 'pointer' }}>
-            <Upload size={24} style={{ color: '#94a3b8', margin: '0 auto 8px' }} />
-            <div style={{ fontSize: 11, color: '#64748b' }}>{fileName || 'Нажмите для выбора файла'}</div>
+            <Upload size={24} style={{ color: 'var(--mc-muted)', margin: '0 auto 8px' }} />
+            <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>{fileName || 'Нажмите для выбора файла'}</div>
             {loading && <div style={{ fontSize: 10, color: '#297b8a', marginTop: 6 }}>⏳ Разбор файла...</div>}
           </div>
           <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
@@ -436,28 +441,28 @@ export function DeliveryNewRegistryScreen({ ctx }) {
 
         {rows && (
           <Card>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>
               Предпросмотр — {rows.length} заказов {skipDupes && duplicates.length > 0 ? `(${finalCount} после фильтра)` : ''}
             </div>
             <div style={{ overflowX: 'auto', marginBottom: 10 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
                 <thead>
                   <tr>{['№', 'Клиент', 'Город', 'Адрес', 'Сумма'].map(h => (
-                    <th key={h} style={{ background: '#F1F5F9', color: '#64748b', padding: '4px 6px', textAlign: 'left', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                    <th key={h} style={{ background: '#F1F5F9', color: 'var(--mc-muted)', padding: '4px 6px', textAlign: 'left', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}</tr>
                 </thead>
                 <tbody>
                   {rows.slice(0, 4).map((r, i) => (
                     <tr key={i}>
-                      <td style={{ padding: '4px 6px', borderBottom: '1px solid #F1F5F9' }}>{r.seq_number || i + 1}</td>
-                      <td style={{ padding: '4px 6px', borderBottom: '1px solid #F1F5F9', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.client}</td>
-                      <td style={{ padding: '4px 6px', borderBottom: '1px solid #F1F5F9' }}>{r.city}</td>
-                      <td style={{ padding: '4px 6px', borderBottom: '1px solid #F1F5F9', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.address}</td>
-                      <td style={{ padding: '4px 6px', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>{fmtNum(r.amount)}</td>
+                      <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--mc-border-light)' }}>{r.seq_number || i + 1}</td>
+                      <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--mc-border-light)', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.client}</td>
+                      <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--mc-border-light)' }}>{r.city}</td>
+                      <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--mc-border-light)', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.address}</td>
+                      <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--mc-border-light)', whiteSpace: 'nowrap' }}>{fmtNum(r.amount)}</td>
                     </tr>
                   ))}
                   {rows.length > 4 && (
-                    <tr><td colSpan={5} style={{ textAlign: 'center', color: '#94a3b8', padding: 4, fontSize: 9, fontStyle: 'italic' }}>... ещё {rows.length - 4} строк</td></tr>
+                    <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--mc-muted)', padding: 4, fontSize: 9, fontStyle: 'italic' }}>... ещё {rows.length - 4} строк</td></tr>
                   )}
                 </tbody>
               </table>
@@ -552,7 +557,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
   const reg    = (db.deliveryRegistries || []).find(r => r.id === registryId);
   const orders = (db.deliveryOrders || []).filter(o => o.registry_id === registryId);
 
-  if (!reg) return <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Реестр не найден</div>;
+  if (!reg) return <div style={{ padding: 24, textAlign: 'center', color: 'var(--mc-muted)' }}>Реестр не найден</div>;
 
   const delivered    = orders.filter(o => o.status === 'delivered');
   const inProgress   = orders.filter(o => o.status === 'assigned');
@@ -562,7 +567,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
   const totalExpected = orders.reduce((s, o) => s + (Number(o.amount) || 0), 0);
 
   return (
-    <div style={{ background: '#F5F7F8', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--mc-bg)' }}>
       <ScreenHeader
         title={`${reg.number} ${SHIFT_LABEL[reg.shift] || ''}`}
         subtitle={`${fmtDate(reg.date)} · ${reg.status === 'active' ? 'Активен' : 'Завершён'}`}
@@ -576,18 +581,18 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
             { val: inProgress.length, lbl: 'В работе',   color: '#d97706' },
             { val: failed.length,     lbl: 'Не удалось', color: '#dc2626' },
           ].map(({ val, lbl, color }) => (
-            <div key={lbl} style={{ flex: 1, background: '#fff', borderRadius: 12, padding: '8px 10px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
+            <div key={lbl} style={{ flex: 1, background: 'var(--mc-surface)', borderRadius: 12, padding: '8px 10px', textAlign: 'center', border: '1px solid var(--mc-border)' }}>
               <div style={{ fontSize: 20, fontWeight: 800, color }}>{val}</div>
-              <div style={{ fontSize: 8, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: .3, marginTop: 2 }}>{lbl}</div>
+              <div style={{ fontSize: 8, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .3, marginTop: 2 }}>{lbl}</div>
             </div>
           ))}
         </div>
 
         <Card>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Наличные</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', marginBottom: 8 }}>Наличные</div>
           {[['Ожидалось по документам', fmtNum(totalExpected) + ' тг', '#1A1814'], ['Принято наличными', fmtNum(totalCash) + ' тг', '#16a34a']].map(([l, v, c]) => (
-            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #F5F7F8', fontSize: 10 }}>
-              <span style={{ color: '#64748b' }}>{l}</span>
+            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--mc-border-light)', fontSize: 10 }}>
+              <span style={{ color: 'var(--mc-muted)' }}>{l}</span>
               <span style={{ fontWeight: 700, color: c }}>{v}</span>
             </div>
           ))}
@@ -616,7 +621,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
           <AddOrderModal ctx={ctx} registryId={registryId} onClose={() => setShowAddModal(false)} />
         )}
 
-        <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Все заказы ({orders.length})</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Все заказы ({orders.length})</div>
 
         {/* ── Архивировать реестр (admin / director, только активный) ── */}
         {canArchive && reg.status === 'active' && (
@@ -636,7 +641,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => setConfirmArchive(false)}
-                    style={{ flex: 1, padding: 9, background: '#fff', color: '#64748b', border: '1px solid #E5E7EB', borderRadius: 9, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                    style={{ flex: 1, padding: 9, background: '#fff', color: 'var(--mc-muted)', border: '1px solid #E5E7EB', borderRadius: 9, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                     Отмена
                   </button>
                   <button
@@ -669,7 +674,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => setConfirmDelete(false)}
-                    style={{ flex: 1, padding: 9, background: '#fff', color: '#64748b', border: '1px solid #E5E7EB', borderRadius: 9, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                    style={{ flex: 1, padding: 9, background: '#fff', color: 'var(--mc-muted)', border: '1px solid #E5E7EB', borderRadius: 9, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                     Отмена
                   </button>
                   <button
@@ -691,15 +696,15 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
           const isClosingThis = closingId === order.id;
 
           return (
-            <div key={order.id} style={{ background: '#fff', borderRadius: 12, padding: '10px 12px', marginBottom: 6,
+            <div key={order.id} style={{ background: 'var(--mc-surface)', borderRadius: 12, padding: '10px 12px', marginBottom: 6,
               borderLeft: isAdminClosed ? '3px solid #9CA3AF' : order.status === 'failed' ? '3px solid #dc2626' : 'none',
               boxShadow: '0 1px 3px rgba(0,0,0,.05)', opacity: isAdminClosed ? 0.75 : 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
-                <div style={{ fontWeight: 700, fontSize: 11, color: '#1A1814', flex: 1, marginRight: 6 }}>{order.client}</div>
+                <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--mc-text)', flex: 1, marginRight: 6 }}>{order.client}</div>
                 <StatusBadge status={order.status} managerDecision={order.manager_decision} />
               </div>
-              <div style={{ fontSize: 9, color: '#94a3b8' }}>📍 {order.city}</div>
-              <div style={{ fontSize: 10, color: '#475569', marginBottom: order.payment_info ? 3 : 4 }}>{order.address}</div>
+              <div style={{ fontSize: 9, color: 'var(--mc-muted)' }}>📍 {order.city}</div>
+              <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: order.payment_info ? 3 : 4 }}>{order.address}</div>
               {order.payment_info && (
                 <div style={{ fontSize: 9, color: '#C2410C', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginBottom: 4 }}>
                   💳 {order.payment_info}
@@ -719,12 +724,12 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: '#1A1814' }}>{fmtNum(order.amount)} тг</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-text)' }}>{fmtNum(order.amount)} тг</span>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   {order.cash_received && (
                     <span style={{ background: '#DCFCE7', color: '#16a34a', padding: '2px 7px', borderRadius: 8, fontSize: 9, fontWeight: 700 }}>💵 {fmtNum(order.cash_amount)} нал.</span>
                   )}
-                  {courier && <span style={{ fontSize: 9, color: '#94a3b8' }}>{courier.first_name}</span>}
+                  {courier && <span style={{ fontSize: 9, color: 'var(--mc-muted)' }}>{courier.first_name}</span>}
                   {canClose && !isClosingThis && (
                     <button
                       onClick={() => { setClosingId(order.id); setCloseComment(''); }}
@@ -737,19 +742,19 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
 
               {/* ── Inline-форма закрытия ── */}
               {isClosingThis && (
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #F1F5F9' }}>
-                  <div style={{ fontSize: 9, color: '#64748b', marginBottom: 4, fontWeight: 600 }}>Причина закрытия *</div>
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--mc-border-light)' }}>
+                  <div style={{ fontSize: 9, color: 'var(--mc-muted)', marginBottom: 4, fontWeight: 600 }}>Причина закрытия *</div>
                   <textarea
                     value={closeComment}
                     onChange={e => setCloseComment(e.target.value)}
                     placeholder="Укажите причину (обязательно)..."
                     rows={2}
-                    style={{ width: '100%', padding: '7px 10px', background: '#F5F7F8', border: '1px solid #E5E7EB', borderRadius: 9, fontSize: 11, resize: 'none', color: '#1A1814', marginBottom: 8 }}
+                    style={{ width: '100%', padding: '7px 10px', background: 'var(--mc-active-item)', border: '1px solid #E5E7EB', borderRadius: 9, fontSize: 11, resize: 'none', color: 'var(--mc-text)', marginBottom: 8 }}
                   />
                   <div style={{ display: 'flex', gap: 7 }}>
                     <button
                       onClick={() => { setClosingId(null); setCloseComment(''); }}
-                      style={{ flex: 1, padding: 8, background: '#F5F7F8', color: '#64748b', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                      style={{ flex: 1, padding: 8, background: 'var(--mc-active-item)', color: 'var(--mc-muted)', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                       Отмена
                     </button>
                     <button
@@ -816,7 +821,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
       registry_id:     registryId,
       source_order_id: o.id,
       client:          o.client_type === 'individual' ? (o.full_name || '') : (o.company_name || ''),
-      phone:           o.phone || '',
+      contacts:        o.phone || '',
       address:         o.address || '',
       city:            '',
       amount:          Number(o.total_amount) || 0,
@@ -843,7 +848,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
       id:          uid(),
       registry_id: registryId,
       client:      qForm.client.trim(),
-      phone:       qForm.phone.trim(),
+      contacts:    qForm.phone.trim(),
       address:     qForm.address.trim(),
       city:        qForm.city.trim(),
       amount:      Number(qForm.amount) || 0,
@@ -865,22 +870,22 @@ function AddOrderModal({ ctx, registryId, onClose }) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,25,35,.5)',
         display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-      <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', maxHeight: '88vh',
+      <div style={{ background: 'var(--mc-surface)', borderRadius: '20px 20px 0 0', maxHeight: '88vh',
         display: 'flex', flexDirection: 'column' }}>
 
         {/* Handle */}
         <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
-          <div style={{ width: 36, height: 4, background: '#E2EAF0', borderRadius: 2 }} />
+          <div style={{ width: 36, height: 4, background: 'var(--mc-border)', borderRadius: 2 }} />
         </div>
 
         {/* Заголовок */}
-        <div style={{ padding: '0 16px 10px', borderBottom: '1px solid #F1F5F9' }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#0f1923' }}>Добавить заявку</div>
-          <div style={{ fontSize: 10, color: '#94a3b8' }}>в {regNumber}</div>
+        <div style={{ padding: '0 16px 10px', borderBottom: '1px solid var(--mc-border-light)' }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--mc-text)' }}>Добавить заявку</div>
+          <div style={{ fontSize: 10, color: 'var(--mc-muted)' }}>в {regNumber}</div>
         </div>
 
         {/* Вкладки */}
-        <div style={{ display: 'flex', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
           {[['existing', '📋 Из заявок'], ['quick', '✍️ Быстрая']].map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)}
               style={{ flex: 1, padding: '10px 4px', fontSize: 12, fontWeight: 700,
@@ -896,7 +901,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
           <>
             {/* Поиск */}
             <div style={{ padding: '10px 12px 6px', flexShrink: 0 }}>
-              <div style={{ background: '#F5F7F8', borderRadius: 10, padding: '8px 12px',
+              <div style={{ background: 'var(--mc-active-item)', borderRadius: 10, padding: '8px 12px',
                 display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 13 }}>🔍</span>
                 <input
@@ -904,7 +909,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Поиск по клиенту или адресу…"
                   style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 11,
-                    color: '#1A1814', outline: 'none' }}
+                    color: 'var(--mc-text)', outline: 'none' }}
                 />
               </div>
             </div>
@@ -912,7 +917,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
             {/* Список заявок */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px' }}>
               {eligible.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '32px 20px', color: '#94a3b8', fontSize: 12 }}>
+                <div style={{ textAlign: 'center', padding: '32px 20px', color: 'var(--mc-muted)', fontSize: 12 }}>
                   {search.trim() ? 'Ничего не найдено' : 'Нет заявок готовых к доставке'}
                 </div>
               ) : eligible.map(o => {
@@ -921,8 +926,8 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                 return (
                   <div key={o.id} onClick={() => toggleSelect(o.id)}
                     style={{ padding: '9px 10px', marginBottom: 5, cursor: 'pointer', borderRadius: 10,
-                      background: isSel ? '#e8f4f6' : '#fff',
-                      border: `1.5px solid ${isSel ? '#297b8a' : '#E2EAF0'}`,
+                      background: isSel ? '#e8f4f6' : 'var(--mc-surface)',
+                      border: `1.5px solid ${isSel ? '#297b8a' : 'var(--mc-border)'}`,
                       display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                     <div style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 1,
                       background: isSel ? '#297b8a' : '#fff',
@@ -931,8 +936,8 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                       {isSel && <span style={{ color: '#fff', fontSize: 10, fontWeight: 900 }}>✓</span>}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#1A1814' }}>{name}</div>
-                      <div style={{ fontSize: 9, color: '#94a3b8' }}>📍 {o.address}</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--mc-text)' }}>{name}</div>
+                      <div style={{ fontSize: 9, color: 'var(--mc-muted)' }}>📍 {o.address}</div>
                       <div style={{ fontSize: 10, fontWeight: 700, color: '#297b8a', marginTop: 2 }}>
                         {fmtNum(o.total_amount)} тг
                       </div>
@@ -947,7 +952,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
             </div>
 
             {/* Кнопка */}
-            <div style={{ padding: '10px 12px 28px', borderTop: '1px solid #F1F5F9', flexShrink: 0 }}>
+            <div style={{ padding: '10px 12px 28px', borderTop: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
               <button onClick={handleAddExisting}
                 disabled={selected.size === 0 || saving}
                 style={{ width: '100%', padding: 12, borderRadius: 12, border: 'none',
@@ -969,7 +974,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                 ['address', 'Адрес доставки *',    'text', 'ул. Абая 25, оф. 3'],
               ].map(([field, label, type, ph]) => (
                 <div key={field} style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b',
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mc-muted)',
                     textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>{label}</div>
                   <input
                     type={type}
@@ -977,15 +982,15 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                     onChange={e => setQForm(f => ({ ...f, [field]: e.target.value }))}
                     placeholder={ph}
                     style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
-                      border: `1.5px solid ${qForm[field] ? '#297b8a' : '#E2EAF0'}`,
-                      fontSize: 12, color: '#1A1814', background: '#fff', outline: 'none' }}
+                      border: `1.5px solid ${qForm[field] ? '#297b8a' : 'var(--mc-border)'}`,
+                      fontSize: 12, color: 'var(--mc-text)', background: 'var(--mc-surface)', outline: 'none' }}
                   />
                 </div>
               ))}
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 {[['city', 'Город'], ['amount', 'Сумма, тг']].map(([field, label]) => (
                   <div key={field} style={{ flex: 1 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b',
+                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mc-muted)',
                       textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>{label}</div>
                     <input
                       type={field === 'amount' ? 'number' : 'text'}
@@ -993,14 +998,14 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                       onChange={e => setQForm(f => ({ ...f, [field]: e.target.value }))}
                       placeholder={field === 'amount' ? '0' : ''}
                       style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
-                        border: '1.5px solid #E2EAF0', fontSize: 12, color: '#1A1814',
-                        background: '#fff', outline: 'none' }}
+                        border: '1.5px solid #E2EAF0', fontSize: 12, color: 'var(--mc-text)',
+                        background: 'var(--mc-surface)', outline: 'none' }}
                     />
                   </div>
                 ))}
               </div>
               <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b',
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mc-muted)',
                   textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>Комментарий</div>
                 <textarea
                   value={qForm.comment}
@@ -1008,14 +1013,14 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                   placeholder="Позвонить за 30 мин…"
                   rows={2}
                   style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
-                    border: '1.5px solid #E2EAF0', fontSize: 12, color: '#1A1814',
+                    border: '1.5px solid #E2EAF0', fontSize: 12, color: 'var(--mc-text)',
                     background: '#fff', outline: 'none', resize: 'none' }}
                 />
               </div>
             </div>
 
             {/* Кнопка */}
-            <div style={{ padding: '10px 12px 28px', borderTop: '1px solid #F1F5F9', flexShrink: 0 }}>
+            <div style={{ padding: '10px 12px 28px', borderTop: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
               <button onClick={handleAddQuick}
                 disabled={saving}
                 style={{ width: '100%', padding: 12, borderRadius: 12, border: 'none',
@@ -1045,11 +1050,11 @@ export function DeliveryFailedQueueScreen({ ctx, registryId }) {
   };
 
   return (
-    <div style={{ background: '#F5F7F8', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--mc-bg)' }}>
       <ScreenHeader title="⚠️ Нужно решение" subtitle={`${orders.length} заказов ждут`} onBack={() => navigate({ name: 'delivery_registry_detail', registryId })} />
       <div style={{ padding: 12 }}>
         {orders.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '48px 20px', color: '#94a3b8' }}>
+          <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--mc-muted)' }}>
             <CheckCircle2 size={36} style={{ margin: '0 auto 10px', color: '#16a34a', opacity: .5 }} />
             <div style={{ fontSize: 13 }}>Все решения приняты</div>
           </div>
@@ -1057,12 +1062,12 @@ export function DeliveryFailedQueueScreen({ ctx, registryId }) {
         {orders.map(order => {
           const courier = db.users?.find(u => u.id === order.delivered_by);
           return (
-            <div key={order.id} style={{ background: '#fff', borderRadius: 12, padding: 12, marginBottom: 8, borderLeft: '3px solid #dc2626', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
-              <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 2, color: '#1A1814' }}>{order.client}</div>
-              <div style={{ fontSize: 10, color: '#64748b', marginBottom: 6 }}>📍 {order.city} · {order.address}</div>
+            <div key={order.id} style={{ background: 'var(--mc-surface)', borderRadius: 12, padding: 12, marginBottom: 8, borderLeft: '3px solid #dc2626', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
+              <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 2, color: 'var(--mc-text)' }}>{order.client}</div>
+              <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 6 }}>📍 {order.city} · {order.address}</div>
               {order.fail_reason && (
                 <div style={{ fontSize: 10, color: '#dc2626', background: '#FEF2F2', padding: '4px 8px', borderRadius: 6, marginBottom: 8 }}>
-                  ✗ «{order.fail_reason}»{courier ? <span style={{ color: '#94a3b8', fontSize: 9 }}> · {courier.first_name}</span> : ''}
+                  ✗ «{order.fail_reason}»{courier ? <span style={{ color: 'var(--mc-muted)', fontSize: 9 }}> · {courier.first_name}</span> : ''}
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8 }}>
@@ -1136,9 +1141,9 @@ export function CourierRegistryScreen({ ctx }) {
 
   if (activeRegs.length === 0) {
     return (
-      <div style={{ background: '#F5F7F8', minHeight: '100vh' }}>
+      <div style={{ background: 'var(--mc-bg)' }}>
         <ScreenHeader title="🚚 Реестр доставок" subtitle="Нет активных реестров" />
-        <div style={{ padding: 48, textAlign: 'center', color: '#94a3b8' }}>
+        <div style={{ padding: 48, textAlign: 'center', color: 'var(--mc-muted)' }}>
           <Truck size={40} style={{ margin: '0 auto 12px', opacity: .3 }} />
           <div style={{ marginBottom: 16 }}>Активных реестров пока нет</div>
           <button onClick={handleRefresh} disabled={refreshing}
@@ -1175,7 +1180,7 @@ export function CourierRegistryScreen({ ctx }) {
   ];
 
   return (
-    <div style={{ background: '#F5F7F8', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--mc-bg)' }}>
       <ScreenHeader
         title="🚚 Реестры доставок"
         subtitle={activeRegs.length > 1 ? `${activeRegs.length} активных реестра` : `${reg.number} · ${SHIFT_LABEL[reg.shift]}`}
@@ -1183,7 +1188,7 @@ export function CourierRegistryScreen({ ctx }) {
 
       {/* Registry selector pills — shown only when multiple active registries exist */}
       {activeRegs.length > 1 && (
-        <div style={{ background: '#fff', borderBottom: '1px solid #F1F5F9', padding: '8px 12px', display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <div style={{ background: 'var(--mc-surface)', borderBottom: '1px solid var(--mc-border-light)', padding: '8px 12px', display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           {activeRegs.map(r => {
             const isActive = reg.id === r.id;
             const regOrders = (db.deliveryOrders || []).filter(o => o.registry_id === r.id);
@@ -1192,9 +1197,9 @@ export function CourierRegistryScreen({ ctx }) {
               <button key={r.id}
                 onClick={() => { setSelectedRegId(r.id); setTab('free'); }}
                 style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                  border: `2px solid ${isActive ? '#297b8a' : '#E5E7EB'}`,
-                  background: isActive ? '#297b8a' : '#F5F7F8',
-                  color: isActive ? '#fff' : '#64748b' }}>
+                  border: `2px solid ${isActive ? '#297b8a' : 'var(--mc-border)'}`,
+                  background: isActive ? '#297b8a' : 'var(--mc-active-item)',
+                  color: isActive ? '#fff' : 'var(--mc-muted)' }}>
                 {r.number} · {SHIFT_LABEL[r.shift]}
                 {freeCnt > 0 && <span style={{ marginLeft: 6, background: isActive ? 'rgba(255,255,255,.25)' : '#FEF9EE', color: isActive ? '#fff' : '#92400E', borderRadius: 8, padding: '1px 5px', fontSize: 9 }}>{freeCnt}</span>}
               </button>
@@ -1204,7 +1209,7 @@ export function CourierRegistryScreen({ ctx }) {
       )}
 
       {/* Tab bar */}
-      <div style={{ display: 'flex', background: '#fff', borderBottom: '1px solid #F1F5F9', alignItems: 'center' }}>
+      <div style={{ display: 'flex', background: 'var(--mc-surface)', borderBottom: '1px solid var(--mc-border-light)', alignItems: 'center' }}>
         {tabs.map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
             style={{ flex: 1, padding: '9px 2px', fontSize: 10, fontWeight: 600,
@@ -1230,7 +1235,7 @@ export function CourierRegistryScreen({ ctx }) {
       <div style={{ padding: '10px 12px 12px' }}>
         {tab === 'free' && (
           <>
-            {freeOrders.length === 0 && <div style={{ textAlign: 'center', padding: '32px 20px', color: '#94a3b8', fontSize: 12 }}>Все свободные заказы разобраны</div>}
+            {freeOrders.length === 0 && <div style={{ textAlign: 'center', padding: '32px 20px', color: 'var(--mc-muted)', fontSize: 12 }}>Все свободные заказы разобраны</div>}
             {freeOrders.map(o => (
               <OrderRow key={o.id} order={o} action={
                 <button onClick={e => { e.stopPropagation(); takeOrder(o.id); }}
@@ -1244,7 +1249,7 @@ export function CourierRegistryScreen({ ctx }) {
         {tab === 'mine' && (
           <>
             {myOrders.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '32px 20px', color: '#94a3b8' }}>
+              <div style={{ textAlign: 'center', padding: '32px 20px', color: 'var(--mc-muted)' }}>
                 <Package size={32} style={{ margin: '0 auto 8px', opacity: .4 }} />
                 <div style={{ fontSize: 12 }}>Нет взятых заказов</div>
               </div>
@@ -1274,7 +1279,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
   const [failReason, setFailReason] = useState('');
   const [saving,     setSaving]     = useState(false);
 
-  if (!order) return <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Заказ не найден</div>;
+  if (!order) return <div style={{ padding: 24, textAlign: 'center', color: 'var(--mc-muted)' }}>Заказ не найден</div>;
 
   const isDone = ['delivered', 'failed'].includes(order.status);
 
@@ -1322,7 +1327,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
   };
 
   return (
-    <div style={{ background: '#F5F7F8', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--mc-bg)' }}>
       <ScreenHeader title={order.client} onBack={() => navigate({ name: 'courier_registry' })} />
       <div style={{ padding: 12 }}>
 
@@ -1334,14 +1339,14 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
             </div>
           )}
           {[['Документ', order.document], ['Сумма', fmtNum(order.amount) + ' тг']].map(([l, v]) => v && (
-            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #F5F7F8', fontSize: 10 }}>
-              <span style={{ color: '#64748b' }}>{l}</span>
-              <span style={{ fontWeight: 700, color: '#1A1814' }}>{v}</span>
+            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--mc-border-light)', fontSize: 10 }}>
+              <span style={{ color: 'var(--mc-muted)' }}>{l}</span>
+              <span style={{ fontWeight: 700, color: 'var(--mc-text)' }}>{v}</span>
             </div>
           ))}
           <div style={{ marginTop: 8 }}>
-            <div style={{ fontSize: 9, color: '#94a3b8', marginBottom: 2, textTransform: 'uppercase', letterSpacing: .3 }}>Адрес</div>
-            <div style={{ fontWeight: 600, fontSize: 11, color: '#1A1814' }}>{order.address}</div>
+            <div style={{ fontSize: 9, color: 'var(--mc-muted)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: .3 }}>Адрес</div>
+            <div style={{ fontWeight: 600, fontSize: 11, color: 'var(--mc-text)' }}>{order.address}</div>
           </div>
           {order.contacts && (
             <a href={`tel:${order.contacts}`}
@@ -1350,14 +1355,14 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
             </a>
           )}
           {order.extra_info && (
-            <div style={{ marginTop: 8, fontSize: 10, color: '#64748b', background: '#F5F7F8', padding: '6px 8px', borderRadius: 8 }}>
+            <div style={{ marginTop: 8, fontSize: 10, color: 'var(--mc-muted)', background: 'var(--mc-active-item)', padding: '6px 8px', borderRadius: 8 }}>
               💬 {order.extra_info}
             </div>
           )}
         </Card>
 
         {isDone ? (
-          <div style={{ background: '#fff', borderRadius: 12, padding: 16, textAlign: 'center' }}>
+          <div style={{ background: 'var(--mc-surface)', borderRadius: 12, padding: 16, textAlign: 'center', border: '1px solid var(--mc-border)' }}>
             {order.status === 'delivered'
               ? <><CheckCircle2 size={36} color="#16a34a" style={{ margin: '0 auto 8px' }} /><div style={{ fontWeight: 700, color: '#16a34a', fontSize: 14 }}>Доставлен</div></>
               : <><XCircle size={36} color="#dc2626" style={{ margin: '0 auto 8px' }} /><div style={{ fontWeight: 700, color: '#dc2626', fontSize: 14 }}>Не удалось доставить</div></>
@@ -1365,9 +1370,9 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
           </div>
         ) : !failMode ? (
           <Card>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 10 }}>Отметить результат</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 10 }}>Отметить результат</div>
 
-            <div style={{ background: cashOn ? '#F0FDF4' : '#F5F7F8', border: `1px solid ${cashOn ? '#BBF7D0' : '#E5E7EB'}`, borderRadius: 10, padding: 10, marginBottom: 10 }}>
+            <div style={{ background: cashOn ? '#F0FDF4' : '#F5F7F8', border: `1px solid ${cashOn ? '#BBF7D0' : 'var(--mc-border)'}`, borderRadius: 10, padding: 10, marginBottom: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: cashOn ? 10 : 0 }}>
                 <div onClick={() => setCashOn(v => !v)}
                   style={{ width: 36, height: 20, borderRadius: 10, background: cashOn ? '#297b8a' : '#CBD5E1', position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
@@ -1377,16 +1382,16 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
               </div>
               {cashOn && (
                 <>
-                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>Сумма наличных (тг)</div>
+                  <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 4 }}>Сумма наличных (тг)</div>
                   <input value={cashAmt} onChange={e => setCashAmt(e.target.value)} type="number"
-                    style={{ width: '100%', padding: '8px 10px', background: '#fff', border: '1px solid #BBF7D0', borderRadius: 10, fontSize: 14, fontWeight: 700, color: '#16a34a' }} />
+                    style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-surface)', border: '1px solid #BBF7D0', borderRadius: 10, fontSize: 14, fontWeight: 700, color: '#16a34a' }} />
                 </>
               )}
             </div>
 
-            <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>Комментарий (необязательно)</div>
+            <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 4 }}>Комментарий (необязательно)</div>
             <input value={note} onChange={e => setNote(e.target.value)} placeholder="Подпись получена..."
-              style={{ width: '100%', padding: '8px 10px', background: '#F5F7F8', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 11, marginBottom: 10, color: '#1A1814' }} />
+              style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-active-item)', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 11, marginBottom: 10, color: 'var(--mc-text)' }} />
 
             <button onClick={markDelivered} disabled={saving}
               style={{ width: '100%', padding: 12, background: saving ? '#CBD5E1' : '#16a34a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
@@ -1400,12 +1405,12 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
         ) : (
           <Card>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', marginBottom: 10 }}>✗ Не удалось доставить</div>
-            <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>Причина *</div>
+            <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 4 }}>Причина *</div>
             <input value={failReason} onChange={e => setFailReason(e.target.value)} placeholder="Дверь закрыта / неверный адрес / ..."
-              style={{ width: '100%', padding: '8px 10px', background: '#F5F7F8', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 11, marginBottom: 10, color: '#1A1814' }} />
+              style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-active-item)', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 11, marginBottom: 10, color: 'var(--mc-text)' }} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setFailMode(false)}
-                style={{ flex: 1, padding: 10, background: '#F5F7F8', color: '#64748b', border: 'none', borderRadius: 10, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                style={{ flex: 1, padding: 10, background: 'var(--mc-active-item)', color: 'var(--mc-muted)', border: 'none', borderRadius: 10, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                 Отмена
               </button>
               <button onClick={markFailed} disabled={saving}
@@ -1462,10 +1467,10 @@ export function CourierDeliveryWidget({ ctx }) {
       </div>
       {nextOrder && (
         <div onClick={() => navigate({ name: 'courier_order', orderId: nextOrder.id })}
-          style={{ background: '#fff', borderRadius: 12, padding: '10px 12px', marginTop: 8, boxShadow: '0 1px 4px rgba(0,0,0,.06)', cursor: 'pointer' }}>
-          <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 3 }}>Следующий заказ</div>
-          <div style={{ fontWeight: 700, fontSize: 13, color: '#1A1814', marginBottom: 2 }}>{nextOrder.client}</div>
-          <div style={{ fontSize: 10, color: '#64748b', marginBottom: 6 }}>📍 {nextOrder.address}</div>
+          style={{ background: 'var(--mc-surface)', borderRadius: 12, padding: '10px 12px', marginTop: 8, border: '1px solid var(--mc-border)', cursor: 'pointer' }}>
+          <div style={{ fontSize: 9, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 3 }}>Следующий заказ</div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--mc-text)', marginBottom: 2 }}>{nextOrder.client}</div>
+          <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 6 }}>📍 {nextOrder.address}</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontWeight: 700, fontSize: 12 }}>{fmtNum(nextOrder.amount)} тг</span>
             <span style={{ fontSize: 11, fontWeight: 700, color: '#297b8a' }}>Открыть →</span>
