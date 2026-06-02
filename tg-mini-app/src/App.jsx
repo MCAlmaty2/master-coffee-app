@@ -1937,6 +1937,32 @@ function App() {
     }
   };
 
+  /**
+   * Переназначить исполнителя задачи.
+   * Доступно: постановщику, admin и управленческим ролям.
+   */
+  const reassignTask = (taskId, newAssigneeId) => {
+    const task = db.tasks.find(t => t.id === taskId);
+    if (!task) return { error: 'Задача не найдена' };
+    const canReassign = currentUser.role === 'admin'
+      || task.created_by === currentUser.id
+      || ['manager', 'senior_manager', 'director', 'b2b'].includes(currentUser.role);
+    if (!canReassign) return { error: 'Нет прав на переназначение' };
+    if (task.assignee_id === newAssigneeId) return { error: 'Этот сотрудник уже является исполнителем' };
+    setDb(d => ({
+      ...d,
+      tasks: d.tasks.map(t => {
+        if (t.id !== taskId) return t;
+        return {
+          ...t,
+          assignee_id: newAssigneeId,
+          log: [...t.log, { event: 'reassign', from: t.assignee_id, to: newAssigneeId, actor: currentUser.id, at: new Date().toISOString() }],
+        };
+      }),
+    }));
+    return { ok: true };
+  };
+
   /* ═══════════ Заявки на списание ═══════════ */
 
   const createWriteOff = (data) => {
@@ -2975,7 +3001,7 @@ function App() {
     loginViaTelegram, logout,
     createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, cancelOrder,
     approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, transferAdmin,
-    createTask, startTask, completeTask, rescheduleTask, deleteTask,
+    createTask, startTask, completeTask, rescheduleTask, deleteTask, reassignTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createGrindRequest, takeGrindRequest, markGrindReady, cancelGrindRequest,
@@ -8343,7 +8369,7 @@ function CreateTaskScreen({ ctx }) {
 }
 
 function TaskDetailScreen({ ctx, taskId }) {
-  const { db, currentUser, goBack, startTask, completeTask, rescheduleTask, deleteTask, showToast } = ctx;
+  const { db, currentUser, goBack, startTask, completeTask, rescheduleTask, deleteTask, reassignTask, showToast } = ctx;
   const task = db.tasks.find(t => t.id === taskId);
   if (!task) return <div className="p-6">Задача не найдена</div>;
 
@@ -8380,6 +8406,11 @@ function TaskDetailScreen({ ctx, taskId }) {
   const [startModalOpen, setStartModalOpen] = useState(false);
   const [doneModalOpen, setDoneModalOpen] = useState(false);
   const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
+  const [reassignModalOpen, setReassignModalOpen] = useState(false);
+
+  const canReassign = currentUser.role === 'admin'
+    || task.created_by === currentUser.id
+    || ['manager', 'senior_manager', 'director', 'b2b'].includes(currentUser.role);
 
   return (
     <div>
@@ -8431,6 +8462,11 @@ function TaskDetailScreen({ ctx, taskId }) {
                     <div className="text-sm" style={{ color: 'var(--mc-text)' }}>
                       {l.event === 'created' && 'Задача создана'}
                       {l.event === 'status' && <>{TASK_STATUS[l.from]?.short || l.from} → <strong>{TASK_STATUS[l.to]?.short || l.to}</strong></>}
+                      {l.event === 'reassign' && (() => {
+                        const fromU = db.users.find(u => u.id === l.from);
+                        const toU   = db.users.find(u => u.id === l.to);
+                        return <>Переназначено: {fromU ? `${fromU.first_name} ${fromU.last_name}` : '—'} → <strong>{toU ? `${toU.first_name} ${toU.last_name}` : '—'}</strong></>;
+                      })()}
                     </div>
                     <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                       {actor ? `${actor.first_name} ${actor.last_name}` : 'Система'} · {fmtDateTime(l.at)}
@@ -8450,10 +8486,17 @@ function TaskDetailScreen({ ctx, taskId }) {
               <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0" style={{ background: ROLES[task.department].color }}>
                 {assignee?.first_name[0] || '?'}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="font-semibold truncate" style={{ color: 'var(--mc-text)' }}>{assignee ? `${assignee.first_name} ${assignee.last_name}` : '—'}</div>
                 <div className="text-xs truncate" style={{ color: 'var(--mc-muted)' }}>{assignee?.email}</div>
               </div>
+              {canReassign && task.status !== 'done' && (
+                <button onClick={() => setReassignModalOpen(true)}
+                  className="flex-shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg"
+                  style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)', border: '1px solid var(--mc-border)' }}>
+                  Сменить
+                </button>
+              )}
             </div>
           </Card>
 
@@ -8523,7 +8566,61 @@ function TaskDetailScreen({ ctx, taskId }) {
           showToast('Визит перенесён');
         }} />
       )}
+      {reassignModalOpen && (
+        <ReassignTaskModal
+          task={task}
+          db={db}
+          onClose={() => setReassignModalOpen(false)}
+          onReassign={(newId) => {
+            const r = reassignTask(task.id, newId);
+            if (r.error) return showToast(r.error);
+            setReassignModalOpen(false);
+            showToast('Исполнитель изменён');
+          }}
+        />
+      )}
       <AdminDeleteButton ctx={ctx} kind="task" id={task.id} label="эту задачу" onDeleted={() => ctx.goBack()} />
+    </div>
+  );
+}
+
+function ReassignTaskModal({ task, db, onClose, onReassign }) {
+  const candidates = (db.users || [])
+    .filter(u => u.active && u.role === task.department && u.id !== task.assignee_id)
+    .sort((a, b) => a.first_name.localeCompare(b.first_name));
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}>
+      <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', padding: '16px 16px 32px', maxHeight: '70vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--mc-text)' }}>Сменить исполнителя</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)', padding: 4 }}>✕</button>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--mc-muted)', marginBottom: 12 }}>
+          Отдел: <strong>{ROLES[task.department]?.label}</strong>
+        </div>
+        {candidates.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--mc-muted)', fontSize: 13 }}>
+            Нет других сотрудников в этом отделе
+          </div>
+        ) : (
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {candidates.map(u => (
+              <button key={u.id} onClick={() => onReassign(u.id)}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 12px', marginBottom: 6, background: 'var(--mc-active-item)', border: '1px solid var(--mc-border)', borderRadius: 12, cursor: 'pointer', textAlign: 'left' }}>
+                <div style={{ width: 38, height: 38, borderRadius: '50%', background: ROLES[task.department]?.color || '#297b8a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 15, flexShrink: 0 }}>
+                  {u.first_name[0]}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--mc-text)' }}>{u.first_name} {u.last_name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>{ROLES[u.role]?.label || u.role}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
