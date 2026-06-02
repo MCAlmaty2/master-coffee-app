@@ -223,8 +223,9 @@ function EventCard({ task: t, db, currentUser, mode, navigate, compact, colIdx =
   const color  = getUserTaskColor(t.assignee_id, db);
   const show   = canSeeTask(t, currentUser, mode);
   const assignee = db.users?.find(u => u.id === t.assignee_id);
+  const isDone = t.status === 'done';
 
-  const colW   = 100 / totalCols;
+  const colW    = 100 / totalCols;
   const leftPct = colIdx * colW;
 
   const kindLabel = t.kind === 'internal' ? 'Внутренняя'
@@ -240,19 +241,21 @@ function EventCard({ task: t, db, currentUser, mode, navigate, compact, colIdx =
         left:   `calc(${leftPct}% + 2px)`,
         width:  `calc(${colW}% - 4px)`,
         height,
-        background: show ? `${color}22` : 'var(--mc-border)',
-        borderLeft: `3px solid ${show ? color : 'var(--mc-muted)'}`,
+        background: show ? (isDone ? `${color}0f` : `${color}22`) : 'var(--mc-border)',
+        borderLeft: `3px solid ${show ? (isDone ? '#22C55E' : color) : 'var(--mc-muted)'}`,
         borderRadius: 5, padding: compact ? '2px 4px' : '3px 6px',
         overflow: 'hidden', cursor: show ? 'pointer' : 'default', zIndex: 2,
         boxSizing: 'border-box',
+        opacity: isDone ? 0.7 : 1,
       }}
     >
-      <div style={{ fontSize: 9, fontWeight: 700, color: show ? color : 'var(--mc-muted)', lineHeight: 1 }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: show ? (isDone ? '#22C55E' : color) : 'var(--mc-muted)', lineHeight: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
         {t.visit_time}{t.visit_time_end ? `–${t.visit_time_end}` : ''}
+        {isDone && <span style={{ fontSize: 8 }}>✅</span>}
       </div>
       {show ? (
         <>
-          <div style={{ fontSize: compact ? 10 : 11, fontWeight: 600, color: 'var(--mc-text)', lineHeight: 1.2, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: compact ? 10 : 11, fontWeight: 600, color: 'var(--mc-text)', lineHeight: 1.2, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', textDecoration: isDone ? 'line-through' : 'none' }}>
             {kindLabel}
           </div>
           {!compact && height > 50 && assignee && (
@@ -328,7 +331,7 @@ function WeekCalendarView({ tasks, weekStart, ctx, mode, onSlotClick }) {
         {/* Колонки дней */}
         {days.map(d => {
           const isToday  = d === todayStr;
-          const dayTasks = tasks.filter(t => t.visit_date === d && t.status !== 'done');
+          const dayTasks = tasks.filter(t => t.visit_date === d);
           const layout   = computeEventLayout(dayTasks);
           return (
             <div key={d}
@@ -377,7 +380,9 @@ function MonthCalendarView({ tasks, monthISO, ctx, onDayClick }) {
           const inMonth  = d.startsWith(monthISO);
           const isToday  = d === todayStr;
           const dateNum  = parseInt(d.split('-')[2], 10);
-          const dayTasks = tasks.filter(t => t.visit_date === d && t.status !== 'done');
+          const allDayTasks  = tasks.filter(t => t.visit_date === d);
+          const activeTasks  = allDayTasks.filter(t => t.status !== 'done');
+          const doneTasks    = allDayTasks.filter(t => t.status === 'done');
           return (
             <div key={d}
               onClick={() => onDayClick(d)}
@@ -386,16 +391,21 @@ function MonthCalendarView({ tasks, monthISO, ctx, onDayClick }) {
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--mc-active-item)'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'var(--mc-surface)'; }}
             >
-              <div style={{
-                width: 24, height: 24, borderRadius: '50%', marginBottom: 3,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, fontWeight: 600,
-                background: isToday ? '#297b8a' : 'transparent',
-                color: isToday ? 'white' : inMonth ? 'var(--mc-text)' : 'var(--mc-border)',
-              }}>
-                {dateNum}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 3 }}>
+                <div style={{
+                  width: 24, height: 24, borderRadius: '50%',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 12, fontWeight: 600, flexShrink: 0,
+                  background: isToday ? '#297b8a' : 'transparent',
+                  color: isToday ? 'white' : inMonth ? 'var(--mc-text)' : 'var(--mc-border)',
+                }}>
+                  {dateNum}
+                </div>
+                {doneTasks.length > 0 && (
+                  <span style={{ fontSize: 10, lineHeight: 1 }} title={`${doneTasks.length} выполн.`}>✅</span>
+                )}
               </div>
-              {dayTasks.slice(0, 3).map(t => {
+              {activeTasks.slice(0, 3).map(t => {
                 const color = getUserTaskColor(t.assignee_id, db);
                 const prefix = t.kind === 'tasting' ? '🍵' : t.kind === 'install' ? '⚙️' : '';
                 return (
@@ -410,8 +420,8 @@ function MonthCalendarView({ tasks, monthISO, ctx, onDayClick }) {
                   </div>
                 );
               })}
-              {dayTasks.length > 3 && (
-                <div style={{ fontSize: 10, color: 'var(--mc-muted)', padding: '0 2px' }}>+{dayTasks.length - 3} ещё</div>
+              {activeTasks.length > 3 && (
+                <div style={{ fontSize: 10, color: 'var(--mc-muted)', padding: '0 2px' }}>+{activeTasks.length - 3} ещё</div>
               )}
             </div>
           );
@@ -427,7 +437,7 @@ function DayCalendarView({ tasks, date, ctx, mode, onSlotClick }) {
   const todayStr = todayISO();
   const isToday  = date === todayStr;
   const nowY     = useNowY();
-  const dayTasks = tasks.filter(t => t.visit_date === date && t.status !== 'done');
+  const dayTasks = tasks.filter(t => t.visit_date === date);
 
   const handleClick = e => {
     if (e.target !== e.currentTarget || !onSlotClick) return;

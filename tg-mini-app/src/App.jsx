@@ -1911,11 +1911,8 @@ function App() {
           log: [...t.log, { event: 'status', from: t.status, to: 'done', actor: currentUser.id, at: new Date().toISOString(), meta: { summary: summary.trim() } }],
         };
       }),
-      notifications: [
-        makeNotif(d, { recipient_id: task.created_by, title: 'Задача выполнена', body: `${task.task_number}: ${task.client_name}`, link_kind: 'task', link_id: task.id }),
-        ...d.notifications,
-      ],
-      telegramLog: [makeTgLogEntry(d, 'task_done', { task_number: task.task_number, client: task.client_name, summary: summary.trim() }), ...d.telegramLog],
+      // Уведомления о выполнении задачи отключены намеренно:
+      // история остаётся в календаре, Telegram-спам не нужен
     }));
     return { ok: true };
   };
