@@ -1322,12 +1322,26 @@ function App() {
 
   /* ═══════════ Бизнес-операции ═══════════ */
 
-  const createOrder = (formData, kind = 'standard') => {
+  const createOrder = async (formData, kind = 'standard') => {
     const year = new Date().getFullYear();
-    const lastNum = db.orders
+    const localMax = db.orders
       .filter(o => o.order_number?.startsWith(`${year}-`))
       .map(o => parseInt(o.order_number.split('-')[1], 10))
       .reduce((m, n) => Math.max(m, n), 0);
+    // Запрашиваем реальный максимум из БД — защита от стейл-кэша
+    let dbMax = 0;
+    try {
+      const { data } = await supabase
+        .from('orders')
+        .select('order_number')
+        .like('order_number', `${year}-%`)
+        .order('order_number', { ascending: false })
+        .limit(1);
+      if (data?.[0]?.order_number) {
+        dbMax = parseInt(data[0].order_number.split('-')[1], 10) || 0;
+      }
+    } catch { /* fallback: используем localMax */ }
+    const lastNum = Math.max(localMax, dbMax);
     const nextNum = String(lastNum + 1).padStart(3, '0');
     const order = {
       id: uid(),
@@ -5916,7 +5930,7 @@ function CreateOrderScreen({ ctx }) {
   const removeItem = idx => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }));
   const total = form.items.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validateOrderForm(form);
     setErrors(e);
     if (Object.keys(e).length > 0) {
@@ -5943,7 +5957,7 @@ function CreateOrderScreen({ ctx }) {
       items: form.items.map(it => ({ ...it, quantity: Number(it.quantity), price: Number(it.price) })),
       comment: form.comment.trim(),
     };
-    const order = createOrder(payload);
+    const order = await createOrder(payload);
     showToast(`Заявка №${order.order_number} создана`);
     resetOrderDraft();
     goBack();
@@ -6596,7 +6610,7 @@ function CreateQuickScreen({ ctx }) {
     return lines.join('\n');
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     const e = {};
     if (!form.client_name || form.client_name.trim().length < 2) e.client_name = 'Укажите имя клиента';
     const items = form.items || [];
@@ -6644,7 +6658,7 @@ function CreateQuickScreen({ ctx }) {
       comment: form.raw_text ? `[Из чата]\n${form.raw_text}` : '—',
       ...(form.doc_no ? { realization_doc_no: form.doc_no.trim() } : {}),
     };
-    const order = createOrder(payload, 'quick');
+    const order = await createOrder(payload, 'quick');
     changeStatus(order.id, 'in_work');
 
     // Автоматически создаём заявки на помол для товаров с выбранным grind_type
