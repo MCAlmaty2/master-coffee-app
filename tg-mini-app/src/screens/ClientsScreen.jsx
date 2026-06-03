@@ -94,12 +94,14 @@ export function ClientsScreen({ ctx }) {
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(c =>
-        c.name.toLowerCase().includes(q) ||
-        (c.phone || '').replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
-        (c.bin  || '').includes(q)
+        (c.name    || '').toLowerCase().includes(q) ||
+        (c.phone   || '').replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
+        (c.bin     || '').includes(q) ||
+        (c.address || '').toLowerCase().includes(q) ||
+        (c.contact_person || '').toLowerCase().includes(q)
       );
     }
-    return [...list].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    return [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
   }, [clients, tab, search]);
 
   return (
@@ -164,12 +166,17 @@ function ClientCard({ client: c, db, onClick }) {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--mc-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-        <div style={{ fontSize: 11, color: 'var(--mc-muted)', marginTop: 2 }}>
+        <div style={{ fontSize: 11, color: 'var(--mc-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {c.phone || '—'}
-          {c.bin && <span style={{ marginLeft: 10, color: 'var(--mc-muted)' }}>БИН: {c.bin}</span>}
+          {c.bin && <span style={{ marginLeft: 8, color: 'var(--mc-muted)' }}>БИН: {c.bin}</span>}
         </div>
+        {c.address && (
+          <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            📍 {c.address}
+          </div>
+        )}
         <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginTop: 1 }}>
-          {orders.length > 0 ? `${orders.length} заказов · последний ${fmtDate(last.created_at)}` : 'Заказов пока нет'}
+          {orders.length > 0 ? `${orders.length} зак. · посл. ${fmtDate(last.created_at)}` : 'Заказов пока нет'}
         </div>
       </div>
       <ChevronRight size={15} color="var(--mc-muted)" style={{ flexShrink: 0 }} />
