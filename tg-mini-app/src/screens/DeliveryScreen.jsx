@@ -490,10 +490,13 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
   const [confirmArchive,  setConfirmArchive]  = useState(false);
   const [archiving,       setArchiving]       = useState(false);
   const [showAddModal,    setShowAddModal]    = useState(false);
+  const [detailOrder,     setDetailOrder]     = useState(null); // заявка в модале деталей
 
   const isAdmin    = currentUser?.role === 'admin';
+  const isManager  = currentUser?.role === 'manager' || currentUser?.role === 'senior_manager';
   const canArchive = isAdmin || currentUser?.role === 'director';
-  const canAdd     = isAdmin || currentUser?.role === 'manager';
+  const canAdd     = isAdmin || isManager;
+  const canDetail  = isAdmin || isManager;
 
   const handleDeleteRegistry = async () => {
     setDeleting(true);
@@ -620,6 +623,26 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
         {showAddModal && (
           <AddOrderModal ctx={ctx} registryId={registryId} onClose={() => setShowAddModal(false)} />
         )}
+        {detailOrder && (
+          <OrderDetailModal
+            order={detailOrder}
+            db={db}
+            currentUser={currentUser}
+            canEdit={canDetail}
+            onClose={() => setDetailOrder(null)}
+            onAddressChange={async (newAddress) => {
+              const oldAddress = detailOrder.address;
+              const logEntry = { event: 'address_change', from: oldAddress, to: newAddress, actor: currentUser.id, at: new Date().toISOString() };
+              const newLog = [...(detailOrder.log || []), logEntry];
+              const { error } = await supabase.from('delivery_orders').update({ address: newAddress, log: newLog }).eq('id', detailOrder.id);
+              if (error) { showToast('Ошибка: ' + error.message, 'error'); return; }
+              const updated = { ...detailOrder, address: newAddress, log: newLog };
+              setDb(d => ({ ...d, deliveryOrders: d.deliveryOrders.map(o => o.id === detailOrder.id ? updated : o) }));
+              setDetailOrder(updated);
+              showToast('Адрес обновлён');
+            }}
+          />
+        )}
 
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Все заказы ({orders.length})</div>
 
@@ -730,6 +753,13 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                     <span style={{ background: '#DCFCE7', color: '#16a34a', padding: '2px 7px', borderRadius: 8, fontSize: 9, fontWeight: 700 }}>💵 {fmtNum(order.cash_amount)} нал.</span>
                   )}
                   {courier && <span style={{ fontSize: 9, color: 'var(--mc-muted)' }}>{courier.first_name}</span>}
+                  {canDetail && (
+                    <button
+                      onClick={() => setDetailOrder(order)}
+                      style={{ padding: '3px 9px', background: 'var(--mc-active-item)', color: 'var(--mc-muted)', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>
+                      Детали
+                    </button>
+                  )}
                   {canClose && !isClosingThis && (
                     <button
                       onClick={() => { setClosingId(order.id); setCloseComment(''); }}
@@ -1477,6 +1507,148 @@ export function CourierDeliveryWidget({ ctx }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Детали заявки реестра + смена адреса ────────────────────────────────
+function OrderDetailModal({ order, db, currentUser, canEdit, onClose, onAddressChange }) {
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [newAddress,     setNewAddress]     = useState(order.address || '');
+  const [saving,         setSaving]         = useState(false);
+
+  const handleSave = async () => {
+    if (!newAddress.trim() || newAddress.trim() === order.address) { setEditingAddress(false); return; }
+    setSaving(true);
+    await onAddressChange(newAddress.trim());
+    setSaving(false);
+    setEditingAddress(false);
+  };
+
+  const addressLog = (order.log || []).filter(e => e.event === 'address_change');
+  const courier    = db.users?.find(u => u.id === order.courier_id);
+
+  const Field = ({ label, value }) => value ? (
+    <div style={{ display: 'flex', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--mc-border-light)' }}>
+      <span style={{ fontSize: 10, color: 'var(--mc-muted)', minWidth: 90, flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: 11, color: 'var(--mc-text)', wordBreak: 'break-word' }}>{value}</span>
+    </div>
+  ) : null;
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}>
+      <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+
+        {/* Шапка */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px', borderBottom: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--mc-text)' }}>{order.client}</div>
+            <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginTop: 2 }}>
+              <StatusBadge status={order.status} managerDecision={order.manager_decision} />
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)', fontSize: 20, padding: 4, lineHeight: 1 }}>✕</button>
+        </div>
+
+        <div style={{ overflowY: 'auto', flex: 1, padding: '12px 16px 28px' }}>
+
+          {/* Адрес с историей изменений */}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .4 }}>Адрес доставки</span>
+              {canEdit && !editingAddress && (
+                <button onClick={() => { setNewAddress(order.address || ''); setEditingAddress(true); }}
+                  style={{ fontSize: 10, fontWeight: 700, color: '#297b8a', background: '#F0F9FA', border: '1px solid #b0dce5', borderRadius: 7, padding: '3px 10px', cursor: 'pointer' }}>
+                  ✏️ Изменить
+                </button>
+              )}
+            </div>
+
+            {editingAddress ? (
+              <div>
+                <textarea value={newAddress} onChange={e => setNewAddress(e.target.value)} rows={2} autoFocus
+                  style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #297b8a', borderRadius: 9, fontSize: 12, resize: 'none', color: 'var(--mc-text)', background: 'var(--mc-surface)', boxSizing: 'border-box', outline: 'none', marginBottom: 6 }} />
+                <div style={{ display: 'flex', gap: 7 }}>
+                  <button onClick={() => setEditingAddress(false)}
+                    style={{ flex: 1, padding: 8, background: 'var(--mc-active-item)', color: 'var(--mc-muted)', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                    Отмена
+                  </button>
+                  <button onClick={handleSave} disabled={saving}
+                    style={{ flex: 1, padding: 8, background: saving ? '#CBD5E1' : '#297b8a', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                    {saving ? '...' : '💾 Сохранить'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: 'var(--mc-text)', padding: '6px 10px', background: 'var(--mc-active-item)', borderRadius: 9 }}>
+                📍 {order.address || '—'}
+              </div>
+            )}
+
+            {/* История изменений адреса */}
+            {addressLog.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 9, color: 'var(--mc-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>История изменений адреса</div>
+                {addressLog.map((e, i) => {
+                  const actor = db.users?.find(u => u.id === e.actor);
+                  return (
+                    <div key={i} style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 6, paddingLeft: 8, borderLeft: '2px solid var(--mc-border)' }}>
+                      <span style={{ color: '#dc2626', textDecoration: 'line-through' }}>{e.from}</span>
+                      {' → '}
+                      <span style={{ color: '#16a34a', fontWeight: 600 }}>{e.to}</span>
+                      <div style={{ fontSize: 9, marginTop: 2 }}>
+                        {actor ? `${actor.first_name} ${actor.last_name}` : '—'} · {new Date(e.at).toLocaleString('ru-KZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Almaty' })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Контакты и данные */}
+          <div style={{ background: 'var(--mc-active-item)', borderRadius: 12, padding: '10px 12px', marginBottom: 12 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>Контакты и данные</div>
+            <Field label="Телефон"     value={order.contacts} />
+            <Field label="Организация" value={order.organization} />
+            <Field label="Документ"    value={order.document} />
+            <Field label="Оплата"      value={order.payment_info} />
+            <Field label="Код заявки"  value={order.request_code} />
+            <Field label="Доставка"    value={order.delivery_method} />
+            <Field label="Город"       value={order.city} />
+            <Field label="№ п/п"       value={order.seq_number} />
+          </div>
+
+          {/* Комментарии */}
+          {(order.extra_info || order.courier_note || order.manager_note) && (
+            <div style={{ background: 'var(--mc-active-item)', borderRadius: 12, padding: '10px 12px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>Комментарии</div>
+              <Field label="Примечание" value={order.extra_info} />
+              <Field label="Курьер"     value={order.courier_note} />
+              <Field label="Менеджер"   value={order.manager_note} />
+            </div>
+          )}
+
+          {/* Доставлено */}
+          {order.status === 'delivered' && (
+            <div style={{ background: '#D1FAE5', borderRadius: 12, padding: '10px 12px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#065F46', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>✓ Доставлено</div>
+              <Field label="Курьер"    value={courier ? `${courier.first_name} ${courier.last_name}` : '—'} />
+              <Field label="Наличные"  value={order.cash_received ? `${fmtNum(order.cash_amount)} тг` : null} />
+              <Field label="Время"     value={order.delivered_at ? new Date(order.delivered_at).toLocaleString('ru-KZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Almaty' }) : null} />
+            </div>
+          )}
+
+          {/* Не доставлено */}
+          {order.status === 'failed' && order.fail_reason && (
+            <div style={{ background: '#FEF2F2', borderRadius: 12, padding: '10px 12px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Причина неудачи</div>
+              <div style={{ fontSize: 12, color: 'var(--mc-text)' }}>{order.fail_reason}</div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
