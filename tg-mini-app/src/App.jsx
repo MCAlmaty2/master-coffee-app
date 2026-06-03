@@ -5264,11 +5264,13 @@ function OrdersListScreen({ ctx }) {
         action={
           hasPermission(db, currentUser, 'orders_create') && (
             <div className="flex gap-2">
-              <button onClick={() => navigate({ name: 'create_quick' })}
-                className="px-3 py-2 rounded-lg font-semibold text-sm flex items-center gap-1.5"
-                style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
-                <Sparkles size={14} /> Быстрая
-              </button>
+              {hasPermission(db, currentUser, 'orders_create_quick') && (
+                <button onClick={() => navigate({ name: 'create_quick' })}
+                  className="px-3 py-2 rounded-lg font-semibold text-sm flex items-center gap-1.5"
+                  style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
+                  <Sparkles size={14} /> Быстрая
+                </button>
+              )}
               <button onClick={() => navigate({ name: 'create_order' })}
                 className="px-3 py-2 rounded-lg font-semibold text-white text-sm flex items-center gap-1.5"
                 style={{ background: '#297b8a' }}>
@@ -6183,7 +6185,15 @@ function CreateOrderScreen({ ctx }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function CreateQuickScreen({ ctx }) {
-  const { db, goBack, navigate, createOrder, changeStatus, createGrindRequest, showToast, quickDraft, setQuickDraft, resetQuickDraft } = ctx;
+  const { db, currentUser, goBack, navigate, createOrder, changeStatus, createGrindRequest, showToast, quickDraft, setQuickDraft, resetQuickDraft } = ctx;
+  if (!hasPermission(db, currentUser, 'orders_create_quick')) {
+    return (
+      <div>
+        <PageHeader title="Нет доступа" onBack={goBack} />
+        <Card><div className="p-3 text-sm" style={{ color: 'var(--mc-muted)' }}>Быстрые B2B-заявки доступны только B2B-менеджерам и старшим менеджерам.</div></Card>
+      </div>
+    );
+  }
   const products = db.products || [];
   const form = quickDraft;
   const setForm = setQuickDraft;
@@ -8407,10 +8417,15 @@ function TaskDetailScreen({ ctx, taskId }) {
   const [doneModalOpen, setDoneModalOpen] = useState(false);
   const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
   const [reassignModalOpen, setReassignModalOpen] = useState(false);
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
 
   const canReassign = currentUser.role === 'admin'
     || task.created_by === currentUser.id
     || ['manager', 'senior_manager', 'director', 'b2b'].includes(currentUser.role);
+
+  const canDuplicate = hasPermission(db, currentUser, 'tasks_create')
+    && (currentUser.role === 'admin' || task.created_by === currentUser.id
+      || ['manager', 'senior_manager', 'director', 'b2b'].includes(currentUser.role));
 
   return (
     <div>
@@ -8523,6 +8538,17 @@ function TaskDetailScreen({ ctx, taskId }) {
             </>
           )}
 
+          {/* Дублировать задачу */}
+          {canDuplicate && (
+            <button
+              onClick={() => setDuplicateModalOpen(true)}
+              className="w-full py-2.5 rounded-lg font-semibold text-sm mt-2 flex items-center justify-center gap-2"
+              style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}
+            >
+              <Copy size={14} /> Дублировать задачу
+            </button>
+          )}
+
           {/* Удалить задачу — исполнитель (если не выполнена) или админ */}
           {(isAssignee && task.status !== 'done') && (
             <button
@@ -8579,6 +8605,36 @@ function TaskDetailScreen({ ctx, taskId }) {
           }}
         />
       )}
+      {duplicateModalOpen && (
+        <DuplicateTaskModal
+          task={task}
+          db={db}
+          onClose={() => setDuplicateModalOpen(false)}
+          onCreate={async (overrides) => {
+            const { createTask } = ctx;
+            const data = {
+              kind:        task.kind,
+              department:  task.department,
+              assignee_id: overrides.assignee_id ?? task.assignee_id,
+              client_name: task.client_name,
+              address:     task.address,
+              phone:       task.phone,
+              problem:     task.problem,
+              visit_date:  overrides.visit_date,
+              visit_time:  overrides.visit_time   ?? task.visit_time,
+              visit_time_end: overrides.visit_time_end ?? task.visit_time_end,
+              duration_min: task.duration_min,
+              tasting_location:  task.meta?.tasting_location,
+              tasting_contact:   task.meta?.contact_name,
+              coffee_preferences: task.meta?.coffee_preferences,
+            };
+            const r = await createTask(data);
+            if (r?.error) return showToast(r.error);
+            setDuplicateModalOpen(false);
+            showToast('Задача создана как дубль');
+          }}
+        />
+      )}
       <AdminDeleteButton ctx={ctx} kind="task" id={task.id} label="эту задачу" onDeleted={() => ctx.goBack()} />
     </div>
   );
@@ -8620,6 +8676,114 @@ function ReassignTaskModal({ task, db, onClose, onReassign }) {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function DuplicateTaskModal({ task, db, onClose, onCreate }) {
+  const tomorrow = (() => {
+    const base = task.visit_date || new Date().toISOString().slice(0, 10);
+    const d = new Date(base + 'T00:00');
+    d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  })();
+
+  const [date, setDate]       = useState(tomorrow);
+  const [time, setTime]       = useState(task.visit_time || '');
+  const [timeEnd, setTimeEnd] = useState(task.visit_time_end || '');
+  const [assigneeId, setAssigneeId] = useState(task.assignee_id || '');
+  const [saving, setSaving]   = useState(false);
+
+  const candidates = (db.users || []).filter(u => u.active && u.role === task.department)
+    .sort((a, b) => a.first_name.localeCompare(b.first_name));
+
+  // быстрые кнопки +N дней от даты задачи
+  const quickDays = [1, 2, 3, 7].map(n => {
+    const base = task.visit_date || new Date().toISOString().slice(0, 10);
+    const d = new Date(base + 'T00:00');
+    d.setDate(d.getDate() + n);
+    const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    return { label: n === 1 ? '+1 день' : n === 7 ? '+1 неделя' : `+${n} дня`, iso };
+  });
+
+  const handleCreate = async () => {
+    if (!date) return;
+    setSaving(true);
+    await onCreate({ visit_date: date, visit_time: time || null, visit_time_end: timeEnd || null, assignee_id: assigneeId || task.assignee_id });
+    setSaving(false);
+  };
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}>
+      <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', padding: '16px 16px 32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--mc-text)' }}>Дублировать задачу</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)', fontSize: 20, lineHeight: 1 }}>✕</button>
+        </div>
+
+        <div style={{ fontSize: 11, color: 'var(--mc-muted)', marginBottom: 12, padding: '8px 10px', background: 'var(--mc-active-item)', borderRadius: 9 }}>
+          Клиент: <strong style={{ color: 'var(--mc-text)' }}>{task.client_name}</strong> · {task.problem?.slice(0, 60)}
+        </div>
+
+        {/* Быстрый выбор даты */}
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>Быстрый выбор</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {quickDays.map(q => (
+              <button key={q.iso} onClick={() => setDate(q.iso)}
+                style={{ padding: '5px 12px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                  background: date === q.iso ? '#297b8a' : 'var(--mc-active-item)',
+                  color: date === q.iso ? '#fff' : 'var(--mc-text)',
+                  border: `1px solid ${date === q.iso ? '#297b8a' : 'var(--mc-border)'}` }}>
+                {q.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Дата и время */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Дата *</div>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #297b8a', borderRadius: 9, fontSize: 12, background: 'var(--mc-surface)', color: 'var(--mc-text)', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Начало</div>
+            <input type="time" value={time} onChange={e => setTime(e.target.value)}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--mc-border)', borderRadius: 9, fontSize: 12, background: 'var(--mc-surface)', color: 'var(--mc-text)', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Конец</div>
+            <input type="time" value={timeEnd} onChange={e => setTimeEnd(e.target.value)}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--mc-border)', borderRadius: 9, fontSize: 12, background: 'var(--mc-surface)', color: 'var(--mc-text)', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+        </div>
+
+        {/* Исполнитель */}
+        {candidates.length > 1 && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>Исполнитель</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {candidates.map(u => (
+                <button key={u.id} onClick={() => setAssigneeId(u.id)}
+                  style={{ padding: '5px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    background: assigneeId === u.id ? '#297b8a' : 'var(--mc-active-item)',
+                    color: assigneeId === u.id ? '#fff' : 'var(--mc-text)',
+                    border: `1px solid ${assigneeId === u.id ? '#297b8a' : 'var(--mc-border)'}` }}>
+                  {u.first_name} {u.last_name[0]}.
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <button onClick={handleCreate} disabled={!date || saving}
+          style={{ width: '100%', padding: 13, background: !date || saving ? '#CBD5E1' : '#297b8a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: !date || saving ? 'not-allowed' : 'pointer' }}>
+          {saving ? '⏳ Создаём…' : '📋 Создать дубль'}
+        </button>
       </div>
     </div>
   );
