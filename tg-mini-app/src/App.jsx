@@ -1938,6 +1938,43 @@ function App() {
   };
 
   /**
+   * Редактировать поля задачи с полным логированием изменений.
+   * Доступно исполнителю, постановщику, admin и любому полевому сотруднику (они одна команда).
+   */
+  const editTask = (taskId, changes) => {
+    const task = db.tasks.find(t => t.id === taskId);
+    if (!task) return { error: 'Задача не найдена' };
+    const FIELD = ['barista', 'technician'];
+    const canEdit = currentUser.role === 'admin'
+      || task.assignee_id === currentUser.id
+      || task.created_by === currentUser.id
+      || FIELD.includes(currentUser.role)
+      || ['manager', 'senior_manager', 'director', 'b2b'].includes(currentUser.role);
+    if (!canEdit) return { error: 'Нет прав на редактирование' };
+    const FIELD_LABELS = {
+      client_name: 'Клиент', address: 'Адрес', phone: 'Телефон',
+      problem: 'Задача', visit_date: 'Дата', visit_time: 'Начало',
+      visit_time_end: 'Конец', duration_min: 'Длительность',
+    };
+    const logged = Object.entries(changes)
+      .filter(([k, v]) => v !== undefined && String(task[k] ?? '') !== String(v ?? ''))
+      .map(([k, v]) => ({ field: k, label: FIELD_LABELS[k] || k, from: task[k] ?? '', to: v }));
+    if (logged.length === 0) return { ok: true };
+    setDb(d => ({
+      ...d,
+      tasks: d.tasks.map(t => {
+        if (t.id !== taskId) return t;
+        return {
+          ...t,
+          ...changes,
+          log: [...t.log, { event: 'edit', changes: logged, actor: currentUser.id, at: new Date().toISOString() }],
+        };
+      }),
+    }));
+    return { ok: true };
+  };
+
+  /**
    * Переназначить исполнителя задачи.
    * Доступно: постановщику, admin и управленческим ролям.
    */
@@ -3001,7 +3038,7 @@ function App() {
     loginViaTelegram, logout,
     createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, cancelOrder,
     approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, transferAdmin,
-    createTask, startTask, completeTask, rescheduleTask, deleteTask, reassignTask,
+    createTask, startTask, completeTask, rescheduleTask, deleteTask, reassignTask, editTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createGrindRequest, takeGrindRequest, markGrindReady, cancelGrindRequest,
@@ -8379,7 +8416,7 @@ function CreateTaskScreen({ ctx }) {
 }
 
 function TaskDetailScreen({ ctx, taskId }) {
-  const { db, currentUser, goBack, startTask, completeTask, rescheduleTask, deleteTask, reassignTask, showToast } = ctx;
+  const { db, currentUser, goBack, startTask, completeTask, rescheduleTask, deleteTask, reassignTask, editTask, showToast } = ctx;
   const task = db.tasks.find(t => t.id === taskId);
   if (!task) return <div className="p-6">Задача не найдена</div>;
 
@@ -8418,6 +8455,14 @@ function TaskDetailScreen({ ctx, taskId }) {
   const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
   const [reassignModalOpen, setReassignModalOpen] = useState(false);
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
+  const [editModalOpen,      setEditModalOpen]      = useState(false);
+
+  const FIELD_ROLES_EDIT = ['barista', 'technician'];
+  const canEdit = currentUser.role === 'admin'
+    || task.assignee_id === currentUser.id
+    || task.created_by === currentUser.id
+    || FIELD_ROLES_EDIT.includes(currentUser.role)
+    || ['manager', 'senior_manager', 'director', 'b2b'].includes(currentUser.role);
 
   const canReassign = currentUser.role === 'admin'
     || task.created_by === currentUser.id
@@ -8482,6 +8527,19 @@ function TaskDetailScreen({ ctx, taskId }) {
                         const toU   = db.users.find(u => u.id === l.to);
                         return <>Переназначено: {fromU ? `${fromU.first_name} ${fromU.last_name}` : '—'} → <strong>{toU ? `${toU.first_name} ${toU.last_name}` : '—'}</strong></>;
                       })()}
+                      {l.event === 'edit' && (
+                        <div>
+                          <span style={{ color: 'var(--mc-muted)' }}>Изменено:</span>
+                          {(l.changes || []).map((c, ci) => (
+                            <div key={ci} className="text-xs mt-0.5 ml-2">
+                              <span style={{ color: 'var(--mc-muted)' }}>{c.label}: </span>
+                              <span style={{ textDecoration: 'line-through', color: '#dc2626' }}>{String(c.from || '—')}</span>
+                              {' → '}
+                              <strong style={{ color: '#16a34a' }}>{String(c.to || '—')}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                       {actor ? `${actor.first_name} ${actor.last_name}` : 'Система'} · {fmtDateTime(l.at)}
@@ -8536,6 +8594,17 @@ function TaskDetailScreen({ ctx, taskId }) {
                 <Calendar size={14} className="inline mr-1.5 -mt-0.5" /> Перенести визит
               </button>
             </>
+          )}
+
+          {/* Редактировать задачу */}
+          {canEdit && task.status !== 'done' && (
+            <button
+              onClick={() => setEditModalOpen(true)}
+              className="w-full py-2.5 rounded-lg font-semibold text-sm mt-2 flex items-center justify-center gap-2"
+              style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}
+            >
+              <Edit3 size={14} /> Редактировать задачу
+            </button>
           )}
 
           {/* Дублировать задачу */}
@@ -8602,6 +8671,18 @@ function TaskDetailScreen({ ctx, taskId }) {
             if (r.error) return showToast(r.error);
             setReassignModalOpen(false);
             showToast('Исполнитель изменён');
+          }}
+        />
+      )}
+      {editModalOpen && (
+        <EditTaskModal
+          task={task}
+          onClose={() => setEditModalOpen(false)}
+          onSave={(changes) => {
+            const r = editTask(task.id, changes);
+            if (r.error) return showToast(r.error);
+            setEditModalOpen(false);
+            showToast('Изменения сохранены');
           }}
         />
       )}
@@ -8676,6 +8757,67 @@ function ReassignTaskModal({ task, db, onClose, onReassign }) {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function EditTaskModal({ task, onClose, onSave }) {
+  const [form, setForm] = useState({
+    client_name:   task.client_name   || '',
+    address:       task.address       || '',
+    phone:         task.phone         || '',
+    problem:       task.problem       || '',
+    visit_time:    task.visit_time    || '',
+    visit_time_end: task.visit_time_end || '',
+    duration_min:  task.duration_min  || 60,
+  });
+  const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const fields = [
+    { key: 'client_name',   label: task.kind === 'tasting' ? 'Заведение' : 'Клиент',  multiline: false },
+    { key: 'address',       label: 'Адрес',          multiline: false },
+    { key: 'phone',         label: 'Телефон',         multiline: false, type: 'tel' },
+    { key: 'problem',       label: 'Описание задачи', multiline: true },
+  ];
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}>
+      <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px', borderBottom: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--mc-text)' }}>Редактировать задачу</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)', fontSize: 20, lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1, padding: '12px 16px' }}>
+          {fields.map(f => (
+            <div key={f.key} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>{f.label}</div>
+              {f.multiline ? (
+                <textarea value={form[f.key]} onChange={e => upd(f.key, e.target.value)} rows={3}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--mc-border)', borderRadius: 9, fontSize: 13, resize: 'vertical', color: 'var(--mc-text)', background: 'var(--mc-surface)', outline: 'none', boxSizing: 'border-box' }} />
+              ) : (
+                <input type={f.type || 'text'} value={form[f.key]} onChange={e => upd(f.key, e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--mc-border)', borderRadius: 9, fontSize: 13, color: 'var(--mc-text)', background: 'var(--mc-surface)', outline: 'none', boxSizing: 'border-box' }} />
+              )}
+            </div>
+          ))}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+            {[['visit_time','Начало','time'], ['visit_time_end','Конец','time'], ['duration_min','Длит. (мин)','number']].map(([k,l,t]) => (
+              <div key={k}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>{l}</div>
+                <input type={t} value={form[k]} onChange={e => upd(k, t === 'number' ? Number(e.target.value) : e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--mc-border)', borderRadius: 9, fontSize: 13, color: 'var(--mc-text)', background: 'var(--mc-surface)', outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ padding: '10px 16px 28px', borderTop: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
+          <button onClick={() => onSave(form)}
+            style={{ width: '100%', padding: 13, background: '#297b8a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+            💾 Сохранить изменения
+          </button>
+        </div>
       </div>
     </div>
   );

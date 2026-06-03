@@ -123,9 +123,12 @@ function computeEventLayout(tasks) {
 // Проверка видимости задачи
 function canSeeTask(t, currentUser, mode) {
   if (mode === 'owner') return true;
+  if (mode === 'team')  return true; // полевые сотрудники видят детали друг друга
   if (mode === 'busy')  return false;
   if (!currentUser) return false;
   if (currentUser.role === 'admin') return true;
+  // полевые сотрудники видят все задачи своих коллег
+  if (FIELD_ROLES.includes(currentUser.role)) return true;
   return t.assignee_id === currentUser.id || t.created_by === currentUser.id;
 }
 
@@ -624,10 +627,26 @@ export function FieldHome({ ctx }) {
   const [view,       setView]       = useState('week');
   const [weekStart,  setWeekStart]  = useState(() => getMonday(todayISO()));
   const [selectedDay,setSelectedDay]= useState(() => todayISO());
+  const [filter,     setFilter]     = useState('all'); // 'all' | 'mine' | userId
 
-  const myTasks     = db.tasks.filter(t => t.assignee_id === currentUser.id);
+  // Все задачи полевых сотрудников
+  const fieldUserIds = new Set(
+    (db.users || []).filter(u => u.active && FIELD_ROLES.includes(u.role)).map(u => u.id)
+  );
+  const allFieldTasks = db.tasks.filter(t => fieldUserIds.has(t.assignee_id));
+
+  const filteredTasks = filter === 'all'  ? allFieldTasks
+    : filter === 'mine' ? allFieldTasks.filter(t => t.assignee_id === currentUser.id)
+    : allFieldTasks.filter(t => t.assignee_id === filter);
+
+  const myTasks     = allFieldTasks.filter(t => t.assignee_id === currentUser.id);
   const unscheduled = myTasks.filter(t => !t.visit_date && t.status !== 'done');
   const todayCount  = myTasks.filter(t => t.visit_date === todayISO() && t.status !== 'done').length;
+
+  // Коллеги — все активные полевые, кроме себя
+  const colleagues = (db.users || [])
+    .filter(u => u.active && FIELD_ROLES.includes(u.role) && u.id !== currentUser.id)
+    .sort((a, b) => a.first_name.localeCompare(b.first_name));
 
   const prev = () => {
     if (view === 'week') setWeekStart(s => shiftDate(s, -7));
@@ -671,11 +690,34 @@ export function FieldHome({ ctx }) {
         hideMonth
       />
 
+      {/* Фильтр по сотруднику */}
+      {colleagues.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, marginBottom: 12 }}>
+          {[
+            { id: 'all',  label: 'Все' },
+            { id: 'mine', label: 'Мои' },
+            ...colleagues.map(u => ({ id: u.id, label: `${u.first_name} ${u.last_name[0]}.`, color: getUserTaskColor(u.id, db) })),
+          ].map(f => {
+            const active = filter === f.id;
+            const color  = f.color || '#297b8a';
+            return (
+              <button key={f.id} onClick={() => setFilter(f.id)}
+                style={{ flexShrink: 0, padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                  background: active ? color : 'var(--mc-surface)',
+                  color:      active ? '#fff' : 'var(--mc-muted)',
+                  border:     `1px solid ${active ? color : 'var(--mc-border)'}` }}>
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {view === 'week' && (
-        <WeekCalendarView tasks={myTasks} weekStart={weekStart} ctx={ctx} mode="owner" onSlotClick={handleSlotClick} />
+        <WeekCalendarView tasks={filteredTasks} weekStart={weekStart} ctx={ctx} mode="team" onSlotClick={handleSlotClick} />
       )}
       {view === 'day' && (
-        <DayCalendarView tasks={myTasks} date={selectedDay} ctx={ctx} mode="owner" onSlotClick={handleSlotClick} />
+        <DayCalendarView tasks={filteredTasks} date={selectedDay} ctx={ctx} mode="team" onSlotClick={handleSlotClick} />
       )}
 
       {/* Задачи без времени */}
