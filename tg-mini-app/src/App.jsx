@@ -1389,6 +1389,16 @@ function App() {
     if (newStatus === 'shipped' && meta.doc_no && !isValidDocNo(meta.doc_no)) {
       return { error: 'Номер документа должен быть в формате 00ЦТ-NNNNNN' };
     }
+    // Подтвердить оплату (invoiced → paid): кассир, admin, или b2b в субботу для физлица
+    const order = (db.orders || []).find(o => o.id === orderId);
+    if (order?.status === 'invoiced' && newStatus === 'paid') {
+      const isSaturday = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Almaty' })).getDay() === 6;
+      const isIndividual = order.client_type === 'individual';
+      const saturdayB2B = isSaturday && isIndividual && currentUser.role === 'b2b';
+      if (currentUser.role !== 'cashier' && currentUser.role !== 'admin' && !saturdayB2B) {
+        return { error: 'Подтвердить оплату может только кассир' + (isIndividual ? ' (или B2B-менеджер по субботам)' : '') };
+      }
+    }
     setDb(d => {
       const orders = d.orders.map(o => {
         if (o.id !== orderId) return o;
@@ -1414,6 +1424,16 @@ function App() {
           recipient_id: author.id,
           title: 'Изменение статуса',
           body: `${order.order_number}: ${STATUS[order.status].label} → ${STATUS[newStatus].label}`,
+        }));
+      }
+      // Кассир подтвердил оплату → уведомить постановщика заявки (менеджер может делать отгрузку)
+      if (newStatus === 'paid' && author && author.id !== currentUser.id) {
+        const clientName = order.client_type === 'individual' ? order.full_name : order.company_name;
+        newNotifs.push(makeNotif(d, {
+          recipient_id: author.id,
+          title: '💰 Оплата подтверждена',
+          body: `${order.order_number} · ${clientName} — можно оформить отгрузку`,
+          link_kind: 'order', link_id: orderId,
         }));
       }
       if (newStatus === 'ready') {
@@ -5544,10 +5564,25 @@ function OrderDetailScreen({ ctx, orderId }) {
   if (!order) return <div className="p-6">Заявка не найдена</div>;
 
   const author = db.users.find(u => u.id === order.created_by);
-  const canChangeStatus = (effectiveRole === 'b2b' || effectiveRole === 'admin') && order.status !== 'archived' && order.status !== 'shipped' && order.status !== 'ready';
   const isLegal = order.client_type === 'legal';
   const currentIdx = STATUS_ORDER.indexOf(order.status);
-  const nextStatus = currentIdx >= 0 && currentIdx < STATUS_ORDER.length - 1 ? STATUS_ORDER[currentIdx + 1] : null;
+
+  // Менеджерские роли — двигают заявку КРОМЕ шага invoiced→paid
+  const MANAGER_ROLES_STATUS = ['b2b', 'senior_manager', 'admin'];
+  const canManagerAdvance = MANAGER_ROLES_STATUS.includes(effectiveRole)
+    && !['archived', 'shipped', 'ready', 'invoiced'].includes(order.status);
+
+  // Кассир (и admin) — шаг invoiced→paid
+  // Исключение: b2b + admin по субботам для физических лиц
+  const isSaturday = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Almaty' })).getDay() === 6;
+  const saturdayB2BException = isSaturday && order.client_type === 'individual' && effectiveRole === 'b2b';
+  const canCashierConfirm = (effectiveRole === 'cashier' || effectiveRole === 'admin' || saturdayB2BException)
+    && order.status === 'invoiced';
+
+  // Следующий статус для менеджера (skip invoiced state — там только кассир)
+  const nextStatus = canManagerAdvance && currentIdx >= 0 && currentIdx < STATUS_ORDER.length - 1
+    ? STATUS_ORDER[currentIdx + 1]
+    : null;
 
   const [statusModal, setStatusModal] = useState(null);
 
@@ -5694,7 +5729,8 @@ function OrderDetailScreen({ ctx, orderId }) {
             {order.kind === 'quick' && <FieldRow label="Тип" value="Быстрая B2B" />}
           </Card>
 
-          {canChangeStatus && nextStatus && (
+          {/* Кнопка следующего статуса для менеджера (всё кроме invoiced→paid) */}
+          {nextStatus && (
             <button
               onClick={() => setStatusModal({ to: nextStatus })}
               className="w-full py-3 rounded-lg font-semibold text-white"
@@ -5702,6 +5738,33 @@ function OrderDetailScreen({ ctx, orderId }) {
             >
               Перевести в «{STATUS[nextStatus].label}» →
             </button>
+          )}
+
+          {/* Блок подтверждения оплаты — только для кассира */}
+          {canCashierConfirm && (
+            <div className="rounded-xl p-4" style={{ background: '#F0FDF4', border: '1.5px solid #BBF7D0' }}>
+              <div className="text-xs font-bold uppercase mb-1" style={{ color: '#15803D', letterSpacing: '0.08em' }}>
+                💰 Подтверждение оплаты
+              </div>
+              <div className="text-sm mb-3" style={{ color: '#166534' }}>
+                Счёт выставлен клиенту. После подтверждения оплаты менеджер оформит отгрузку.
+                {saturdayB2BException && (
+                  <span className="block mt-1 text-xs" style={{ color: '#15803D', opacity: 0.8 }}>
+                    📅 Суббота · физлицо — доступно без кассира
+                  </span>
+                )}
+              </div>
+              <div className="text-sm font-bold mb-3" style={{ color: '#166534' }}>
+                Сумма: {fmtNum(order.total_amount)} ₸
+              </div>
+              <button
+                onClick={() => setStatusModal({ to: 'paid' })}
+                className="w-full py-2.5 rounded-lg font-semibold text-white text-sm"
+                style={{ background: '#16a34a' }}
+              >
+                <Banknote size={15} className="inline mr-1.5" /> Подтвердить оплату получена
+              </button>
+            </div>
           )}
 
           {order.status !== 'archived' && order.status !== 'cancelled' && (
