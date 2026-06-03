@@ -2002,18 +2002,24 @@ function App() {
 
   /* ═══════════ Заявки на списание ═══════════ */
 
-  const createWriteOff = (data) => {
+  const createWriteOff = async (data) => {
     if (!hasPermission(db, currentUser, 'writeoff_create')) return { error: 'Нет прав на создание заявки на списание' };
     const items = (data.items || []).filter(i => i && i.name && Number(i.quantity) > 0);
     if (items.length === 0) return { error: 'Добавьте хотя бы одну позицию' };
     if (!data.reason || data.reason.trim().length < 5) return { error: 'Укажите причину списания (минимум 5 символов)' };
 
     const year = new Date().getFullYear();
-    const lastNum = db.writeOffs
+    const localMax = db.writeOffs
       .filter(w => w.number?.startsWith(`WO-${year}-`))
       .map(w => parseInt(w.number.split('-')[2], 10))
       .reduce((m, n) => Math.max(m, n), 0);
-    const number = `WO-${year}-${String(lastNum + 1).padStart(3, '0')}`;
+    let dbMax = 0;
+    try {
+      const { data: rows } = await supabase.from('write_offs').select('number')
+        .like('number', `WO-${year}-%`).order('number', { ascending: false }).limit(1);
+      if (rows?.[0]?.number) dbMax = parseInt(rows[0].number.split('-')[2], 10) || 0;
+    } catch { /* fallback to localMax */ }
+    const number = `WO-${year}-${String(Math.max(localMax, dbMax) + 1).padStart(3, '0')}`;
 
     const writeOff = {
       id: uid(),
@@ -2273,7 +2279,7 @@ function App() {
 
   /* ═══════════ Заявки на договор ═══════════ */
 
-  const createContractRequest = (data) => {
+  const createContractRequest = async (data) => {
     if (!hasPermission(db, currentUser, 'contract_create')) return { error: 'Нет прав на подачу заявки на договор' };
     if (!data.contract_type || !CONTRACT_TYPE[data.contract_type]) return { error: 'Выберите тип договора' };
     if (!data.payment_terms || !PAYMENT_TERMS[data.payment_terms]) return { error: 'Выберите условия оплаты' };
@@ -2285,11 +2291,17 @@ function App() {
     if (!data.authority_doc) return { error: 'Прикрепите основание полномочий (устав / доверенность / приказ)' };
 
     const year = new Date().getFullYear();
-    const lastNum = db.contractRequests
+    const localMax = db.contractRequests
       .filter(c => c.number?.startsWith(`CR-${year}-`))
       .map(c => parseInt(c.number.split('-')[2], 10))
       .reduce((m, n) => Math.max(m, n), 0);
-    const number = `CR-${year}-${String(lastNum + 1).padStart(3, '0')}`;
+    let dbMax = 0;
+    try {
+      const { data: rows } = await supabase.from('contract_requests').select('number')
+        .like('number', `CR-${year}-%`).order('number', { ascending: false }).limit(1);
+      if (rows?.[0]?.number) dbMax = parseInt(rows[0].number.split('-')[2], 10) || 0;
+    } catch { /* fallback to localMax */ }
+    const number = `CR-${year}-${String(Math.max(localMax, dbMax) + 1).padStart(3, '0')}`;
 
     const cr = {
       id: uid(),
@@ -2566,7 +2578,7 @@ function App() {
 
   /* ═══════════ Помол кофе ═══════════ */
 
-  const createGrindRequest = (data) => {
+  const createGrindRequest = async (data) => {
     if (!hasPermission(db, currentUser, 'grind_create')) return { error: 'Нет прав на создание заявки на помол' };
     if (!data.product_name?.trim()) return { error: 'Укажите название кофе' };
     const qty = Number(data.quantity);
@@ -2575,11 +2587,17 @@ function App() {
     if (data.grind_type === 'custom' && !data.grind_custom?.trim()) return { error: 'Опишите свой вариант помола' };
 
     const year = new Date().getFullYear();
-    const lastNum = (db.grindRequests || [])
+    const localMax = (db.grindRequests || [])
       .filter(g => g.number?.startsWith(`POM-${year}-`))
       .map(g => parseInt(g.number.split('-')[2], 10))
       .reduce((m, n) => Math.max(m, n), 0);
-    const number = `POM-${year}-${String(lastNum + 1).padStart(3, '0')}`;
+    let dbMax = 0;
+    try {
+      const { data: rows } = await supabase.from('grind_requests').select('number')
+        .like('number', `POM-${year}-%`).order('number', { ascending: false }).limit(1);
+      if (rows?.[0]?.number) dbMax = parseInt(rows[0].number.split('-')[2], 10) || 0;
+    } catch { /* fallback to localMax */ }
+    const number = `POM-${year}-${String(Math.max(localMax, dbMax) + 1).padStart(3, '0')}`;
 
     const grind = {
       id: uid(),
@@ -6733,9 +6751,9 @@ function CreateQuickScreen({ ctx }) {
 
     // Автоматически создаём заявки на помол для товаров с выбранным grind_type
     const grindItems = items.filter(it => it.grind_type);
-    grindItems.forEach(it => {
+    for (const it of grindItems) {
       const prod = products.find(p => p.id === it.product_id);
-      createGrindRequest({
+      await createGrindRequest({
         product_id: it.product_id || null,
         product_name: it.name || prod?.name || '—',
         quantity: Number(it.quantity),
@@ -6749,7 +6767,7 @@ function CreateQuickScreen({ ctx }) {
         phone: form.phone || '',
         comment: `Из B2B заявки ${order.order_number}`,
       });
-    });
+    }
 
     const grindNote = grindItems.length > 0 ? ` · ${grindItems.length} заявка на помол` : '';
     showToast(`Заявка ${order.order_number} создана · в работе${grindNote}`);
@@ -9697,7 +9715,7 @@ function CreateWriteOffScreen({ ctx }) {
   const removeItem = (idx) => setItems(arr => arr.length === 1 ? arr : arr.filter((_, i) => i !== idx));
   const addItem = () => setItems(arr => [...arr, { tempId: uid(), product_id: '', name: '', unit: 'шт', category: '', quantity: '' }]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = {};
     items.forEach((it, i) => {
       if (!it.name || it.name.trim().length < 2) e[`name_${i}`] = 'Укажите наименование';
@@ -9706,7 +9724,7 @@ function CreateWriteOffScreen({ ctx }) {
     if (!reason || reason.trim().length < 5) e.reason = 'Опишите причину списания (минимум 5 символов)';
     setErrors(e);
     if (Object.keys(e).length > 0) return;
-    const r = createWriteOff({ items, reason });
+    const r = await createWriteOff({ items, reason });
     if (r.error) return showToast(r.error);
     showToast(`Заявка ${r.writeOff.number} отправлена на подтверждение`);
     goBack();
@@ -10534,7 +10552,7 @@ function CreateContractScreen({ ctx }) {
 
   const totalSum = form.specification.reduce((sum, i) => sum + (Number(i.volume) || 0) * (Number(i.price_per_unit) || 0), 0);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = {};
     form.specification.forEach((it, i) => {
       if (!it.name || it.name.trim().length < 2) e[`name_${i}`] = 'Укажите наименование';
@@ -10548,7 +10566,7 @@ function CreateContractScreen({ ctx }) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
-    const r = createContractRequest(form);
+    const r = await createContractRequest(form);
     if (r.error) return showToast(r.error);
     showToast(`Заявка ${r.contractRequest.number} отправлена на рассмотрение`);
     navigate({ name: 'contracts' });
@@ -11801,13 +11819,13 @@ function CreateGrindScreen({ ctx }) {
     parseText(text);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const productName = form.product_mode === 'from_list'
       ? (coffeeProducts.find(p => p.id === form.product_id)?.name || '')
       : form.product_name;
     if (form.product_mode === 'from_list' && !form.product_id) return showToast('Выберите кофе из прайса');
     if (form.product_mode === 'manual'    && !productName.trim()) return showToast('Укажите название кофе');
-    const result = createGrindRequest({
+    const result = await createGrindRequest({
       client_name: form.client_name,
       product_id:  form.product_mode === 'from_list' ? form.product_id : null,
       product_name: productName,
