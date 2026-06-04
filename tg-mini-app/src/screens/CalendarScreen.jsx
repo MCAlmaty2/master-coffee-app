@@ -5,6 +5,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { SalesReportHomeTile } from './SalesReportScreen';
 
 /* ── КОНСТАНТЫ ─────────────────────────────────────────────────────────────── */
 const CAL_START  = 9;
@@ -719,6 +720,11 @@ export function FieldHome({ ctx }) {
       {view === 'day' && (
         <DayCalendarView tasks={filteredTasks} date={selectedDay} ctx={ctx} mode="team" onSlotClick={handleSlotClick} />
       )}
+
+      {/* Тайл отчёта ОП */}
+      <div className="mt-6">
+        <SalesReportHomeTile ctx={ctx} />
+      </div>
 
       {/* Задачи без времени */}
       {unscheduled.length > 0 && (

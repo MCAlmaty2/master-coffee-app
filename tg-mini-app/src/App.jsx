@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { supabase } from './supabase/client';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
+import { SalesReportScreen, SalesReportHomeTile } from './screens/SalesReportScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -4312,6 +4313,7 @@ function Screen({ ctx }) {
       if (effectiveRole === 'cashier') return <DashboardHome ctx={ctx} title="Главная — Касса" />;
       // Кастомная роль — permission-aware фолбэк
       return <DashboardHome ctx={ctx} title="Главная" />;
+    case 'sales_report': return <SalesReportScreen ctx={ctx} />;
     case 'create_order': return <CreateOrderScreen ctx={ctx} />;
     case 'create_quick': return <CreateQuickScreen ctx={ctx} />;
     case 'orders_list': return <OrdersListScreen ctx={ctx} />;
@@ -4765,8 +4767,11 @@ function DashboardHome({ ctx, title }) {
 
   return (
     <div>
-      {/* Карточка профиля пользователя — приветствие сверху */}
+      {/* Карточка профиля пользователя — первой */}
       <UserHeroCard user={currentUser} db={db} />
+
+      {/* ── Отчёт ОП — крупный акцентный тайл ── */}
+      <SalesReportHomeTile ctx={ctx} />
 
       {/* Виджет доставок — только для курьера */}
       {has('delivery_courier') && <CourierDeliveryWidget ctx={ctx} />}
