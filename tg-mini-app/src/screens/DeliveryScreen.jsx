@@ -493,9 +493,10 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
   const [detailOrder,     setDetailOrder]     = useState(null); // заявка в модале деталей
 
   const isAdmin    = currentUser?.role === 'admin';
-  const isManager  = currentUser?.role === 'manager' || currentUser?.role === 'senior_manager';
+  const isManager  = ['manager', 'senior_manager', 'b2b', 'b2c'].includes(currentUser?.role);
   const canArchive = isAdmin || currentUser?.role === 'director';
   const canAdd     = isAdmin || isManager;
+  // Детали заявки + смена адреса (как у админа) — менеджеры, включая B2B и B2C
   const canDetail  = isAdmin || isManager;
 
   const handleDeleteRegistry = async () => {
