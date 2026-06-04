@@ -12,6 +12,7 @@ import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
 import { SalesReportScreen, SalesReportHomeTile } from './screens/SalesReportScreen';
 import { ShipmentRegistryScreen, ShipmentRegistryHomeTile } from './screens/ShipmentRegistryScreen';
 import { DailyRevenueScreen } from './screens/DailyRevenueScreen';
+import { ManagerTasksScreen, ManagerTasksHomeTile } from './screens/ManagerTasksScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -218,9 +219,13 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, but
   };
   const tgs       = db?.telegramSettings;
   const recipient = db?.users?.find(u => u.id === recipient_id);
+  // Личная настройка по категориям (по link_kind). По умолчанию включено.
+  const category = link_kind || 'general';
+  const prefs = recipient?.tg_notif_prefs || {};
+  const categoryAllowed = prefs[category] !== false;
   // Отправляем личный TG: нужен telegram_id получателя и настроенный бот.
   // bot_token НЕ передаём в теле — edge function читает TELEGRAM_BOT_TOKEN из Supabase Secrets.
-  if (recipient?.telegram_id && recipient.tg_notif_enabled !== false && tgs?.bot_token) {
+  if (recipient?.telegram_id && recipient.tg_notif_enabled !== false && tgs?.bot_token && categoryAllowed) {
     const tgText = `🔔 <b>${title}</b>${body ? `\n${body}` : ''}`;
     const invokeBody = { chat_id: recipient.telegram_id, text: tgText };
     // Inline-кнопка "Открыть заявку" — только если передан button_url
@@ -1434,6 +1439,9 @@ function App() {
           updated.shipped_at = meta.shipped_at;
           updated.realization_doc_no = meta.doc_no;
         }
+        if (newStatus === 'paid' && meta.paid_amount != null) {
+          updated.paid_amount = meta.paid_amount;
+        }
         if (newStatus === 'ready') {
           const existingCodes = d.orders.filter(x => x.pickup_code && x.status !== 'archived').map(x => x.pickup_code);
           updated.pickup_code = gen4DigitCode(existingCodes);
@@ -1453,12 +1461,22 @@ function App() {
       // Кассир подтвердил оплату → уведомить постановщика заявки (менеджер может делать отгрузку)
       if (newStatus === 'paid' && author && author.id !== currentUser.id) {
         const clientName = order.client_type === 'individual' ? order.full_name : order.company_name;
-        newNotifs.push(makeNotif(d, {
-          recipient_id: author.id,
-          title: '💰 Оплата подтверждена',
-          body: `${order.order_number} · ${clientName} — можно оформить отгрузку`,
-          link_kind: 'order', link_id: orderId,
-        }));
+        const shortfall = Number(meta.shortfall) || 0;
+        if (shortfall > 0) {
+          newNotifs.push(makeNotif(d, {
+            recipient_id: author.id,
+            title: '⚠️ Недоплата по заявке',
+            body: `${order.order_number} · ${clientName}\nПоступило ${fmtNum(meta.paid_amount)} из ${fmtNum(order.total_amount)} ₸ — недоплата ${fmtNum(shortfall)} ₸`,
+            link_kind: 'order', link_id: orderId,
+          }));
+        } else {
+          newNotifs.push(makeNotif(d, {
+            recipient_id: author.id,
+            title: '💰 Оплата подтверждена',
+            body: `${order.order_number} · ${clientName} — можно оформить отгрузку`,
+            link_kind: 'order', link_id: orderId,
+          }));
+        }
       }
       if (newStatus === 'ready') {
         const ord = orders.find(o => o.id === orderId);
@@ -1624,6 +1642,47 @@ function App() {
     return { ok: true };
   };
 
+  /**
+   * Отменить последнее действие по заявке (откат статуса).
+   * Например склад выдал по ошибке — вернуть в предыдущий статус.
+   * Доступно: admin, warehouse, b2b, senior_manager, director.
+   */
+  const revertLastAction = (orderId) => {
+    const order = (db.orders || []).find(o => o.id === orderId);
+    if (!order) return { error: 'Заявка не найдена' };
+    const allowed = ['admin', 'warehouse', 'b2b', 'senior_manager', 'director'];
+    if (!allowed.includes(currentUser.role)) return { error: 'Нет прав на отмену действия' };
+
+    const log = order.log || [];
+    let entry = null;
+    for (let i = log.length - 1; i >= 0; i--) {
+      if (['status', 'pickup_closed', 'delivered'].includes(log[i].event)) { entry = log[i]; break; }
+    }
+    if (!entry) return { error: 'Нет действий для отмены' };
+
+    let prevStatus;
+    if (entry.event === 'pickup_closed') prevStatus = 'ready';
+    else if (entry.event === 'delivered') prevStatus = 'shipped';
+    else prevStatus = entry.from;
+    if (!prevStatus) return { error: 'Невозможно определить предыдущий статус' };
+
+    const fromStatus = order.status;
+    setDb(d => ({
+      ...d,
+      orders: d.orders.map(o => {
+        if (o.id !== orderId) return o;
+        const updated = { ...o, status: prevStatus };
+        // откат побочных эффектов
+        if (entry.event === 'delivered' || fromStatus === 'archived') updated.delivered_at = null;
+        if (entry.to === 'shipped' || fromStatus === 'shipped') { updated.shipped_at = null; updated.realization_doc_no = null; }
+        if (entry.to === 'paid') updated.paid_amount = null;
+        updated.log = [...o.log, { event: 'revert', from: fromStatus, to: prevStatus, actor: currentUser.id, at: new Date().toISOString() }];
+        return updated;
+      }),
+    }));
+    return { ok: true, to: prevStatus };
+  };
+
   const cancelOrder = (orderId, reason = '') => {
     const order = (db.orders || []).find(o => o.id === orderId);
     if (!order) return { error: 'Заявка не найдена' };
@@ -1781,6 +1840,18 @@ function App() {
       const { error } = await supabase.from('users').update({ tg_notif_enabled: enabled }).eq('id', userId);
       if (error) throw error;
       setDb(d => ({ ...d, users: d.users.map(u => u.id === userId ? { ...u, tg_notif_enabled: enabled } : u) }));
+      return { ok: true };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+
+  // Личные настройки категорий TG-уведомлений (каждый сам себе)
+  const updateMyTgPrefs = async (prefs) => {
+    try {
+      const { error } = await supabase.from('users').update({ tg_notif_prefs: prefs }).eq('id', currentUser.id);
+      if (error) throw error;
+      setDb(d => ({ ...d, users: d.users.map(u => u.id === currentUser.id ? { ...u, tg_notif_prefs: prefs } : u) }));
       return { ok: true };
     } catch (e) {
       return { error: e.message };
@@ -3147,8 +3218,8 @@ function App() {
     route, navigate, goBack, showToast,
     bootStatus,
     loginViaTelegram, logout,
-    createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, cancelOrder, editOrder,
-    approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, transferAdmin,
+    createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, cancelOrder, editOrder, revertLastAction,
+    approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, updateMyTgPrefs, transferAdmin,
     createTask, startTask, completeTask, rescheduleTask, deleteTask, reassignTask, editTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
@@ -4389,6 +4460,8 @@ function Screen({ ctx }) {
       return <DashboardHome ctx={ctx} title="Главная" />;
     case 'sales_report': return <SalesReportScreen ctx={ctx} />;
     case 'daily_revenue': return <DailyRevenueScreen ctx={ctx} />;
+    case 'my_notifications': return <MyNotificationsScreen ctx={ctx} />;
+    case 'manager_tasks': return <ManagerTasksScreen ctx={ctx} />;
     case 'shipment_registry': return <ShipmentRegistryScreen ctx={ctx} />;
     case 'create_order': return <CreateOrderScreen ctx={ctx} />;
     case 'create_quick': return <CreateQuickScreen ctx={ctx} />;
@@ -4670,6 +4743,68 @@ function MyPinButton({ ctx }) {
   );
 }
 
+const NOTIF_CATEGORIES = [
+  { key: 'order',    label: 'Заявки (статусы, оплата)', icon: '📋' },
+  { key: 'task',     label: 'Задачи (выезд)',           icon: '🔧' },
+  { key: 'grind',    label: 'Помол кофе',               icon: '☕' },
+  { key: 'writeoff', label: 'Списания',                 icon: '🗑️' },
+  { key: 'contract', label: 'Договоры',                 icon: '📄' },
+  { key: 'shipment', label: 'Реестр отгрузок',          icon: '📦' },
+  { key: 'manager_task', label: 'Вопросы / поручения',  icon: '📌' },
+  { key: 'feedback', label: 'Обратная связь',           icon: '💬' },
+  { key: 'general',  label: 'Прочие уведомления',        icon: '🔔' },
+];
+
+function MyNotificationsScreen({ ctx }) {
+  const { currentUser, goBack, updateMyTgPrefs, showToast } = ctx;
+  const [prefs, setPrefs] = useState(() => ({ ...(currentUser?.tg_notif_prefs || {}) }));
+  const [saving, setSaving] = useState(false);
+
+  const toggle = (key) => setPrefs(p => ({ ...p, [key]: p[key] === false ? true : false }));
+
+  const save = async () => {
+    setSaving(true);
+    const r = await updateMyTgPrefs(prefs);
+    setSaving(false);
+    if (r?.error) return showToast('Ошибка: ' + r.error);
+    showToast('Настройки сохранены');
+    goBack();
+  };
+
+  return (
+    <div>
+      <button onClick={goBack} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--mc-muted)', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 8, padding: 0 }}>
+        <ChevronLeft size={15} /> Назад
+      </button>
+      <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--mc-text)', margin: '0 0 4px' }}>🔔 Мои уведомления</h1>
+      <div style={{ fontSize: 12, color: 'var(--mc-muted)', marginBottom: 16 }}>
+        Выберите, о чём получать личные сообщения в Telegram. Отключённые категории перестанут вам приходить.
+      </div>
+
+      <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 14, overflow: 'hidden', marginBottom: 16 }}>
+        {NOTIF_CATEGORIES.map((c, i) => {
+          const on = prefs[c.key] !== false;
+          return (
+            <div key={c.key} onClick={() => toggle(c.key)}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', cursor: 'pointer', borderBottom: i < NOTIF_CATEGORIES.length - 1 ? '1px solid var(--mc-border-light)' : 'none' }}>
+              <span style={{ fontSize: 18 }}>{c.icon}</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--mc-text)' }}>{c.label}</span>
+              <div style={{ width: 42, height: 24, borderRadius: 12, background: on ? '#22c55e' : 'var(--mc-border)', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+                <div style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 2px rgba(0,0,0,.2)' }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <button onClick={save} disabled={saving}
+        style={{ width: '100%', padding: 13, background: saving ? 'var(--mc-border)' : '#297b8a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: saving ? 'not-allowed' : 'pointer' }}>
+        {saving ? 'Сохраняем…' : 'Сохранить'}
+      </button>
+    </div>
+  );
+}
+
 function DashboardHome({ ctx, title }) {
   const { db, currentUser, navigate } = ctx;
 
@@ -4866,6 +5001,9 @@ function DashboardHome({ ctx, title }) {
       {/* ── Реестр отгрузок — оплачено / не оплачено ── */}
       <ShipmentRegistryHomeTile ctx={ctx} />
 
+      {/* ── Вопросы / поручения (руководители) ── */}
+      <ManagerTasksHomeTile ctx={ctx} />
+
       {/* Виджет доставок — только для курьера */}
       {has('delivery_courier') && <CourierDeliveryWidget ctx={ctx} />}
 
@@ -4874,6 +5012,20 @@ function DashboardHome({ ctx, title }) {
 
       {/* PIN для входа в браузере — для всех пользователей */}
       <MyPinButton ctx={ctx} />
+
+      {/* Личные настройки уведомлений */}
+      <button onClick={() => navigate({ name: 'my_notifications' })}
+        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-3"
+        style={{ background: 'white', border: '1px solid var(--mc-border)' }}>
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--mc-active-item)' }}>
+          <Bell size={16} style={{ color: '#A8A8AE' }} />
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <div className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>Мои уведомления</div>
+          <div className="text-[11px]" style={{ color: '#64748B' }}>Какие сообщения получать в Telegram</div>
+        </div>
+        <ChevronRight size={16} style={{ color: 'var(--mc-muted)' }} />
+      </button>
 
       <PageHeader
         title={title || 'Главная'}
@@ -5662,7 +5814,7 @@ function AdminDeleteButton({ ctx, kind, id, label, onDeleted }) {
 }
 
 function OrderDetailScreen({ ctx, orderId }) {
-  const { db, currentUser, effectiveRole, goBack, changeStatus, closePickupOrder, archiveDeliveredOrder, editOrder, showToast } = ctx;
+  const { db, currentUser, effectiveRole, goBack, changeStatus, closePickupOrder, archiveDeliveredOrder, editOrder, revertLastAction, showToast } = ctx;
   const [editModalOpen, setEditModalOpen] = useState(false);
   const order = db.orders.find(o => o.id === orderId);
   if (!order) return <div className="p-6">Заявка не найдена</div>;
@@ -5772,6 +5924,7 @@ function OrderDetailScreen({ ctx, orderId }) {
                       {l.event === 'status' && <>{STATUS[l.from]?.short || l.from} → <strong>{STATUS[l.to]?.short || l.to}</strong></>}
                       {l.event === 'pickup_closed' && 'Заказ выдан клиенту'}
                       {l.event === 'delivered' && 'Доставлен клиенту'}
+                      {l.event === 'revert' && <>↩️ Откат: {STATUS[l.from]?.short || l.from} → <strong>{STATUS[l.to]?.short || l.to}</strong></>}
                       {l.event === 'edit' && (
                         <div>
                           <span style={{ color: 'var(--mc-muted)' }}>Изменено:</span>
@@ -5855,6 +6008,14 @@ function OrderDetailScreen({ ctx, orderId }) {
             <FieldRow label="Менеджер" value={author ? `${author.first_name} ${author.last_name}` : '—'} />
             <FieldRow label="Создана" value={fmtDateTime(order.created_at)} />
             {order.kind === 'quick' && <FieldRow label="Тип" value="Быстрая B2B" />}
+            {order.paid_amount != null && (
+              <FieldRow label="Поступило" value={
+                <span style={{ color: (Number(order.paid_amount) < Number(order.total_amount)) ? '#D97706' : '#16a34a', fontWeight: 700 }}>
+                  {fmtNum(order.paid_amount)} ₸
+                  {Number(order.paid_amount) < Number(order.total_amount) && ` (недоплата ${fmtNum(Number(order.total_amount) - Number(order.paid_amount))})`}
+                </span>
+              } />
+            )}
           </Card>
 
           {/* Статус доставки из реестра (если заявка в реестре) */}
@@ -5872,6 +6033,24 @@ function OrderDetailScreen({ ctx, orderId }) {
               style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}
             >
               <Edit3 size={14} /> Редактировать заявку
+            </button>
+          )}
+
+          {/* Отменить последнее действие (откат статуса) */}
+          {['admin', 'warehouse', 'b2b', 'senior_manager', 'director'].includes(currentUser.role)
+            && order.status !== 'new' && order.status !== 'cancelled'
+            && (order.log || []).some(l => ['status', 'pickup_closed', 'delivered'].includes(l.event)) && (
+            <button
+              onClick={() => {
+                if (!confirm('Отменить последнее действие и вернуть предыдущий статус?')) return;
+                const r = revertLastAction(order.id);
+                if (r?.error) return showToast(r.error);
+                showToast(`Откат: статус → ${STATUS[r.to]?.label || r.to}`);
+              }}
+              className="w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+              style={{ background: '#FFF7ED', color: '#C2410C', border: '1px solid #FED7AA' }}
+            >
+              <ArrowLeftRight size={14} /> Отменить последнее действие
             </button>
           )}
 
@@ -6161,15 +6340,22 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
   const isLegal = order.client_type === 'legal';
   const needsPDF = to === 'invoiced' && isLegal;
   const needsShipMeta = to === 'shipped';
+  const needsPayment = to === 'paid';
   const isCancellation = to === 'cancelled';
 
   const [pdfFile, setPdfFile] = useState(null);
   const [docNo, setDocNo] = useState(needsShipMeta ? '00ЦТ-' : '');
   const [shipDate, setShipDate] = useState(new Date().toISOString().slice(0, 10));
   const [cancelReason, setCancelReason] = useState('');
+  const [paidAmount, setPaidAmount] = useState(needsPayment ? String(order.total_amount || '') : '');
 
   const docValid = !needsShipMeta || isValidDocNo(docNo);
-  const canConfirm = (!needsPDF || !!pdfFile) && (!needsShipMeta || (docValid && shipDate)) && (!isCancellation || cancelReason.trim().length > 0);
+  const paidNum = Number(paidAmount) || 0;
+  const shortfall = needsPayment ? (Number(order.total_amount) || 0) - paidNum : 0;
+  const canConfirm = (!needsPDF || !!pdfFile)
+    && (!needsShipMeta || (docValid && shipDate))
+    && (!needsPayment || paidNum > 0)
+    && (!isCancellation || cancelReason.trim().length > 0);
 
   const title = isCancellation ? 'Отменить заявку?' : `Перевести в «${STATUS[to].label}»?`;
 
@@ -6241,7 +6427,34 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
           </>
         )}
 
-        {!needsPDF && !needsShipMeta && !isCancellation && (
+        {needsPayment && (
+          <div>
+            <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>
+              Сумма поступивших денег, ₸
+            </label>
+            <input
+              type="number" inputMode="numeric" value={paidAmount} autoFocus
+              onChange={e => setPaidAmount(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg outline-none font-bold"
+              style={{ border: `1px solid ${shortfall > 0 ? '#F59E0B' : 'var(--mc-border)'}`, fontSize: 16, color: 'var(--mc-text)' }}
+            />
+            <div className="text-[11px] mt-1" style={{ color: 'var(--mc-muted)' }}>
+              По заявке: {fmtNum(order.total_amount)} ₸
+            </div>
+            {shortfall > 0 && (
+              <div className="text-xs mt-2 p-2 rounded-lg" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                ⚠ Недоплата {fmtNum(shortfall)} ₸ — менеджеру уйдёт уведомление
+              </div>
+            )}
+            {shortfall < 0 && (
+              <div className="text-xs mt-2 p-2 rounded-lg" style={{ background: '#EFF6FF', color: '#1D4ED8' }}>
+                Переплата {fmtNum(-shortfall)} ₸
+              </div>
+            )}
+          </div>
+        )}
+
+        {!needsPDF && !needsShipMeta && !needsPayment && !isCancellation && (
           <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>Подтвердите смену статуса.</div>
         )}
 
@@ -6253,6 +6466,7 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
               const meta = {};
               if (needsPDF) meta.pdf = pdfFile;
               if (needsShipMeta) { meta.doc_no = docNo.trim(); meta.shipped_at = new Date(shipDate).toISOString(); }
+              if (needsPayment) { meta.paid_amount = paidNum; meta.shortfall = shortfall > 0 ? shortfall : 0; }
               if (isCancellation) meta.reason = cancelReason.trim();
               onConfirm(meta);
             }}
@@ -12921,6 +13135,7 @@ function NotificationsScreen({ ctx }) {
         case 'writeoff': return navigate({ name: 'writeoff_detail', writeOffId: n.link_id });
         case 'contract': return navigate({ name: 'contract_detail', contractId: n.link_id });
         case 'shipment': return navigate({ name: 'shipment_registry' });
+        case 'manager_task': return navigate({ name: 'manager_tasks' });
         case 'access':   return navigate({ name: 'admin_requests' });
         default: return;
       }
@@ -13075,10 +13290,18 @@ function FeedbackScreen({ ctx }) {
    АДМИН ПАНЕЛЬ — ОБРАТНАЯ СВЯЗЬ
    ═════════════════════════════════════════════════════════════════════════ */
 
+const FB_STATUS = {
+  new:         { label: 'Новое',     color: '#3390EC', bg: '#E7F3FE' },
+  in_progress: { label: 'В работе',  color: '#F59E0B', bg: '#FEF3C7' },
+  done:        { label: 'Выполнено', color: '#22C55E', bg: '#DCFCE7' },
+  rejected:    { label: 'Отклонено', color: '#EB5757', bg: '#FEE2E2' },
+};
+
 function AdminFeedbackScreen({ ctx }) {
-  const { db, goBack } = ctx;
+  const { db, goBack, currentUser, setDb, showToast, notify } = ctx;
   const [feedbacks, setFeedbacks] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [draft, setDraft] = React.useState({}); // fbId -> comment
 
   React.useEffect(() => {
     (async () => {
@@ -13092,6 +13315,34 @@ function AdminFeedbackScreen({ ctx }) {
     })();
   }, []);
 
+  const setStatus = async (fb, status) => {
+    const comment = (draft[fb.id] ?? fb.admin_comment ?? '').trim();
+    if ((status === 'done' || status === 'rejected') && !comment) {
+      return showToast('Добавьте комментарий перед закрытием');
+    }
+    const patch = {
+      status,
+      admin_comment: comment || null,
+      resolved_by: (status === 'done' || status === 'rejected') ? currentUser.id : null,
+      resolved_at: (status === 'done' || status === 'rejected') ? new Date().toISOString() : null,
+    };
+    const { error } = await supabase.from('feedback_messages').update(patch).eq('id', fb.id);
+    if (error) return showToast('Ошибка: ' + error.message);
+    setFeedbacks(list => list.map(x => x.id === fb.id ? { ...x, ...patch } : x));
+
+    // Уведомление постановщику при «Выполнено»
+    if (status === 'done' && fb.sender_id && fb.sender_id !== currentUser.id && notify) {
+      const notifObj = notify({
+        recipient_id: fb.sender_id,
+        title: '✅ Ваша обратная связь выполнена',
+        body: `Принята в работу и выполнена:\n${comment}`,
+        link_kind: 'feedback',
+      });
+      setDb(d => ({ ...d, notifications: [notifObj, ...(d.notifications || [])] }));
+    }
+    showToast(`Статус: ${FB_STATUS[status].label}`);
+  };
+
   return (
     <div>
       <PageHeader title="Обратная связь" subtitle={loading ? 'Загрузка...' : `${feedbacks.length} сообщений`} onBack={goBack} />
@@ -13101,6 +13352,8 @@ function AdminFeedbackScreen({ ctx }) {
         <div className="space-y-2">
           {feedbacks.map(fb => {
             const author = db.users.find(u => u.id === fb.sender_id);
+            const st = FB_STATUS[fb.status || 'new'];
+            const commentVal = draft[fb.id] ?? fb.admin_comment ?? '';
             return (
               <div key={fb.id} className="bg-white rounded-xl p-4" style={{ border: '1px solid var(--mc-border)' }}>
                 <div className="flex items-start gap-3">
@@ -13108,14 +13361,35 @@ function AdminFeedbackScreen({ ctx }) {
                     {author?.first_name?.[0]}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm" style={{ color: 'var(--mc-text)' }}>
-                      {author ? `${author.first_name} ${author.last_name}` : 'Неизвестный пользователь'}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-semibold text-sm" style={{ color: 'var(--mc-text)' }}>
+                        {author ? `${author.first_name} ${author.last_name}` : 'Неизвестный пользователь'}
+                      </div>
+                      <span style={{ background: st.bg, color: st.color, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 12, whiteSpace: 'nowrap' }}>{st.label}</span>
                     </div>
-                    <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>
-                      {fmtDateTime(fb.at)}
-                    </div>
-                    <div className="text-sm mt-2" style={{ color: 'var(--mc-text)' }}>
-                      {fb.message}
+                    <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>{fmtDateTime(fb.at)}</div>
+                    <div className="text-sm mt-2" style={{ color: 'var(--mc-text)' }}>{fb.message}</div>
+
+                    {/* Комментарий админа */}
+                    <textarea
+                      value={commentVal}
+                      onChange={e => setDraft(d => ({ ...d, [fb.id]: e.target.value }))}
+                      placeholder="Комментарий (виден сотруднику при «Выполнено»)"
+                      rows={2}
+                      className="w-full mt-3 px-3 py-2 rounded-lg outline-none"
+                      style={{ border: '1px solid var(--mc-border)', fontSize: 13, color: 'var(--mc-text)', background: 'var(--mc-surface)', resize: 'vertical', boxSizing: 'border-box' }}
+                    />
+                    {/* Кнопки статусов */}
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {['new', 'in_progress', 'done', 'rejected'].map(s => (
+                        <button key={s} onClick={() => setStatus(fb, s)}
+                          style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                            border: `1px solid ${fb.status === s ? FB_STATUS[s].color : 'var(--mc-border)'}`,
+                            background: fb.status === s ? FB_STATUS[s].bg : 'var(--mc-surface)',
+                            color: fb.status === s ? FB_STATUS[s].color : 'var(--mc-muted)' }}>
+                          {FB_STATUS[s].label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
