@@ -1152,6 +1152,12 @@ function App() {
       for (const [id, row] of currMap) {
         const prevRow = prevMap.get(id);
         if (!prevRow || JSON.stringify(prevRow) !== JSON.stringify(row)) {
+          // Защита от FK: не пушим заказ доставки, чей реестр отсутствует локально
+          // (реестр был удалён — заказ остался «сиротой» в кэше). Иначе ошибка FK.
+          if (stateKey === 'deliveryOrders' && row.registry_id
+              && !(db.deliveryRegistries || []).some(r => r.id === row.registry_id)) {
+            continue;
+          }
           upsertRow(stateKey, row).catch(e => {
             // eslint-disable-next-line no-console
             console.error(`[sync] ${stateKey} upsert ${id}:`, e);
