@@ -1846,6 +1846,18 @@ function App() {
     }
   };
 
+  // Личная настройка главного экрана (какие блоки показывать)
+  const updateMyHomePrefs = async (prefs) => {
+    try {
+      const { error } = await supabase.from('users').update({ home_prefs: prefs }).eq('id', currentUser.id);
+      if (error) throw error;
+      setDb(d => ({ ...d, users: d.users.map(u => u.id === currentUser.id ? { ...u, home_prefs: prefs } : u) }));
+      return { ok: true };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+
   // Личные настройки категорий TG-уведомлений (каждый сам себе)
   const updateMyTgPrefs = async (prefs) => {
     try {
@@ -3219,7 +3231,7 @@ function App() {
     bootStatus,
     loginViaTelegram, logout,
     createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, cancelOrder, editOrder, revertLastAction,
-    approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, updateMyTgPrefs, transferAdmin,
+    approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, updateMyTgPrefs, updateMyHomePrefs, transferAdmin,
     createTask, startTask, completeTask, rescheduleTask, deleteTask, reassignTask, editTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
@@ -4462,6 +4474,7 @@ function Screen({ ctx }) {
     case 'sales_report': return <SalesReportScreen ctx={ctx} />;
     case 'daily_revenue': return <DailyRevenueScreen ctx={ctx} />;
     case 'my_notifications': return <MyNotificationsScreen ctx={ctx} />;
+    case 'home_customize': return <HomeCustomizeScreen ctx={ctx} />;
     case 'manager_tasks': return <ManagerTasksScreen ctx={ctx} />;
     case 'shipment_registry': return <ShipmentRegistryScreen ctx={ctx} />;
     case 'create_order': return <CreateOrderScreen ctx={ctx} />;
@@ -4808,6 +4821,87 @@ function MyNotificationsScreen({ ctx }) {
   );
 }
 
+function HomeCustomizeScreen({ ctx }) {
+  const { db, currentUser, goBack, updateMyHomePrefs, showToast } = ctx;
+  const has = (p) => hasPermission(db, currentUser, p);
+  const isAdmin = currentUser.role === 'admin';
+  const isMgr = ['admin', 'director', 'senior_manager'].includes(currentUser.role);
+
+  const items = [
+    { key: 'w_sales',    label: '📊 Выполнение плана',         show: () => true, section: 'Блоки' },
+    { key: 'w_shipment', label: '📦 Реестр отгрузок (сводка)', show: () => has('shipment_view'), section: 'Блоки' },
+    { key: 'w_mtasks',   label: '📌 Вопросы / поручения',       show: () => isMgr, section: 'Блоки' },
+    { key: 'w_quick',    label: '⚡ Быстрые действия',           show: () => isAdmin, section: 'Блоки' },
+    { key: 'w_recent',   label: '🧾 Последние заявки',           show: () => has('orders_view_all') || has('orders_view_own'), section: 'Блоки' },
+    { key: 'orders',     label: 'Заявки на закуп',     show: () => has('orders_view_all') || has('orders_view_own') || has('orders_create'), section: 'Плитки' },
+    { key: 'tasks',      label: 'Задачи (выезд)',      show: () => has('tasks_view_own') || has('tasks_self_assign') || has('tasks_calendar_all'), section: 'Плитки' },
+    { key: 'grinds',     label: 'Помол кофе',          show: () => has('grind_view_all') || has('grind_create') || has('grind_fulfill'), section: 'Плитки' },
+    { key: 'writeoffs',  label: 'Списания',            show: () => has('writeoff_view_all') || has('writeoff_create') || has('writeoff_approve') || has('writeoff_finalize'), section: 'Плитки' },
+    { key: 'contracts',  label: 'Договоры',            show: () => has('contract_view_all') || has('contract_create') || has('contract_take'), section: 'Плитки' },
+    { key: 'deliveries', label: 'Доставки',            show: () => has('delivery_manage') || has('delivery_view_all'), section: 'Плитки' },
+    { key: 'shipment',   label: 'Реестр отгрузок',     show: () => has('shipment_view'), section: 'Плитки' },
+    { key: 'requests',   label: 'Запросы доступа',     show: () => isAdmin, section: 'Плитки' },
+    { key: 'users',      label: 'Пользователи',        show: () => isAdmin, section: 'Плитки' },
+    { key: 'products',   label: 'Товары / прайс',      show: () => isAdmin, section: 'Плитки' },
+  ].filter(it => it.show());
+
+  const [prefs, setPrefs] = useState(() => ({ ...(currentUser?.home_prefs || {}) }));
+  const [saving, setSaving] = useState(false);
+  const toggle = (k) => setPrefs(p => ({ ...p, [k]: p[k] === false ? true : false }));
+
+  const save = async () => {
+    setSaving(true);
+    const r = await updateMyHomePrefs(prefs);
+    setSaving(false);
+    if (r?.error) return showToast('Ошибка: ' + r.error);
+    showToast('Главный экран настроен');
+    goBack();
+  };
+
+  const sections = ['Блоки', 'Плитки'];
+
+  return (
+    <div>
+      <button onClick={goBack} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--mc-muted)', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 8, padding: 0 }}>
+        <ChevronLeft size={15} /> Назад
+      </button>
+      <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--mc-text)', margin: '0 0 4px' }}>⚙️ Настроить главный экран</h1>
+      <div style={{ fontSize: 12, color: 'var(--mc-muted)', marginBottom: 16 }}>
+        Выключите то, что вам не нужно на главной. Настройка только ваша.
+      </div>
+
+      {sections.map(sec => {
+        const secItems = items.filter(it => it.section === sec);
+        if (secItems.length === 0) return null;
+        return (
+          <div key={sec} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>{sec}</div>
+            <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 14, overflow: 'hidden' }}>
+              {secItems.map((it, i) => {
+                const on = prefs[it.key] !== false;
+                return (
+                  <div key={it.key} onClick={() => toggle(it.key)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', cursor: 'pointer', borderBottom: i < secItems.length - 1 ? '1px solid var(--mc-border-light)' : 'none' }}>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: on ? 'var(--mc-text)' : 'var(--mc-muted)' }}>{it.label}</span>
+                    <div style={{ width: 42, height: 24, borderRadius: 12, background: on ? '#22c55e' : 'var(--mc-border)', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+                      <div style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 2px rgba(0,0,0,.2)' }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      <button onClick={save} disabled={saving}
+        style={{ width: '100%', padding: 13, background: saving ? 'var(--mc-border)' : '#297b8a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: saving ? 'not-allowed' : 'pointer' }}>
+        {saving ? 'Сохраняем…' : 'Сохранить'}
+      </button>
+    </div>
+  );
+}
+
 function DashboardHome({ ctx, title }) {
   const { db, currentUser, navigate } = ctx;
 
@@ -4884,7 +4978,7 @@ function DashboardHome({ ctx, title }) {
   // Заявки на закуп
   if (has('orders_view_all') || has('orders_view_own') || has('orders_create')) {
     tiles.push({
-      icon: FileText, label: 'Заявки на закуп',
+      key: 'orders', icon: FileText, label: 'Заявки на закуп',
       value: stats.orders.active,
       hint: stats.orders.archived > 0 ? `+${stats.orders.archived} в архиве` : 'активных',
       color: '#3390EC',
@@ -4894,7 +4988,7 @@ function DashboardHome({ ctx, title }) {
   // Задачи (выездные)
   if (has('tasks_view_own') || has('tasks_self_assign') || has('tasks_calendar_all')) {
     tiles.push({
-      icon: ClipboardList, label: 'Задачи (выезд)',
+      key: 'tasks', icon: ClipboardList, label: 'Задачи (выезд)',
       value: stats.tasks.active,
       hint: stats.tasks.today > 0 ? `${stats.tasks.today} на сегодня` : 'активных',
       color: '#F59E0B',
@@ -4904,7 +4998,7 @@ function DashboardHome({ ctx, title }) {
   // Помол кофе
   if (has('grind_view_all') || has('grind_create') || has('grind_fulfill')) {
     tiles.push({
-      icon: Coffee, label: 'Помол кофе',
+      key: 'grinds', icon: Coffee, label: 'Помол кофе',
       value: stats.grinds.active,
       hint: stats.grinds.ready > 0 ? `${stats.grinds.ready} готово` : 'активных',
       color: '#8B5CF6',
@@ -4914,7 +5008,7 @@ function DashboardHome({ ctx, title }) {
   // Списания
   if (has('writeoff_view_all') || has('writeoff_create') || has('writeoff_approve') || has('writeoff_finalize')) {
     tiles.push({
-      icon: Banknote, label: 'Списания',
+      key: 'writeoffs', icon: Banknote, label: 'Списания',
       value: stats.writeOffs.pending,
       hint: stats.writeOffs.pending > 0 ? 'ждут одобрения' : `всего: ${stats.writeOffs.total}`,
       color: '#EB5757',
@@ -4924,7 +5018,7 @@ function DashboardHome({ ctx, title }) {
   // Договоры
   if (has('contract_view_all') || has('contract_create') || has('contract_take')) {
     tiles.push({
-      icon: FileText, label: 'Договоры',
+      key: 'contracts', icon: FileText, label: 'Договоры',
       value: stats.contracts.pending + stats.contracts.inProgress,
       hint: stats.contracts.pending > 0 ? `${stats.contracts.pending} новых` : `всего: ${stats.contracts.total}`,
       color: '#0EA5E9',
@@ -4935,7 +5029,7 @@ function DashboardHome({ ctx, title }) {
   if (has('delivery_manage') || has('delivery_view_all')) {
     const activeRegs = (db.deliveryRegistries || []).filter(r => r.status === 'active');
     tiles.push({
-      icon: Truck, label: 'Доставки',
+      key: 'deliveries', icon: Truck, label: 'Доставки',
       value: activeRegs.length,
       hint: activeRegs.length > 0 ? 'активных реестров' : 'нет активных',
       color: '#0891B2',
@@ -4948,7 +5042,7 @@ function DashboardHome({ ctx, title }) {
     const monthShip = (db.shipmentRegistry || []).filter(r => r.month === mk);
     const unpaidShip = monthShip.filter(r => !r.paid);
     tiles.push({
-      icon: Package, label: 'Реестр отгрузок',
+      key: 'shipment', icon: Package, label: 'Реестр отгрузок',
       value: unpaidShip.length,
       hint: unpaidShip.length > 0 ? 'ждут оплаты' : `всего: ${monthShip.length}`,
       color: '#D97706',
@@ -4959,7 +5053,7 @@ function DashboardHome({ ctx, title }) {
   // Только для админа
   if (stats.isAdmin) {
     tiles.push({
-      icon: Bell, label: 'Запросы доступа',
+      key: 'requests', icon: Bell, label: 'Запросы доступа',
       value: stats.pendingUsers,
       hint: stats.pendingUsers > 0 ? 'ждут одобрения' : 'нет',
       color: stats.pendingUsers > 0 ? '#FBBF24' : '#64748B',
@@ -4967,14 +5061,14 @@ function DashboardHome({ ctx, title }) {
       highlight: stats.pendingUsers > 0,
     });
     tiles.push({
-      icon: Users, label: 'Пользователи',
+      key: 'users', icon: Users, label: 'Пользователи',
       value: db.users.filter(u => u.active).length,
       hint: 'активных',
       color: '#10B981',
       go: () => navigate({ name: 'admin_users' }),
     });
     tiles.push({
-      icon: Package, label: 'Товары / прайс',
+      key: 'products', icon: Package, label: 'Товары / прайс',
       value: stats.totalProducts,
       hint: 'в каталоге',
       color: '#A78BFA',
@@ -4984,7 +5078,7 @@ function DashboardHome({ ctx, title }) {
   // Уведомления — для всех
   if (stats.unreadNotifications > 0) {
     tiles.unshift({
-      icon: Bell, label: 'Уведомления',
+      key: 'notifications', icon: Bell, label: 'Уведомления',
       value: stats.unreadNotifications,
       hint: 'непрочитанных',
       color: '#EB5757',
@@ -4993,19 +5087,24 @@ function DashboardHome({ ctx, title }) {
     });
   }
 
+  // ── Применяем личные настройки главного экрана ──
+  const homePrefs = currentUser.home_prefs || {};
+  const hidden = (key) => homePrefs[key] === false;
+  const visibleTiles = tiles.filter(t => !t.key || !hidden(t.key));
+
   return (
     <div>
       {/* Карточка профиля пользователя — первой */}
       <UserHeroCard user={currentUser} db={db} />
 
       {/* ── Отчёт ОП — крупный акцентный тайл ── */}
-      <SalesReportHomeTile ctx={ctx} />
+      {!hidden('w_sales') && <SalesReportHomeTile ctx={ctx} />}
 
       {/* ── Реестр отгрузок — оплачено / не оплачено ── */}
-      <ShipmentRegistryHomeTile ctx={ctx} />
+      {!hidden('w_shipment') && <ShipmentRegistryHomeTile ctx={ctx} />}
 
       {/* ── Вопросы / поручения (руководители) ── */}
-      <ManagerTasksHomeTile ctx={ctx} />
+      {!hidden('w_mtasks') && <ManagerTasksHomeTile ctx={ctx} />}
 
       {/* Виджет доставок — только для курьера */}
       {has('delivery_courier') && <CourierDeliveryWidget ctx={ctx} />}
@@ -5026,6 +5125,20 @@ function DashboardHome({ ctx, title }) {
         <div className="flex-1 min-w-0 text-left">
           <div className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>Мои уведомления</div>
           <div className="text-[11px]" style={{ color: '#64748B' }}>Какие сообщения получать в Telegram</div>
+        </div>
+        <ChevronRight size={16} style={{ color: 'var(--mc-muted)' }} />
+      </button>
+
+      {/* Настроить главный экран */}
+      <button onClick={() => navigate({ name: 'home_customize' })}
+        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-3"
+        style={{ background: 'white', border: '1px solid var(--mc-border)' }}>
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--mc-active-item)' }}>
+          <Settings size={16} style={{ color: '#A8A8AE' }} />
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <div className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>Настроить главный экран</div>
+          <div className="text-[11px]" style={{ color: '#64748B' }}>Скрыть лишние блоки и плитки</div>
         </div>
         <ChevronRight size={16} style={{ color: 'var(--mc-muted)' }} />
       </button>
@@ -5122,7 +5235,7 @@ function DashboardHome({ ctx, title }) {
 
       {/* Плитки дашборда */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-        {tiles.map((t, i) => {
+        {visibleTiles.map((t, i) => {
           const Icon = t.icon;
           return (
             <button
@@ -5152,7 +5265,7 @@ function DashboardHome({ ctx, title }) {
       </div>
 
       {/* Быстрые действия для админа */}
-      {stats.isAdmin && (
+      {stats.isAdmin && !hidden('w_quick') && (
         <div className="flex flex-wrap gap-2 mb-6">
           <ActionPill label="Создать заявку"      onClick={() => navigate({ name: 'create_order' })} icon={Plus} />
           <ActionPill label="Быстрая B2B"         onClick={() => navigate({ name: 'create_quick' })} icon={Sparkles} />
@@ -5162,7 +5275,7 @@ function DashboardHome({ ctx, title }) {
       )}
 
       {/* Список последних заявок, если есть */}
-      {stats.orders.active > 0 && (has('orders_view_all') || has('orders_view_own')) && (
+      {!hidden('w_recent') && stats.orders.active > 0 && (has('orders_view_all') || has('orders_view_own')) && (
         <>
           <h2 className="display-font text-xl mb-3" style={{ color: 'var(--mc-text)' }}>Последние активные заявки</h2>
           <OrdersList orders={db.orders.filter(o => o.status !== 'archived' && o.status !== 'cancelled').slice(0, 5)} ctx={ctx} />
