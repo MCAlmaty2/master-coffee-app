@@ -20,6 +20,7 @@ export const SYNC_TABLES = {
   deliveryOrders:       { table: 'delivery_orders',     pk: 'id'  },
   clients:              { table: 'clients',             pk: 'id'  },
   salesReports:         { table: 'sales_reports',       pk: 'month' },
+  shipmentRegistry:     { table: 'shipment_registry',   pk: 'id' },
   // feedback_messages и error_reports пишутся напрямую через supabase.from(),
   // поэтому их не включаем в автосинхронизацию.
 };

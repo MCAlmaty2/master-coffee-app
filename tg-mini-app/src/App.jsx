@@ -10,6 +10,7 @@ import {
 import { supabase } from './supabase/client';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
 import { SalesReportScreen, SalesReportHomeTile } from './screens/SalesReportScreen';
+import { ShipmentRegistryScreen, ShipmentRegistryHomeTile } from './screens/ShipmentRegistryScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -4314,6 +4315,7 @@ function Screen({ ctx }) {
       // Кастомная роль — permission-aware фолбэк
       return <DashboardHome ctx={ctx} title="Главная" />;
     case 'sales_report': return <SalesReportScreen ctx={ctx} />;
+    case 'shipment_registry': return <ShipmentRegistryScreen ctx={ctx} />;
     case 'create_order': return <CreateOrderScreen ctx={ctx} />;
     case 'create_quick': return <CreateQuickScreen ctx={ctx} />;
     case 'orders_list': return <OrdersListScreen ctx={ctx} />;
@@ -4728,6 +4730,20 @@ function DashboardHome({ ctx, title }) {
       go: () => navigate({ name: 'delivery_registries' }),
     });
   }
+  // Реестр отгрузок (менеджеры + кассир)
+  if (['admin', 'senior_manager', 'director', 'b2b', 'cashier', 'observer'].includes(currentUser.role)) {
+    const mk = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const monthShip = (db.shipmentRegistry || []).filter(r => r.month === mk);
+    const unpaidShip = monthShip.filter(r => !r.paid);
+    tiles.push({
+      icon: Package, label: 'Реестр отгрузок',
+      value: unpaidShip.length,
+      hint: unpaidShip.length > 0 ? 'ждут оплаты' : `всего: ${monthShip.length}`,
+      color: '#D97706',
+      go: () => navigate({ name: 'shipment_registry' }),
+      highlight: unpaidShip.length > 0 && currentUser.role === 'cashier',
+    });
+  }
   // Только для админа
   if (stats.isAdmin) {
     tiles.push({
@@ -4772,6 +4788,9 @@ function DashboardHome({ ctx, title }) {
 
       {/* ── Отчёт ОП — крупный акцентный тайл ── */}
       <SalesReportHomeTile ctx={ctx} />
+
+      {/* ── Реестр отгрузок — оплачено / не оплачено ── */}
+      <ShipmentRegistryHomeTile ctx={ctx} />
 
       {/* Виджет доставок — только для курьера */}
       {has('delivery_courier') && <CourierDeliveryWidget ctx={ctx} />}
