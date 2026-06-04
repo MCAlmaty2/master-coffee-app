@@ -67,8 +67,18 @@ function doSync() {
     }
   });
 
-  if (allRows.length) postBatch(allRows);
-  return allRows.length;
+  // Дедупликация по дате (один день может встретиться в двух листах) — иначе
+  // Postgres ругается "ON CONFLICT cannot affect row a second time". Берём последнее значение.
+  var byDate = {};
+  allRows.forEach(function (r) {
+    var ex = byDate[r.date];
+    // при дубле даты оставляем строку с большей суммой (реальные данные важнее пустой)
+    if (!ex || Math.abs(r.amount) > Math.abs(ex.amount)) byDate[r.date] = r;
+  });
+  var deduped = Object.keys(byDate).map(function (k) { return byDate[k]; });
+
+  if (deduped.length) postBatch(deduped);
+  return deduped.length;
 }
 
 // ── Хелперы ───────────────────────────────────────────────────────
