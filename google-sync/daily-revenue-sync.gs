@@ -50,19 +50,15 @@ function doSync() {
   var allRows = [];
 
   ss.getSheets().forEach(function (sheet) {
-    var monthKey = sheetToMonthKey(sheet.getName());
-    if (!monthKey) return;
     var values = sheet.getDataRange().getValues();
     // строка 1 — заголовки, данные со 2-й
     for (var i = 1; i < values.length; i++) {
       var r = values[i];
-      var dateCell = r[0];
-      // стоп на строках "Cумма"/"Ср знач" и пустых
-      if (!(dateCell instanceof Date)) continue;
-      var dateStr = Utilities.formatDate(dateCell, tz, 'yyyy-MM-dd');
+      var dateStr = toDateStr(r[0], tz);   // понимает дату, число-серийник Excel и текст
+      if (!dateStr) continue;              // строки "Cумма"/"Ср знач"/пустые — пропуск
       allRows.push({
         date:           dateStr,
-        month:          monthKey,
+        month:          dateStr.slice(0, 7),  // месяц из самой даты
         amount:         num(r[1]),   // Сумма
         sales_count:    int(r[3]),   // Кол-во продаж
         delivery_count: int(r[4]),   // Рейс
@@ -78,6 +74,22 @@ function doSync() {
 // ── Хелперы ───────────────────────────────────────────────────────
 function num(v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; }
 function int(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
+
+// Преобразует значение ячейки даты в 'YYYY-MM-DD'. Понимает:
+//  • объект Date  • число-серийник Excel (напр. 46174)  • строку «01.06.2026»/«2026-06-01»
+function toDateStr(v, tz) {
+  if (v instanceof Date && !isNaN(v.getTime())) return Utilities.formatDate(v, tz, 'yyyy-MM-dd');
+  if (typeof v === 'number' && v > 30000 && v < 80000) {
+    var d = new Date(Math.round((v - 25569) * 86400 * 1000)); // серийник Excel → дата
+    return Utilities.formatDate(d, 'UTC', 'yyyy-MM-dd');
+  }
+  var s = String(v).trim();
+  var m = s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/); // 01.06.2026
+  if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/); // 2026-06-01
+  if (m) return s;
+  return null;
+}
 
 function sheetToMonthKey(name) {
   var s = String(name).toLowerCase().replace(/[^а-яё0-9]/gi, '');
