@@ -11,6 +11,7 @@ import { supabase } from './supabase/client';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
 import { SalesReportScreen, SalesReportHomeTile } from './screens/SalesReportScreen';
 import { ShipmentRegistryScreen, ShipmentRegistryHomeTile } from './screens/ShipmentRegistryScreen';
+import { DailyRevenueScreen } from './screens/DailyRevenueScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -375,6 +376,14 @@ const STATUS = {
 };
 
 const STATUS_ORDER = ['new', 'in_work', 'invoiced', 'paid', 'shipped'];
+
+// Поток статусов зависит от способа оплаты.
+// «При получении» (on_delivery): оплата у курьера → счёт/оплата пропускаются:
+// Новая → В работе → Отгружен.
+function statusFlow(order) {
+  if (order?.payment_method === 'on_delivery') return ['new', 'in_work', 'shipped'];
+  return STATUS_ORDER;
+}
 
 const ROLES = {
   admin:          { label: 'Администратор',          short: 'Admin',        color: '#EB5757' },
@@ -4373,6 +4382,7 @@ function Screen({ ctx }) {
       // Кастомная роль — permission-aware фолбэк
       return <DashboardHome ctx={ctx} title="Главная" />;
     case 'sales_report': return <SalesReportScreen ctx={ctx} />;
+    case 'daily_revenue': return <DailyRevenueScreen ctx={ctx} />;
     case 'shipment_registry': return <ShipmentRegistryScreen ctx={ctx} />;
     case 'create_order': return <CreateOrderScreen ctx={ctx} />;
     case 'create_quick': return <CreateQuickScreen ctx={ctx} />;
@@ -5653,7 +5663,8 @@ function OrderDetailScreen({ ctx, orderId }) {
 
   const author = db.users.find(u => u.id === order.created_by);
   const isLegal = order.client_type === 'legal';
-  const currentIdx = STATUS_ORDER.indexOf(order.status);
+  const FLOW = statusFlow(order);
+  const currentIdx = FLOW.indexOf(order.status);
 
   // Редактирование — до статуса «Оплачен», для автора / менеджеров / админа
   const canEditOrder = ['new', 'in_work', 'invoiced'].includes(order.status)
@@ -5676,8 +5687,8 @@ function OrderDetailScreen({ ctx, orderId }) {
     && order.status === 'invoiced';
 
   // Следующий статус для менеджера (skip invoiced state — там только кассир)
-  const nextStatus = canManagerAdvance && currentIdx >= 0 && currentIdx < STATUS_ORDER.length - 1
-    ? STATUS_ORDER[currentIdx + 1]
+  const nextStatus = canManagerAdvance && currentIdx >= 0 && currentIdx < FLOW.length - 1
+    ? FLOW[currentIdx + 1]
     : null;
 
   const [statusModal, setStatusModal] = useState(null);
@@ -5689,7 +5700,7 @@ function OrderDetailScreen({ ctx, orderId }) {
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
           <Card>
-            <StatusTimeline status={order.status} />
+            <StatusTimeline status={order.status} order={order} />
           </Card>
 
           <Card title={isLegal ? 'Юридическое лицо' : 'Физическое лицо'}>
@@ -6105,11 +6116,12 @@ function EditOrderModal({ order, ctx, onClose, onSave }) {
   );
 }
 
-function StatusTimeline({ status }) {
-  const idx = STATUS_ORDER.indexOf(status);
+function StatusTimeline({ status, order }) {
+  const FLOW = statusFlow(order || { status });
+  const idx = FLOW.indexOf(status);
   return (
     <div className="flex items-center justify-between gap-1">
-      {STATUS_ORDER.map((s, i) => {
+      {FLOW.map((s, i) => {
         const reached = i <= idx;
         const current = i === idx;
         return (
@@ -6129,7 +6141,7 @@ function StatusTimeline({ status }) {
                 {STATUS[s].short}
               </div>
             </div>
-            {i < STATUS_ORDER.length - 1 && (
+            {i < FLOW.length - 1 && (
               <div className="h-0.5 flex-1 -mt-4 mx-0.5" style={{ background: i < idx ? STATUS[s].color : '#E7E7E9' }} />
             )}
           </React.Fragment>

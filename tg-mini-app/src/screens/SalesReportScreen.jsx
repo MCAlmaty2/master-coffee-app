@@ -4,8 +4,9 @@
  * Смотреть: все сотрудники (тайл на главной + экран)
  */
 import React, { useState, useMemo, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Save, Settings } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, Settings, CalendarDays } from 'lucide-react';
 import { supabase } from '../supabase/client';
+import { dailyRevenueSum, hasDailyRevenue } from './DailyRevenueScreen';
 
 /* ─────────────────────────────────────────────────────────────
    КОНСТАНТЫ
@@ -58,6 +59,43 @@ export const MONTHS = [
   { key: '2026-11', label: 'Ноябрь 2026',   short: 'Ноя', idx: 7, weeks: ['01-07.11','08-14.11','15-21.11','22-30.11'] },
   { key: '2026-12', label: 'Декабрь 2026',  short: 'Дек', idx: 8, weeks: ['01-07.12','08-14.12','15-21.12','22-31.12'] },
 ];
+
+const MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+function monthLabelOf(key) { const [y, m] = key.split('-'); return `${MONTH_NAMES[+m - 1]} ${y}`; }
+function monthShortOf(key) { const [, m] = key.split('-'); return MONTH_NAMES[+m - 1].slice(0, 3); }
+
+// Универсальные недельные интервалы для месяца, если из Google ещё не пришли
+function genWeeks(key) {
+  const [y, m] = key.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  const mm = String(m).padStart(2, '0');
+  const out = [];
+  for (let start = 1; start <= last; start += 7) {
+    const end = Math.min(start + 6, last);
+    out.push(`${String(start).padStart(2, '0')}-${String(end).padStart(2, '0')}.${mm}`);
+  }
+  return out;
+}
+
+// Список месяцев = захардкоженные ∪ синхронизированные из Google.
+// Недели берём из Google (sales_reports.weeks), иначе захардкоженные/сгенерированные.
+export function buildMonths(salesReports) {
+  const base = MONTHS.map(m => ({ ...m }));
+  const keys = new Set(base.map(m => m.key));
+  (salesReports || []).forEach(r => {
+    if (r.month && !keys.has(r.month)) {
+      keys.add(r.month);
+      base.push({ key: r.month, label: monthLabelOf(r.month), short: monthShortOf(r.month), idx: -1, weeks: genWeeks(r.month) });
+    }
+  });
+  return base
+    .map(m => {
+      const rec = (salesReports || []).find(r => r.month === m.key);
+      return rec?.weeks?.length ? { ...m, weeks: rec.weeks } : m;
+    })
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
 
 /* ─────────────────────────────────────────────────────────────
    ХЕЛПЕРЫ
@@ -183,21 +221,22 @@ function EditableCell({ value, onSave, readOnly, isRevenue, planMode }) {
    ГЛАВНЫЙ ЭКРАН
 ───────────────────────────────────────────────────────────── */
 export function SalesReportScreen({ ctx }) {
-  const { db, currentUser, goBack, setDb, showToast } = ctx;
-  const canEdit = CAN_EDIT_ROLES.includes(currentUser?.role);
+  const { db, currentUser, goBack, setDb, showToast, can } = ctx;
+  const canEdit = can ? can('report_edit') : CAN_EDIT_ROLES.includes(currentUser?.role);
 
   const nowKey = (() => {
     const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
   })();
 
-  const defaultMonth = MONTHS.find(m => m.key === nowKey) || MONTHS[2];
+  const monthsList = useMemo(() => buildMonths(db.salesReports), [db.salesReports]);
+  const defaultMonth = monthsList.find(m => m.key === nowKey) || monthsList[0];
   const [selectedKey, setSelectedKey]   = useState(defaultMonth.key);
   const [view, setView]                 = useState('monthly');
   const [editingPlan, setEditingPlan]   = useState(false); // режим редактирования плана
   const [saving, setSaving]             = useState(false);
 
-  const month = MONTHS.find(m => m.key === selectedKey) || MONTHS[0];
+  const month = monthsList.find(m => m.key === selectedKey) || monthsList[0];
 
   // Черновик факта и плана для текущего месяца
   const [draftFacts, setDraftFacts] = useState(() =>
@@ -253,17 +292,19 @@ export function SalesReportScreen({ ctx }) {
     }
   };
 
-  // KPI для текущего месяца
+  // KPI для текущего месяца. Выручка-факт: если есть дневная выручка — берём её сумму.
   const kpi = useMemo(() => {
     const coffFact = sumArr(draftFacts['coffee_kg']);
     const coffPlan = getPlan('coffee_kg', month.idx, draftPlans);
-    const revFact  = sumArr(draftFacts['revenue']);
+    const revFromDaily = hasDailyRevenue(db, selectedKey);
+    const revFact  = revFromDaily ? dailyRevenueSum(db, selectedKey) : sumArr(draftFacts['revenue']);
     const revPlan  = getPlan('revenue',   month.idx, draftPlans);
     return {
       coffFact, coffPlan, coffPct: coffPlan ? coffFact / coffPlan : 0,
       revFact,  revPlan,  revPct:  revPlan  ? revFact  / revPlan  : 0,
+      revFromDaily,
     };
-  }, [draftFacts, draftPlans, month]);
+  }, [draftFacts, draftPlans, month, db, selectedKey]);
 
   return (
     <div>
@@ -281,7 +322,11 @@ export function SalesReportScreen({ ctx }) {
             </div>
           </div>
           {canEdit && (
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button onClick={() => ctx.navigate({ name: 'daily_revenue' })}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', background: 'var(--mc-active-item)', color: 'var(--mc-muted)', border: '1px solid var(--mc-border)', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                <CalendarDays size={13} /> Выручка по дням
+              </button>
               <button onClick={() => setEditingPlan(p => !p)}
                 style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', background: editingPlan ? '#fef9c3' : 'var(--mc-active-item)', color: editingPlan ? '#a16207' : 'var(--mc-muted)', border: `1px solid ${editingPlan ? '#d97706' : 'var(--mc-border)'}`, borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                 <Settings size={13} /> {editingPlan ? 'Режим плана' : 'Изм. план'}
@@ -297,7 +342,7 @@ export function SalesReportScreen({ ctx }) {
 
       {/* Выбор месяца */}
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, marginBottom: 14 }}>
-        {MONTHS.map(m => {
+        {monthsList.map(m => {
           const mFacts = getMonthFacts(db.salesReports, m.key);
           const mPlans = getMonthPlans(db.salesReports, m.key);
           const cf = sumArr(mFacts['coffee_kg']);
@@ -345,7 +390,7 @@ export function SalesReportScreen({ ctx }) {
         />
       )}
       {view === 'annual' && (
-        <AnnualView salesReports={db.salesReports} />
+        <AnnualView salesReports={db.salesReports} monthsList={monthsList} />
       )}
     </div>
   );
@@ -464,7 +509,8 @@ function MonthlyView({ month, draftFacts, draftPlans, canEdit, editingPlan, kpi,
 /* ─────────────────────────────────────────────────────────────
    ГОДОВАЯ СВОДКА
 ───────────────────────────────────────────────────────────── */
-function AnnualView({ salesReports }) {
+function AnnualView({ salesReports, monthsList }) {
+  const MONTHS = monthsList;
   return (
     <div style={{ overflowX: 'auto', borderRadius: 14, border: '1px solid var(--mc-border)', background: 'var(--mc-surface)' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
@@ -591,7 +637,7 @@ export function SalesReportHomeTile({ ctx }) {
   const coffPct  = coffPlan ? coffFact / coffPlan : 0;
   const coffRem  = Math.max(0, coffPlan - coffFact);
 
-  const revFact  = sumArr(facts['revenue']);
+  const revFact  = hasDailyRevenue(db, nowKey) ? dailyRevenueSum(db, nowKey) : sumArr(facts['revenue']);
   const revPlan  = getPlan('revenue', month.idx, plans);
   const revPct   = revPlan ? revFact / revPlan : 0;
   const revRem   = Math.max(0, revPlan - revFact);

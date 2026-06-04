@@ -119,11 +119,11 @@ const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID)
    ГЛАВНЫЙ ЭКРАН
 ───────────────────────────────────────────────────────────── */
 export function ShipmentRegistryScreen({ ctx }) {
-  const { db, currentUser, goBack, setDb, showToast } = ctx;
+  const { db, currentUser, goBack, setDb, showToast, can } = ctx;
 
-  const canEdit = CAN_EDIT_ROLES.includes(currentUser?.role);
-  const canPay  = CAN_PAY_ROLES.includes(currentUser?.role);
-  const canView = canEdit || canPay || CAN_VIEW_ROLES.includes(currentUser?.role);
+  const canEdit = can ? can('shipment_edit') : CAN_EDIT_ROLES.includes(currentUser?.role);
+  const canPay  = can ? can('shipment_pay')  : CAN_PAY_ROLES.includes(currentUser?.role);
+  const canView = can ? can('shipment_view') : CAN_VIEW_ROLES.includes(currentUser?.role);
 
   const rows = db.shipmentRegistry || [];
 
@@ -480,10 +480,9 @@ function PasteModal({ onClose, onConfirm }) {
    ТАЙЛ НА ГЛАВНОЙ (кассир / менеджер)
 ───────────────────────────────────────────────────────────── */
 export function ShipmentRegistryHomeTile({ ctx }) {
-  const { db, currentUser, navigate } = ctx;
-  const canView = CAN_EDIT_ROLES.includes(currentUser?.role)
-    || CAN_PAY_ROLES.includes(currentUser?.role)
-    || CAN_VIEW_ROLES.includes(currentUser?.role);
+  const { db, currentUser, navigate, can } = ctx;
+  const canView = can ? can('shipment_view')
+    : (CAN_EDIT_ROLES.includes(currentUser?.role) || CAN_PAY_ROLES.includes(currentUser?.role) || CAN_VIEW_ROLES.includes(currentUser?.role));
   if (!canView) return null;
 
   const mk = currentMonthKey();
