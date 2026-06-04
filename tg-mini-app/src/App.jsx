@@ -4093,6 +4093,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       admin.push({ id: 'admin_requests', label: 'Запросы доступа',    icon: Bell });
       admin.push({ id: 'admin_telegram', label: 'Telegram-уведомления', icon: Send });
       admin.push({ id: 'admin_feedback', label: 'Сообщения сотрудников', icon: Mail });
+      admin.push({ id: 'admin_release_notes', label: 'Что нового (рассылка)', icon: Send });
       admin.push({ id: 'admin_errors',   label: 'Отчёты об ошибках',  icon: AlertTriangle });
       admin.push({ id: 'admin_service',  label: 'Сервис · очистка',   icon: Settings });
       groups.push({ title: 'Администрирование', items: admin });
@@ -4496,6 +4497,7 @@ function Screen({ ctx }) {
     case 'grind_detail': return <GrindDetailScreen ctx={ctx} grindId={route.grindId} />;
     case 'feedback': return <FeedbackScreen ctx={ctx} />;
     case 'admin_feedback': return <AdminFeedbackScreen ctx={ctx} />;
+    case 'admin_release_notes': return <AdminReleaseNotesScreen ctx={ctx} />;
     // ─── Доставка (менеджер) ───
     case 'delivery_registries':    return <DeliveryRegistriesScreen ctx={ctx} />;
     case 'delivery_new_registry':  return <DeliveryNewRegistryScreen ctx={ctx} />;
@@ -4752,6 +4754,7 @@ const NOTIF_CATEGORIES = [
   { key: 'shipment', label: 'Реестр отгрузок',          icon: '📦' },
   { key: 'manager_task', label: 'Вопросы / поручения',  icon: '📌' },
   { key: 'feedback', label: 'Обратная связь',           icon: '💬' },
+  { key: 'release',  label: 'Что нового (обновления)',   icon: '📣' },
   { key: 'general',  label: 'Прочие уведомления',        icon: '🔔' },
 ];
 
@@ -13396,6 +13399,105 @@ function AdminFeedbackScreen({ ctx }) {
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminReleaseNotesScreen({ ctx }) {
+  const { db, currentUser, goBack, setDb, showToast, notify } = ctx;
+  const todayISOalmaty = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Almaty' }).format(new Date());
+
+  const notes = (db.releaseNotes || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const addNote = async () => {
+    if (!title.trim()) return showToast('Введите заголовок');
+    const row = {
+      id: uid(), title: title.trim(), body: body.trim() || null,
+      note_date: todayISOalmaty(), created_by: currentUser.id,
+      created_at: new Date().toISOString(), sent_at: null,
+    };
+    const { error } = await supabase.from('release_notes').insert(row);
+    if (error) return showToast('Ошибка: ' + error.message);
+    setDb(d => ({ ...d, releaseNotes: [row, ...(d.releaseNotes || [])] }));
+    setTitle(''); setBody('');
+    showToast('Добавлено в «Что нового»');
+  };
+
+  const deleteNote = async (id) => {
+    const { error } = await supabase.from('release_notes').delete().eq('id', id);
+    if (error) return showToast('Ошибка: ' + error.message);
+    setDb(d => ({ ...d, releaseNotes: (d.releaseNotes || []).filter(n => n.id !== id) }));
+  };
+
+  // Отправить запись сейчас всем сотрудникам в личку
+  const sendNow = async (note) => {
+    if (!confirm(`Отправить «${note.title}» всем сотрудникам в Telegram сейчас?`)) return;
+    setSending(true);
+    const recipients = db.users.filter(u =>
+      u.active && u.telegram_id && u.tg_notif_enabled !== false
+      && (u.tg_notif_prefs?.release !== false) && u.id !== currentUser.id
+    );
+    const newNotifs = recipients.map(u => makeNotif(db, {
+      recipient_id: u.id,
+      title: `📣 ${note.title}`,
+      body: note.body || '',
+      link_kind: 'release',
+    }));
+    setDb(d => ({ ...d, notifications: [...newNotifs, ...d.notifications] }));
+    await supabase.from('release_notes').update({ sent_at: new Date().toISOString() }).eq('id', note.id);
+    setDb(d => ({ ...d, releaseNotes: (d.releaseNotes || []).map(n => n.id === note.id ? { ...n, sent_at: new Date().toISOString() } : n) }));
+    setSending(false);
+    showToast(`Отправлено ${recipients.length} сотрудникам`);
+  };
+
+  return (
+    <div>
+      <PageHeader title="📣 Что нового" subtitle="Записи дня уходят сотрудникам в 19:00 автоматически" onBack={goBack} />
+
+      {/* Добавить запись */}
+      <Card title="Новая запись">
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Заголовок (напр. «Новый реестр отгрузок»)"
+          className="w-full px-3 py-2.5 rounded-lg outline-none mb-2" style={{ border: '1px solid var(--mc-border)', fontSize: 14, color: 'var(--mc-text)', background: 'var(--mc-surface)' }} />
+        <textarea value={body} onChange={e => setBody(e.target.value)} rows={3} placeholder="Описание (что изменилось, как пользоваться)"
+          className="w-full px-3 py-2.5 rounded-lg outline-none mb-2" style={{ border: '1px solid var(--mc-border)', fontSize: 14, color: 'var(--mc-text)', background: 'var(--mc-surface)', resize: 'vertical' }} />
+        <button onClick={addNote} className="w-full py-2.5 rounded-lg font-semibold text-white" style={{ background: '#297b8a' }}>
+          Добавить
+        </button>
+      </Card>
+
+      <div className="text-xs uppercase font-bold mt-5 mb-2" style={{ color: 'var(--mc-muted)', letterSpacing: '.08em' }}>Записи</div>
+      {notes.length === 0 ? (
+        <Empty icon={Send} title="Записей пока нет" subtitle="Добавьте, что нового — сотрудники получат в 19:00" />
+      ) : (
+        <div className="space-y-2">
+          {notes.map(n => (
+            <div key={n.id} className="bg-white rounded-xl p-4" style={{ border: '1px solid var(--mc-border)' }}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm" style={{ color: 'var(--mc-text)' }}>{n.title}</div>
+                  {n.body && <div className="text-sm mt-1 whitespace-pre-wrap" style={{ color: 'var(--mc-muted)' }}>{n.body}</div>}
+                  <div className="text-[11px] mt-2" style={{ color: 'var(--mc-muted)' }}>
+                    {fmtDate(n.note_date)} · {n.sent_at
+                      ? <span style={{ color: '#16a34a' }}>✓ отправлено {fmtDateTime(n.sent_at)}</span>
+                      : <span style={{ color: '#D97706' }}>⏳ уйдёт в 19:00</span>}
+                  </div>
+                </div>
+                <button onClick={() => deleteNote(n.id)} style={{ color: '#EB5757', flexShrink: 0 }}><Trash2 size={15} /></button>
+              </div>
+              {!n.sent_at && (
+                <button onClick={() => sendNow(n)} disabled={sending}
+                  className="mt-3 w-full py-2 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+                  style={{ background: 'var(--mc-active-item)', color: '#297b8a', border: '1px solid #b0dce5' }}>
+                  <Send size={14} /> Отправить сейчас
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
