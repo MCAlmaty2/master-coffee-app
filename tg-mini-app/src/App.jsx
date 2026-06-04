@@ -430,6 +430,11 @@ const PERMISSIONS = {
   grind_create:         { group: 'Помол', label: 'Создавать заявки на помол' },
   grind_fulfill:        { group: 'Помол', label: 'Молоть кофе (склад): брать в работу, отмечать готовность' },
   grind_view_all:       { group: 'Помол', label: 'Видеть все заявки на помол' },
+  // Отчёты и реестры
+  report_edit:          { group: 'Отчёты', label: 'Заполнять отчёт ОП (план и факт)' },
+  shipment_view:        { group: 'Отчёты', label: 'Видеть реестр отгрузок' },
+  shipment_edit:        { group: 'Отчёты', label: 'Вносить накладные в реестр отгрузок' },
+  shipment_pay:         { group: 'Отчёты', label: 'Отмечать оплату в реестре отгрузок (кассир)' },
   // Админ
   admin_users:          { group: 'Администрирование', label: 'Управлять пользователями' },
   admin_roles:          { group: 'Администрирование', label: 'Создавать и редактировать роли' },
@@ -447,17 +452,17 @@ function defaultPermissionsFor(roleKey) {
       return Object.keys(PERMISSIONS);
     case 'director':
     case 'senior_manager':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit'];
     case 'courier':
       return ['delivery_courier'];
     case 'b2b':
-      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all'];
+      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit'];
     case 'sales':
       return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create'];
     case 'warehouse':
       return ['orders_view_all', 'orders_change_status', 'warehouse_pickup', 'grind_fulfill', 'grind_view_all'];
     case 'cashier':
-      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all'];
+      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay'];
     case 'barista':
     case 'technician':
       return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create'];
@@ -901,6 +906,8 @@ function validateOrderForm(form) {
     if (itemErrs.some((e) => Object.keys(e).length > 0)) errors.itemErrors = itemErrs;
   }
   if (!form.delivery_method) errors.delivery_method = 'Выберите способ получения';
+  if (form.delivery_method === 'delivery' && (!form.delivery_address || form.delivery_address.trim().length < 8))
+    errors.delivery_address = 'Укажите адрес доставки (минимум 8 символов)';
   if (form.client_type === 'individual' && !form.payment_method) errors.payment_method = 'Выберите способ оплаты';
   if (!form.comment || form.comment.trim().length === 0) errors.comment = 'Заполните комментарий (или поставьте «—»)';
   return errors;
@@ -935,7 +942,7 @@ function App() {
   const [bootStatus, setBootStatus] = useState({ phase: 'loading', error: null });
 
   // Черновики форм поднимаем в App, чтобы они переживали навигацию на ProductPicker и обратно
-  const emptyOrderDraft = { client_type: 'legal', items: [], delivery_method: '', comment: '', full_name: '', company_name: '', bin: '', contact_person: '', phone: '', address: '', bank: '', kbe: '', bik: '', account_number: '' };
+  const emptyOrderDraft = { client_type: 'legal', items: [], delivery_method: '', comment: '', full_name: '', company_name: '', bin: '', contact_person: '', phone: '', address: '', delivery_address: '', bank: '', kbe: '', bik: '', account_number: '' };
   const emptyQuickDraft = {
     client_type: 'individual',
     client_name: '',
@@ -1549,6 +1556,55 @@ function App() {
         }),
         ...d.notifications,
       ],
+    }));
+    return { ok: true };
+  };
+
+  /**
+   * Редактировать заявку до статуса «Оплачен». Все изменения логируются.
+   * Доступ: автор, b2b/senior_manager/director, admin.
+   */
+  const editOrder = (orderId, changes) => {
+    const order = (db.orders || []).find(o => o.id === orderId);
+    if (!order) return { error: 'Заявка не найдена' };
+    if (!['new', 'in_work', 'invoiced'].includes(order.status)) {
+      return { error: 'Редактировать можно только до подтверждения оплаты' };
+    }
+    const canEdit = currentUser.role === 'admin'
+      || order.created_by === currentUser.id
+      || ['b2b', 'senior_manager', 'director'].includes(currentUser.role);
+    if (!canEdit) return { error: 'Нет прав на редактирование заявки' };
+
+    const LABELS = {
+      full_name: 'ФИО', company_name: 'Юр. лицо', bin: 'БИН', contact_person: 'Контакт',
+      phone: 'Телефон', address: 'Адрес', delivery_address: 'Адрес доставки', comment: 'Комментарий',
+    };
+    const logged = [];
+    for (const [k, label] of Object.entries(LABELS)) {
+      if (changes[k] !== undefined && String(order[k] ?? '') !== String(changes[k] ?? '')) {
+        logged.push({ field: k, label, from: order[k] ?? '', to: changes[k] ?? '' });
+      }
+    }
+    let newItems = order.items;
+    let newTotal = order.total_amount;
+    if (changes.items && JSON.stringify(order.items) !== JSON.stringify(changes.items)) {
+      newItems = changes.items;
+      newTotal = changes.items.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0);
+      logged.push({ field: 'items', label: 'Товары',
+        from: `${(order.items || []).length} поз. · ${fmtNum(order.total_amount)} тг`,
+        to:   `${newItems.length} поз. · ${fmtNum(newTotal)} тг` });
+    }
+    if (logged.length === 0) return { ok: true };
+
+    setDb(d => ({
+      ...d,
+      orders: d.orders.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o, ...changes, items: newItems, total_amount: newTotal,
+          log: [...o.log, { event: 'edit', changes: logged, actor: currentUser.id, at: new Date().toISOString() }],
+        };
+      }),
     }));
     return { ok: true };
   };
@@ -3076,7 +3132,7 @@ function App() {
     route, navigate, goBack, showToast,
     bootStatus,
     loginViaTelegram, logout,
-    createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, cancelOrder,
+    createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, cancelOrder, editOrder,
     approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, transferAdmin,
     createTask, startTask, completeTask, rescheduleTask, deleteTask, reassignTask, editTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
@@ -3095,6 +3151,8 @@ function App() {
     generateWebToken,
     loginViaPin, setPinForUser, resetPinForUser,
     theme, toggleTheme,
+    can: (perm) => hasPermission(db, currentUser, perm),
+    notify: (opts) => makeNotif(db, opts),
   };
 
   // ─── Интеграция с Telegram Mini App ───
@@ -4730,8 +4788,8 @@ function DashboardHome({ ctx, title }) {
       go: () => navigate({ name: 'delivery_registries' }),
     });
   }
-  // Реестр отгрузок (менеджеры + кассир)
-  if (['admin', 'senior_manager', 'director', 'b2b', 'cashier', 'observer'].includes(currentUser.role)) {
+  // Реестр отгрузок (по праву shipment_view)
+  if (has('shipment_view')) {
     const mk = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
     const monthShip = (db.shipmentRegistry || []).filter(r => r.month === mk);
     const unpaidShip = monthShip.filter(r => !r.paid);
@@ -5298,10 +5356,15 @@ function OrdersListScreen({ ctx }) {
   }, [route?.filterStatus]);
 
   // Какие заявки видит этот пользователь?
+  const isCashier = currentUser.role === 'cashier';
   const canSeeAll = currentUser.role === 'admin'
     || hasPermission(db, currentUser, 'orders_view_all');
 
-  const myOrders = canSeeAll ? db.orders : db.orders.filter(o => o.created_by === currentUser.id);
+  const myOrders = isCashier
+    ? db.orders.filter(o => o.status === 'invoiced')          // кассир видит только «Счёт выставлен»
+    : canSeeAll
+      ? db.orders
+      : db.orders.filter(o => o.created_by === currentUser.id);
 
   // Подсчёт по статусам
   const counts = useMemo(() => {
@@ -5583,13 +5646,22 @@ function AdminDeleteButton({ ctx, kind, id, label, onDeleted }) {
 }
 
 function OrderDetailScreen({ ctx, orderId }) {
-  const { db, currentUser, effectiveRole, goBack, changeStatus, closePickupOrder, archiveDeliveredOrder, showToast } = ctx;
+  const { db, currentUser, effectiveRole, goBack, changeStatus, closePickupOrder, archiveDeliveredOrder, editOrder, showToast } = ctx;
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const order = db.orders.find(o => o.id === orderId);
   if (!order) return <div className="p-6">Заявка не найдена</div>;
 
   const author = db.users.find(u => u.id === order.created_by);
   const isLegal = order.client_type === 'legal';
   const currentIdx = STATUS_ORDER.indexOf(order.status);
+
+  // Редактирование — до статуса «Оплачен», для автора / менеджеров / админа
+  const canEditOrder = ['new', 'in_work', 'invoiced'].includes(order.status)
+    && (currentUser.role === 'admin' || order.created_by === currentUser.id
+      || ['b2b', 'senior_manager', 'director'].includes(currentUser.role));
+
+  // Связанная строка реестра доставок (если заявка добавлена в реестр)
+  const deliveryRow = (db.deliveryOrders || []).find(dr => dr.source_order_id === order.id);
 
   // Менеджерские роли — двигают заявку КРОМЕ шага invoiced→paid
   const MANAGER_ROLES_STATUS = ['b2b', 'senior_manager', 'admin'];
@@ -5632,6 +5704,7 @@ function OrderDetailScreen({ ctx, orderId }) {
             )}
             <FieldRow label="Телефон" value={prettyPhone(order.phone)} />
             <FieldRow label={isLegal ? 'Юр. адрес' : 'Адрес'} value={order.address} />
+            {order.delivery_address && <FieldRow label="📍 Адрес доставки" value={order.delivery_address} />}
             {isLegal && (order.bank || order.kbe || order.bik || order.account_number) && (
               <>
                 <div className="pt-2 mt-1" style={{ borderTop: '1px solid #F1F5F9' }}>
@@ -5681,6 +5754,20 @@ function OrderDetailScreen({ ctx, orderId }) {
                       {l.event === 'created' && 'Создана'}
                       {l.event === 'status' && <>{STATUS[l.from]?.short || l.from} → <strong>{STATUS[l.to]?.short || l.to}</strong></>}
                       {l.event === 'pickup_closed' && 'Заказ выдан клиенту'}
+                      {l.event === 'delivered' && 'Доставлен клиенту'}
+                      {l.event === 'edit' && (
+                        <div>
+                          <span style={{ color: 'var(--mc-muted)' }}>Изменено:</span>
+                          {(l.changes || []).map((c, ci) => (
+                            <div key={ci} className="text-xs mt-0.5 ml-2">
+                              <span style={{ color: 'var(--mc-muted)' }}>{c.label}: </span>
+                              <span style={{ textDecoration: 'line-through', color: '#EB5757' }}>{String(c.from || '—').slice(0, 40)}</span>
+                              {' → '}
+                              <strong style={{ color: '#22C55E' }}>{String(c.to || '—').slice(0, 40)}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                       {actor ? `${actor.first_name} ${actor.last_name}` : 'Система'} · {fmtDateTime(l.at)}
@@ -5752,6 +5839,24 @@ function OrderDetailScreen({ ctx, orderId }) {
             <FieldRow label="Создана" value={fmtDateTime(order.created_at)} />
             {order.kind === 'quick' && <FieldRow label="Тип" value="Быстрая B2B" />}
           </Card>
+
+          {/* Статус доставки из реестра (если заявка в реестре) */}
+          {order.delivery_method === 'delivery' && deliveryRow && (
+            <Card title="🚚 Статус в реестре">
+              <DeliveryRegistryStatus deliveryRow={deliveryRow} db={db} />
+            </Card>
+          )}
+
+          {/* Редактировать заявку — до статуса «Оплачен» */}
+          {canEditOrder && (
+            <button
+              onClick={() => setEditModalOpen(true)}
+              className="w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+              style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}
+            >
+              <Edit3 size={14} /> Редактировать заявку
+            </button>
+          )}
 
           {/* Кнопка следующего статуса для менеджера (всё кроме invoiced→paid) */}
           {nextStatus && (
@@ -5860,7 +5965,142 @@ function OrderDetailScreen({ ctx, orderId }) {
         />
       )}
 
+      {editModalOpen && (
+        <EditOrderModal
+          order={order}
+          ctx={ctx}
+          onClose={() => setEditModalOpen(false)}
+          onSave={(changes) => {
+            const r = editOrder(order.id, changes);
+            if (r?.error) return showToast(r.error);
+            setEditModalOpen(false);
+            showToast('Изменения сохранены');
+          }}
+        />
+      )}
+
       <AdminDeleteButton ctx={ctx} kind="order" id={order.id} label="эту заявку" onDeleted={() => ctx.goBack()} />
+    </div>
+  );
+}
+
+function DeliveryRegistryStatus({ deliveryRow, db }) {
+  const courier = db.users?.find(u => u.id === (deliveryRow.delivered_by || deliveryRow.courier_id));
+  const ST = {
+    pending:   { label: 'Ждёт назначения', color: '#64748b', bg: 'var(--mc-active-item)' },
+    assigned:  { label: 'У курьера',        color: '#d97706', bg: '#FEF3C7' },
+    delivered: { label: '✓ Доставлен',      color: '#16a34a', bg: '#D1FAE5' },
+    failed:    { label: 'Не доставлен',     color: '#dc2626', bg: '#FEE2E2' },
+  };
+  const s = ST[deliveryRow.status] || ST.pending;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm" style={{ color: 'var(--mc-muted)' }}>Статус</span>
+        <span style={{ background: s.bg, color: s.color, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>{s.label}</span>
+      </div>
+      {courier && <FieldRow label="Курьер" value={`${courier.first_name} ${courier.last_name}`} />}
+      {deliveryRow.address && <FieldRow label="Адрес" value={deliveryRow.address} />}
+      {deliveryRow.status === 'delivered' && deliveryRow.delivered_at && (
+        <FieldRow label="Доставлен" value={fmtDateTime(deliveryRow.delivered_at)} />
+      )}
+      {deliveryRow.cash_received && <FieldRow label="Наличные" value={`${fmtNum(deliveryRow.cash_amount)} тг`} />}
+      {deliveryRow.status === 'failed' && deliveryRow.fail_reason && (
+        <div className="text-xs mt-1" style={{ color: '#dc2626' }}>{deliveryRow.fail_reason}</div>
+      )}
+    </div>
+  );
+}
+
+function EditOrderModal({ order, ctx, onClose, onSave }) {
+  const isLegal = order.client_type === 'legal';
+  const [form, setForm] = useState({
+    full_name:      order.full_name || '',
+    company_name:   order.company_name || '',
+    bin:            order.bin || '',
+    contact_person: order.contact_person || '',
+    phone:          order.phone || '',
+    address:        order.address || '',
+    delivery_address: order.delivery_address || '',
+    comment:        order.comment || '',
+    items:          (order.items || []).map(it => ({ ...it })),
+  });
+  const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const updItem = (i, k, v) => setForm(f => ({ ...f, items: f.items.map((it, idx) => idx === i ? { ...it, [k]: v.replace(/[^0-9.]/g, '') } : it) }));
+  const total = form.items.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0);
+
+  const handleSave = () => {
+    const changes = {
+      phone: form.phone, address: form.address.trim(),
+      delivery_address: (form.delivery_address || '').trim() || null,
+      comment: form.comment.trim(),
+      items: form.items.map(it => ({ ...it, quantity: Number(it.quantity), price: Number(it.price) })),
+    };
+    if (isLegal) { changes.company_name = form.company_name.trim(); changes.bin = form.bin.trim(); changes.contact_person = form.contact_person.trim(); }
+    else { changes.full_name = form.full_name.trim(); }
+    onSave(changes);
+  };
+
+  const fld = { width: '100%', padding: '8px 10px', border: '1px solid var(--mc-border)', borderRadius: 9, fontSize: 13, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', boxSizing: 'border-box' };
+  const lbl = { fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4, display: 'block' };
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}>
+      <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px', borderBottom: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--mc-text)' }}>Редактировать заявку</div>
+            <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>№{order.order_number} · изменения фиксируются в истории</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)' }}><X size={20} /></button>
+        </div>
+
+        <div style={{ overflowY: 'auto', flex: 1, padding: '12px 16px' }}>
+          {/* Клиент */}
+          {isLegal ? (
+            <>
+              <div style={{ marginBottom: 10 }}><label style={lbl}>Наименование</label><input style={fld} value={form.company_name} onChange={e => upd('company_name', e.target.value)} /></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                <div><label style={lbl}>БИН</label><input style={fld} value={form.bin} onChange={e => upd('bin', e.target.value.replace(/\D/g, '').slice(0, 12))} /></div>
+                <div><label style={lbl}>Контакт</label><input style={fld} value={form.contact_person} onChange={e => upd('contact_person', e.target.value)} /></div>
+              </div>
+            </>
+          ) : (
+            <div style={{ marginBottom: 10 }}><label style={lbl}>ФИО</label><input style={fld} value={form.full_name} onChange={e => upd('full_name', e.target.value)} /></div>
+          )}
+          <div style={{ marginBottom: 10 }}><label style={lbl}>Телефон</label><input style={fld} value={form.phone} onChange={e => upd('phone', e.target.value)} /></div>
+          <div style={{ marginBottom: 10 }}><label style={lbl}>{isLegal ? 'Юр. адрес' : 'Адрес'}</label><textarea rows={2} style={{ ...fld, resize: 'vertical' }} value={form.address} onChange={e => upd('address', e.target.value)} /></div>
+          <div style={{ marginBottom: 10 }}><label style={lbl}>📍 Адрес доставки</label><textarea rows={2} style={{ ...fld, resize: 'vertical' }} value={form.delivery_address} onChange={e => upd('delivery_address', e.target.value)} placeholder="если отличается" /></div>
+          <div style={{ marginBottom: 14 }}><label style={lbl}>Комментарий</label><textarea rows={2} style={{ ...fld, resize: 'vertical' }} value={form.comment} onChange={e => upd('comment', e.target.value)} /></div>
+
+          {/* Товары — кол-во и цена */}
+          <label style={lbl}>Товары (кол-во и цена)</label>
+          {form.items.map((it, i) => (
+            <div key={i} style={{ background: 'var(--mc-active-item)', borderRadius: 10, padding: '8px 10px', marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--mc-text)', marginBottom: 6 }}>{it.name}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div><label style={{ ...lbl, marginBottom: 2 }}>Кол-во ({it.unit})</label><input style={fld} value={it.quantity} onChange={e => updItem(i, 'quantity', e.target.value)} /></div>
+                <div><label style={{ ...lbl, marginBottom: 2 }}>Цена</label><input style={fld} value={it.price} onChange={e => updItem(i, 'price', e.target.value)} /></div>
+              </div>
+              <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 700, color: 'var(--mc-text)', marginTop: 4 }}>
+                {fmtNum((Number(it.quantity) || 0) * (Number(it.price) || 0))} тг
+              </div>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 4px', borderTop: '1px solid var(--mc-border)', marginTop: 4 }}>
+            <span style={{ fontWeight: 700, color: 'var(--mc-muted)' }}>ИТОГО</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--mc-text)' }}>{fmtNum(total)} тг</span>
+          </div>
+        </div>
+
+        <div style={{ padding: '10px 16px 28px', borderTop: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
+          <button onClick={handleSave}
+            style={{ width: '100%', padding: 13, background: '#297b8a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+            💾 Сохранить изменения
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -6119,6 +6359,7 @@ function CreateOrderScreen({ ctx }) {
           }),
       phone: normalizePhone(form.phone),
       address: form.address.trim(),
+      delivery_address: (form.delivery_address || '').trim() || null,
       delivery_method: form.delivery_method,
       payment_method: form.client_type === 'individual' ? form.payment_method : null,
       items: form.items.map(it => ({ ...it, quantity: Number(it.quantity), price: Number(it.price) })),
@@ -6185,6 +6426,22 @@ function CreateOrderScreen({ ctx }) {
                   placeholder={form.client_type === 'legal' ? 'г. Алматы, ул. Абая 150, оф. 405' : 'г. Алматы, ул. Абая 150'}
                 />
                 {errors.address && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.address}</div>}
+              </div>
+              {/* Адрес доставки — отдельно, особенно важно для юр. лиц */}
+              <div>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>
+                  📍 Адрес доставки {form.client_type === 'legal' && <span style={{ color: 'var(--mc-muted)', fontWeight: 400 }}>(если отличается от юр. адреса)</span>}
+                </label>
+                <textarea
+                  value={form.delivery_address || ''} onChange={e => update({ delivery_address: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2.5 rounded-lg outline-none"
+                  style={{ border: `1px solid ${errors.delivery_address ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 15 }}
+                  placeholder="г. Алматы, ул. Сатпаева 90, склад №3"
+                />
+                {errors.delivery_address
+                  ? <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.delivery_address}</div>
+                  : <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>Куда везти заказ. Для самовывоза можно не заполнять.</div>}
               </div>
               {form.client_type === 'legal' && (
                 <>
@@ -12645,6 +12902,7 @@ function NotificationsScreen({ ctx }) {
         case 'grind':    return navigate({ name: 'grind_detail',    grindId:    n.link_id });
         case 'writeoff': return navigate({ name: 'writeoff_detail', writeOffId: n.link_id });
         case 'contract': return navigate({ name: 'contract_detail', contractId: n.link_id });
+        case 'shipment': return navigate({ name: 'shipment_registry' });
         case 'access':   return navigate({ name: 'admin_requests' });
         default: return;
       }

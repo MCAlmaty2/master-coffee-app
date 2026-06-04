@@ -852,7 +852,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
       source_order_id: o.id,
       client:          o.client_type === 'individual' ? (o.full_name || '') : (o.company_name || ''),
       contacts:        o.phone || '',
-      address:         o.address || '',
+      address:         o.delivery_address || o.address || '',
       city:            '',
       amount:          Number(o.total_amount) || 0,
       status:          'pending',
@@ -1299,7 +1299,7 @@ export function CourierRegistryScreen({ ctx }) {
 // ─── Отметить доставку ────────────────────────────────────────────────────
 
 export function CourierOrderDetailScreen({ ctx, orderId }) {
-  const { db, navigate, currentUser, showToast, setDb } = ctx;
+  const { db, navigate, currentUser, showToast, setDb, notify } = ctx;
   const order = (db.deliveryOrders || []).find(o => o.id === orderId);
 
   const [cashOn,     setCashOn]     = useState(order?.cash_received   || false);
@@ -1333,10 +1333,34 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
 
   const markDelivered = async () => {
     setSaving(true);
-    const upd = { status: 'delivered', cash_received: cashOn, cash_amount: cashOn ? (Number(cashAmt) || 0) : null, courier_note: note.trim() || null, delivered_at: new Date().toISOString(), delivered_by: currentUser.id };
+    const now = new Date().toISOString();
+    const upd = { status: 'delivered', cash_received: cashOn, cash_amount: cashOn ? (Number(cashAmt) || 0) : null, courier_note: note.trim() || null, delivered_at: now, delivered_by: currentUser.id };
     const { error } = await supabase.from('delivery_orders').update(upd).eq('id', orderId);
     if (error) { showToast('Ошибка: ' + error.message, 'error'); setSaving(false); return; }
     setDb(d => ({ ...d, deliveryOrders: d.deliveryOrders.map(o => o.id === orderId ? { ...o, ...upd } : o) }));
+
+    // Авто-архив связанной заявки (если эта строка реестра привязана к заявке)
+    if (order.source_order_id) {
+      const src = (db.orders || []).find(o => o.id === order.source_order_id);
+      if (src && src.status !== 'archived' && src.status !== 'cancelled') {
+        const newLog = [...(src.log || []), { event: 'delivered', actor: currentUser.id, at: now }];
+        const srcUpd = { status: 'archived', delivered_at: now, log: newLog };
+        await supabase.from('orders').update(srcUpd).eq('id', src.id);
+        setDb(d => ({ ...d, orders: (d.orders || []).map(o => o.id === src.id ? { ...o, ...srcUpd } : o) }));
+        // Уведомить менеджера-автора заявки
+        if (notify && src.created_by && src.created_by !== currentUser.id) {
+          const clientName = src.client_type === 'individual' ? src.full_name : src.company_name;
+          const notifObj = notify({
+            recipient_id: src.created_by,
+            title: '✅ Доставка подтверждена',
+            body: `${src.order_number} · ${clientName || ''} — доставлен и архивирован`,
+            link_kind: 'order', link_id: src.id,
+          });
+          setDb(d => ({ ...d, notifications: [notifObj, ...(d.notifications || [])] }));
+        }
+      }
+    }
+
     await finishRegistry(order.registry_id, orderId, 'delivered');
     showToast('✓ Доставка отмечена', 'success');
     navigate({ name: 'courier_registry' });
