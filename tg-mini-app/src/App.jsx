@@ -4238,7 +4238,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
             на мобильных убираем внешние отступы, чтобы они не выглядели "открыткой в рамке".
             На десктопе (lg) оступ p-8 оставляем для читаемости. */}
         <div className={FULL_BLEED_ROUTES.has(route.name)
-          ? 'lg:max-w-5xl lg:mx-auto lg:p-8'
+          ? 'lg:max-w-5xl lg:mx-auto lg:p-8 p-2 pt-3'
           : 'max-w-5xl mx-auto p-4 sm:p-6 lg:p-8'
         }>
           <ScreenErrorBoundary
@@ -4726,7 +4726,7 @@ function MyPinButton({ ctx }) {
           <div className="text-xs mb-3" style={{ color: 'var(--mc-muted)' }}>
             Введите новый 4-значный PIN. Он позволит входить на сайт без Telegram.
           </div>
-          <div className="flex gap-2 mb-2">
+          <div className="mb-2">
             <input
               type="tel"
               inputMode="numeric"
@@ -4735,11 +4735,11 @@ function MyPinButton({ ctx }) {
               onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setError(''); }}
               placeholder="••••"
               disabled={loading}
-              className="flex-1 px-3 py-2 rounded-lg text-center font-bold outline-none"
-              style={{ fontSize: 22, letterSpacing: '0.35em', border: '2px solid var(--mc-border)', background: '#F8FAFC' }}
+              className="w-full px-3 py-2.5 rounded-lg text-center font-bold outline-none mb-2"
+              style={{ fontSize: 22, letterSpacing: '0.35em', border: '2px solid var(--mc-border)', background: '#F8FAFC', boxSizing: 'border-box' }}
             />
             <button onClick={handleSave} disabled={loading || pin.length !== 4}
-                    className="px-4 py-2 rounded-lg font-semibold text-white text-sm transition"
+                    className="w-full py-2.5 rounded-lg font-semibold text-white text-sm transition"
                     style={{ background: pin.length === 4 && !loading ? '#297b8a' : '#A8A8AE' }}>
               {loading ? '…' : 'Сохранить'}
             </button>
@@ -6359,7 +6359,7 @@ function EditOrderModal({ order, ctx, onClose, onSave }) {
   return (
     <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}>
-      <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', maxHeight: 'min(88vh, 88dvh)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px', borderBottom: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
           <div>
             <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--mc-text)' }}>Редактировать заявку</div>
@@ -9494,7 +9494,7 @@ function EditTaskModal({ task, onClose, onSave }) {
   return (
     <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}>
-      <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', maxHeight: 'min(85vh, 85dvh)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px', borderBottom: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--mc-text)' }}>Редактировать задачу</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)', fontSize: 20, lineHeight: 1 }}>✕</button>

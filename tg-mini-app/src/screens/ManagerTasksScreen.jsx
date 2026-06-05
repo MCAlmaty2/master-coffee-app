@@ -315,6 +315,6 @@ export function ManagerTasksHomeTile({ ctx }) {
 /* ── styles ── */
 const backBtn = { display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--mc-muted)', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 8, padding: 0 };
 const sheetWrap = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' };
-const sheetBody = { background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', maxHeight: '88vh', display: 'flex', flexDirection: 'column' };
+const sheetBody = { background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', maxHeight: 'min(88vh, 88dvh)', display: 'flex', flexDirection: 'column' };
 const sheetHeader = { display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px 10px', borderBottom: '1px solid var(--mc-border-light)' };
 const btn = (color) => ({ padding: '8px 16px', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', background: color, color: '#fff' });

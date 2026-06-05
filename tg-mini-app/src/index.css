@@ -79,6 +79,11 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* ── Safe-area: нижний отступ для модалов на iPhone (notch / home indicator) */
+body {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* ── iOS: запрещаем авто-зум при фокусе на input (срабатывает при font-size < 16px)
    Устанавливаем базовый размер; компонентные стили могут переопределить его вверх. */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),

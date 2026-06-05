@@ -907,7 +907,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,25,35,.5)',
         display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-      <div style={{ background: 'var(--mc-surface)', borderRadius: '20px 20px 0 0', maxHeight: '88vh',
+      <div style={{ background: 'var(--mc-surface)', borderRadius: '20px 20px 0 0', maxHeight: 'min(88vh, 88dvh)',
         display: 'flex', flexDirection: 'column' }}>
 
         {/* Handle */}
@@ -1586,7 +1586,7 @@ function OrderDetailModal({ order, db, currentUser, canEdit, onClose, onAddressC
   return (
     <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}>
-      <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', maxHeight: 'min(85vh, 85dvh)', display: 'flex', flexDirection: 'column' }}>
 
         {/* Шапка */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px', borderBottom: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
