@@ -13340,64 +13340,200 @@ function NotificationsScreen({ ctx }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function FeedbackScreen({ ctx }) {
-  const { goBack, sendFeedback, showToast } = ctx;
+  const { db, currentUser, goBack, sendFeedback, showToast, setDb, notify } = ctx;
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [myFeedbacks, setMyFeedbacks] = useState([]);
+  const [fbLoading, setFbLoading] = useState(true);
+  const [replyDraft, setReplyDraft] = useState({}); // fbId -> text
+  const [tab, setTab] = useState('active'); // active | archived
+
+  React.useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('feedback_messages')
+        .select('*')
+        .eq('sender_id', currentUser.id)
+        .order('at', { ascending: false });
+      setMyFeedbacks(data || []);
+      setFbLoading(false);
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!message.trim()) {
-      showToast('Напишите сообщение');
-      return;
-    }
+    if (!message.trim()) { showToast('Напишите сообщение'); return; }
     setLoading(true);
     const res = await sendFeedback(message);
     setLoading(false);
     if (res.ok) {
       showToast('Спасибо! Ваше мнение отправлено');
       setMessage('');
-      goBack();
+      // Reload my feedbacks
+      const { data } = await supabase.from('feedback_messages').select('*').eq('sender_id', currentUser.id).order('at', { ascending: false });
+      setMyFeedbacks(data || []);
     } else {
       showToast(res.error || 'Ошибка отправки');
     }
   };
 
+  const confirmFeedback = async (fb) => {
+    const patch = { status: 'archived' };
+    const { error } = await supabase.from('feedback_messages').update(patch).eq('id', fb.id);
+    if (error) return showToast('Ошибка: ' + error.message);
+    setMyFeedbacks(list => list.map(x => x.id === fb.id ? { ...x, ...patch } : x));
+    // Уведомить админа
+    const adminUser = db.users.find(u => u.role === 'admin');
+    if (adminUser && notify) {
+      const n = notify({ recipient_id: adminUser.id, title: '✅ Обратная связь подтверждена', body: `${currentUser.first_name}: подтвердил(а) выполнение`, link_kind: 'feedback', link_id: fb.id });
+      setDb(d => ({ ...d, notifications: [n, ...(d.notifications || [])] }));
+    }
+    showToast('Подтверждено! Задача в архиве');
+  };
+
+  const disputeFeedback = async (fb) => {
+    const reply = (replyDraft[fb.id] || '').trim();
+    if (!reply) return showToast('Напишите комментарий');
+    const comments = [...(fb.comments || []), { author_id: currentUser.id, text: reply, at: new Date().toISOString() }];
+    const patch = { status: 'in_progress', comments };
+    const { error } = await supabase.from('feedback_messages').update(patch).eq('id', fb.id);
+    if (error) return showToast('Ошибка: ' + error.message);
+    setMyFeedbacks(list => list.map(x => x.id === fb.id ? { ...x, ...patch } : x));
+    setReplyDraft(d => ({ ...d, [fb.id]: '' }));
+    // Уведомить админа
+    const adminUser = db.users.find(u => u.role === 'admin');
+    if (adminUser && notify) {
+      const n = notify({ recipient_id: adminUser.id, title: '🔄 Обратная связь — не подтверждено', body: `${currentUser.first_name}: ${reply.slice(0, 80)}`, link_kind: 'feedback', link_id: fb.id });
+      setDb(d => ({ ...d, notifications: [n, ...(d.notifications || [])] }));
+    }
+    showToast('Комментарий отправлен, задача возвращена в работу');
+  };
+
+  const activeFbs = myFeedbacks.filter(fb => fb.status !== 'archived');
+  const archivedFbs = myFeedbacks.filter(fb => fb.status === 'archived');
+  const displayList = tab === 'active' ? activeFbs : archivedFbs;
+
   return (
     <div>
       <PageHeader title="Обратная связь" subtitle="Помогите улучшить приложение" onBack={goBack} />
-      <Card title="Ваше сообщение">
+
+      {/* Форма новой обратной связи */}
+      <Card title="Новое сообщение">
         <form onSubmit={handleSubmit} className="space-y-3">
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Что не работает или что улучшить?..."
             className="w-full rounded-lg p-3 border resize-none"
-            style={{ borderColor: 'var(--mc-border)', minHeight: 120 }}
+            style={{ borderColor: 'var(--mc-border)', minHeight: 100 }}
           />
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={loading || !message.trim()}
-              className="flex-1 py-2.5 rounded-lg font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50"
-              style={{ background: '#297b8a' }}
-            >
-              {loading && <Loader2 size={16} className="animate-spin" />}
-              Отправить
-            </button>
-            <button
-              type="button"
-              onClick={goBack}
-              className="px-4 py-2.5 rounded-lg font-semibold"
-              style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}
-            >
-              Отмена
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading || !message.trim()}
+            className="w-full py-2.5 rounded-lg font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{ background: '#297b8a' }}
+          >
+            {loading && <Loader2 size={16} className="animate-spin" />}
+            Отправить
+          </button>
         </form>
       </Card>
-      <div className="mt-4 p-3 rounded-lg text-xs" style={{ background: '#F0F9FA', color: 'var(--mc-text)' }}>
-        💬 Ваше имя и время отправки сохраняются автоматически. Спасибо за обратную связь!
-      </div>
+
+      {/* Мои обращения */}
+      {!fbLoading && myFeedbacks.length > 0 && (
+        <>
+          <div className="flex gap-2 mt-4 mb-2">
+            {[['active', `Активные (${activeFbs.length})`], ['archived', `Архив (${archivedFbs.length})`]].map(([k, l]) => (
+              <button key={k} onClick={() => setTab(k)}
+                style={{ padding: '5px 14px', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  border: `1.5px solid ${tab === k ? '#297b8a' : 'var(--mc-border)'}`,
+                  background: tab === k ? '#297b8a' : 'var(--mc-surface)', color: tab === k ? '#fff' : 'var(--mc-muted)' }}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {displayList.length === 0 ? (
+            <div className="text-center py-8" style={{ color: 'var(--mc-muted)', fontSize: 13 }}>
+              {tab === 'active' ? 'Нет активных обращений' : 'Архив пуст'}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {displayList.map(fb => {
+                const st = FB_STATUS[fb.status || 'new'];
+                const isAwaiting = fb.status === 'awaiting_confirmation';
+                const comments = fb.comments || [];
+                return (
+                  <div key={fb.id} className="rounded-xl p-4" style={{ background: 'var(--mc-surface)', border: `1px solid ${isAwaiting ? '#8B5CF6' : 'var(--mc-border)'}` }}>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span style={{ background: st.bg, color: st.color, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 12 }}>{st.label}</span>
+                      <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>{fmtDateTime(fb.at)}</span>
+                    </div>
+                    <div className="text-sm mt-2" style={{ color: 'var(--mc-text)' }}>{fb.message}</div>
+
+                    {/* Ответ админа */}
+                    {fb.admin_comment && (
+                      <div className="mt-3 p-3 rounded-lg" style={{ background: '#F0F9FA', border: '1px solid #b0dce5' }}>
+                        <div className="text-xs font-bold mb-1" style={{ color: '#297b8a' }}>💬 Ответ администратора:</div>
+                        <div className="text-sm" style={{ color: 'var(--mc-text)' }}>{fb.admin_comment}</div>
+                      </div>
+                    )}
+
+                    {/* История комментариев */}
+                    {comments.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {comments.map((c, i) => {
+                          const cAuthor = db.users.find(u => u.id === c.author_id);
+                          const isAdmin = cAuthor?.role === 'admin';
+                          return (
+                            <div key={i} className="p-2 rounded-lg text-xs" style={{ background: isAdmin ? '#F0F9FA' : '#FEF9EE', border: `1px solid ${isAdmin ? '#b0dce5' : '#FDE68A'}` }}>
+                              <span className="font-bold" style={{ color: isAdmin ? '#297b8a' : '#92400E' }}>
+                                {cAuthor ? `${cAuthor.first_name}` : '—'}:
+                              </span>{' '}
+                              <span style={{ color: 'var(--mc-text)' }}>{c.text}</span>
+                              <span className="ml-2" style={{ color: 'var(--mc-muted)', fontSize: 9 }}>{fmtDateTime(c.at)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Кнопки подтверждения / оспаривания */}
+                    {isAwaiting && (
+                      <div className="mt-3" style={{ borderTop: '1px solid var(--mc-border-light)', paddingTop: 10 }}>
+                        <div className="text-xs font-bold mb-2" style={{ color: '#8B5CF6' }}>
+                          Подтвердите, что проблема решена, или опишите что ещё не так:
+                        </div>
+                        <textarea
+                          value={replyDraft[fb.id] || ''}
+                          onChange={e => setReplyDraft(d => ({ ...d, [fb.id]: e.target.value }))}
+                          placeholder="Ещё не работает, потому что..."
+                          rows={2}
+                          className="w-full px-3 py-2 rounded-lg outline-none mb-2"
+                          style={{ border: '1px solid var(--mc-border)', fontSize: 12, resize: 'none', boxSizing: 'border-box', color: 'var(--mc-text)', background: 'var(--mc-surface)' }}
+                        />
+                        <div className="flex gap-2">
+                          <button onClick={() => confirmFeedback(fb)}
+                            className="flex-1 py-2 rounded-lg font-bold text-white text-xs"
+                            style={{ background: '#22C55E' }}>
+                            ✅ Подтверждаю, всё работает
+                          </button>
+                          <button onClick={() => disputeFeedback(fb)}
+                            disabled={!(replyDraft[fb.id] || '').trim()}
+                            className="flex-1 py-2 rounded-lg font-bold text-xs disabled:opacity-40"
+                            style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }}>
+                            🔄 Не решено
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -13407,10 +13543,12 @@ function FeedbackScreen({ ctx }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 const FB_STATUS = {
-  new:         { label: 'Новое',     color: '#3390EC', bg: '#E7F3FE' },
-  in_progress: { label: 'В работе',  color: '#F59E0B', bg: '#FEF3C7' },
-  done:        { label: 'Выполнено', color: '#22C55E', bg: '#DCFCE7' },
-  rejected:    { label: 'Отклонено', color: '#EB5757', bg: '#FEE2E2' },
+  new:                     { label: 'Новое',       color: '#3390EC', bg: '#E7F3FE' },
+  in_progress:             { label: 'В работе',    color: '#F59E0B', bg: '#FEF3C7' },
+  done:                    { label: 'Выполнено',   color: '#22C55E', bg: '#DCFCE7' },
+  rejected:                { label: 'Отклонено',   color: '#EB5757', bg: '#FEE2E2' },
+  awaiting_confirmation:   { label: 'Ожидает подтверждения', color: '#8B5CF6', bg: '#F3E8FF' },
+  archived:                { label: 'Архив',       color: '#94a3b8', bg: '#F1F5F9' },
 };
 
 function AdminFeedbackScreen({ ctx }) {
@@ -13418,6 +13556,7 @@ function AdminFeedbackScreen({ ctx }) {
   const [feedbacks, setFeedbacks] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [draft, setDraft] = React.useState({}); // fbId -> comment
+  const [tab, setTab] = React.useState('active'); // active | archived
 
   React.useEffect(() => {
     (async () => {
@@ -13433,45 +13572,89 @@ function AdminFeedbackScreen({ ctx }) {
 
   const setStatus = async (fb, status) => {
     const comment = (draft[fb.id] ?? fb.admin_comment ?? '').trim();
-    if ((status === 'done' || status === 'rejected') && !comment) {
+    // «Выполнено» / «Отклонено» → переходит в awaiting_confirmation (ожидает подтверждения автора)
+    const isFinalizing = status === 'done' || status === 'rejected';
+    if (isFinalizing && !comment) {
       return showToast('Добавьте комментарий перед закрытием');
     }
+    const realStatus = isFinalizing ? 'awaiting_confirmation' : status;
+    // Добавить комментарий в историю при финализации
+    const comments = [...(fb.comments || [])];
+    if (isFinalizing && comment) {
+      comments.push({ author_id: currentUser.id, text: `[${FB_STATUS[status].label}] ${comment}`, at: new Date().toISOString() });
+    }
     const patch = {
-      status,
+      status: realStatus,
       admin_comment: comment || null,
-      resolved_by: (status === 'done' || status === 'rejected') ? currentUser.id : null,
-      resolved_at: (status === 'done' || status === 'rejected') ? new Date().toISOString() : null,
+      resolved_by: isFinalizing ? currentUser.id : null,
+      resolved_at: isFinalizing ? new Date().toISOString() : null,
+      awaiting_decision: isFinalizing ? status : null, // 'done' или 'rejected' — что именно решил админ
+      comments,
     };
     const { error } = await supabase.from('feedback_messages').update(patch).eq('id', fb.id);
     if (error) return showToast('Ошибка: ' + error.message);
     setFeedbacks(list => list.map(x => x.id === fb.id ? { ...x, ...patch } : x));
 
-    // Уведомление постановщику при «Выполнено»
-    if (status === 'done' && fb.sender_id && fb.sender_id !== currentUser.id && notify) {
+    // Уведомление постановщику — подтвердить результат
+    if (isFinalizing && fb.sender_id && fb.sender_id !== currentUser.id && notify) {
+      const title = status === 'done' ? '✅ Обратная связь выполнена — подтвердите' : '❌ Обратная связь отклонена — подтвердите';
       const notifObj = notify({
         recipient_id: fb.sender_id,
-        title: '✅ Ваша обратная связь выполнена',
-        body: `Принята в работу и выполнена:\n${comment}`,
+        title,
+        body: `${comment}\n\nОткройте «Обратная связь» чтобы подтвердить или оспорить.`,
         link_kind: 'feedback',
+        link_id: fb.id,
       });
       setDb(d => ({ ...d, notifications: [notifObj, ...(d.notifications || [])] }));
     }
-    showToast(`Статус: ${FB_STATUS[status].label}`);
+    showToast(isFinalizing ? 'Отправлено на подтверждение сотруднику' : `Статус: ${FB_STATUS[realStatus].label}`);
   };
+
+  const addAdminComment = async (fb) => {
+    const comment = (draft[fb.id] || '').trim();
+    if (!comment) return showToast('Напишите комментарий');
+    const comments = [...(fb.comments || []), { author_id: currentUser.id, text: comment, at: new Date().toISOString() }];
+    const patch = { comments, admin_comment: comment };
+    const { error } = await supabase.from('feedback_messages').update(patch).eq('id', fb.id);
+    if (error) return showToast('Ошибка: ' + error.message);
+    setFeedbacks(list => list.map(x => x.id === fb.id ? { ...x, ...patch } : x));
+    setDraft(d => ({ ...d, [fb.id]: '' }));
+    showToast('Комментарий добавлен');
+  };
+
+  const activeFbs = feedbacks.filter(fb => fb.status !== 'archived');
+  const archivedFbs = feedbacks.filter(fb => fb.status === 'archived');
+  const displayList = tab === 'active' ? activeFbs : archivedFbs;
 
   return (
     <div>
-      <PageHeader title="Обратная связь" subtitle={loading ? 'Загрузка...' : `${feedbacks.length} сообщений`} onBack={goBack} />
-      {feedbacks.length === 0 ? (
-        <Empty icon={MessageSquare} title="Обратной связи пока нет" subtitle="Когда сотрудники пришлют мнение, оно появится здесь" />
+      <PageHeader title="Сообщения сотрудников" subtitle={loading ? 'Загрузка...' : `${activeFbs.length} активных · ${archivedFbs.length} в архиве`} onBack={goBack} />
+
+      {/* Табы: Активные / Архив */}
+      <div className="flex gap-2 mb-3">
+        {[['active', `Активные (${activeFbs.length})`], ['archived', `Архив (${archivedFbs.length})`]].map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)}
+            style={{ padding: '5px 14px', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              border: `1.5px solid ${tab === k ? '#297b8a' : 'var(--mc-border)'}`,
+              background: tab === k ? '#297b8a' : 'var(--mc-surface)', color: tab === k ? '#fff' : 'var(--mc-muted)' }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {displayList.length === 0 ? (
+        <Empty icon={MessageSquare} title={tab === 'active' ? 'Нет активных обращений' : 'Архив пуст'} subtitle={tab === 'active' ? 'Когда сотрудники пришлют мнение, оно появится здесь' : 'Подтверждённые обращения попадают сюда'} />
       ) : (
         <div className="space-y-2">
-          {feedbacks.map(fb => {
+          {displayList.map(fb => {
             const author = db.users.find(u => u.id === fb.sender_id);
             const st = FB_STATUS[fb.status || 'new'];
-            const commentVal = draft[fb.id] ?? fb.admin_comment ?? '';
+            const commentVal = draft[fb.id] ?? '';
+            const comments = fb.comments || [];
+            const isArchived = fb.status === 'archived';
+            const isAwaiting = fb.status === 'awaiting_confirmation';
             return (
-              <div key={fb.id} className="bg-white rounded-xl p-4" style={{ border: '1px solid var(--mc-border)' }}>
+              <div key={fb.id} className="bg-white rounded-xl p-4" style={{ border: `1px solid ${isAwaiting ? '#8B5CF6' : 'var(--mc-border)'}`, opacity: isArchived ? 0.7 : 1 }}>
                 <div className="flex items-start gap-3">
                   <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-sm" style={{ background: '#297b8a' }}>
                     {author?.first_name?.[0]}
@@ -13486,27 +13669,75 @@ function AdminFeedbackScreen({ ctx }) {
                     <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>{fmtDateTime(fb.at)}</div>
                     <div className="text-sm mt-2" style={{ color: 'var(--mc-text)' }}>{fb.message}</div>
 
-                    {/* Комментарий админа */}
-                    <textarea
-                      value={commentVal}
-                      onChange={e => setDraft(d => ({ ...d, [fb.id]: e.target.value }))}
-                      placeholder="Комментарий (виден сотруднику при «Выполнено»)"
-                      rows={2}
-                      className="w-full mt-3 px-3 py-2 rounded-lg outline-none"
-                      style={{ border: '1px solid var(--mc-border)', fontSize: 13, color: 'var(--mc-text)', background: 'var(--mc-surface)', resize: 'vertical', boxSizing: 'border-box' }}
-                    />
-                    {/* Кнопки статусов */}
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {['new', 'in_progress', 'done', 'rejected'].map(s => (
-                        <button key={s} onClick={() => setStatus(fb, s)}
-                          style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                            border: `1px solid ${fb.status === s ? FB_STATUS[s].color : 'var(--mc-border)'}`,
-                            background: fb.status === s ? FB_STATUS[s].bg : 'var(--mc-surface)',
-                            color: fb.status === s ? FB_STATUS[s].color : 'var(--mc-muted)' }}>
-                          {FB_STATUS[s].label}
-                        </button>
-                      ))}
-                    </div>
+                    {/* Ответ админа (если есть) */}
+                    {fb.admin_comment && (
+                      <div className="mt-2 p-2 rounded-lg" style={{ background: '#F0F9FA', border: '1px solid #b0dce5' }}>
+                        <div className="text-xs font-bold" style={{ color: '#297b8a' }}>💬 Ваш ответ:</div>
+                        <div className="text-xs mt-1" style={{ color: 'var(--mc-text)' }}>{fb.admin_comment}</div>
+                      </div>
+                    )}
+
+                    {/* История комментариев (диалог) */}
+                    {comments.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        <div className="text-xs font-bold" style={{ color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>Переписка:</div>
+                        {comments.map((c, i) => {
+                          const cAuthor = db.users.find(u => u.id === c.author_id);
+                          const isAdminComment = cAuthor?.role === 'admin';
+                          return (
+                            <div key={i} className="p-2 rounded-lg text-xs" style={{ background: isAdminComment ? '#F0F9FA' : '#FEF9EE', border: `1px solid ${isAdminComment ? '#b0dce5' : '#FDE68A'}` }}>
+                              <span className="font-bold" style={{ color: isAdminComment ? '#297b8a' : '#92400E' }}>
+                                {cAuthor ? cAuthor.first_name : '—'}:
+                              </span>{' '}
+                              <span style={{ color: 'var(--mc-text)' }}>{c.text}</span>
+                              <span className="ml-2" style={{ color: 'var(--mc-muted)', fontSize: 9 }}>{fmtDateTime(c.at)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Ожидает подтверждения — инфо для админа */}
+                    {isAwaiting && (
+                      <div className="mt-2 p-2 rounded-lg text-xs" style={{ background: '#F3E8FF', border: '1px solid #C4B5FD', color: '#6D28D9' }}>
+                        ⏳ Ожидает подтверждения от {author?.first_name || 'сотрудника'}. Решение: <b>{fb.awaiting_decision === 'done' ? 'Выполнено' : 'Отклонено'}</b>
+                      </div>
+                    )}
+
+                    {/* Комментарий + кнопки (только для неархивных) */}
+                    {!isArchived && (
+                      <>
+                        <textarea
+                          value={commentVal}
+                          onChange={e => setDraft(d => ({ ...d, [fb.id]: e.target.value }))}
+                          placeholder="Комментарий..."
+                          rows={2}
+                          className="w-full mt-3 px-3 py-2 rounded-lg outline-none"
+                          style={{ border: '1px solid var(--mc-border)', fontSize: 13, color: 'var(--mc-text)', background: 'var(--mc-surface)', resize: 'vertical', boxSizing: 'border-box' }}
+                        />
+                        {commentVal.trim() && !isAwaiting && (
+                          <button onClick={() => addAdminComment(fb)}
+                            className="mt-1 mb-2 text-xs font-bold px-3 py-1.5 rounded-lg"
+                            style={{ background: '#F0F9FA', color: '#297b8a', border: '1px solid #b0dce5', cursor: 'pointer' }}>
+                            💬 Добавить комментарий
+                          </button>
+                        )}
+                        {/* Кнопки статусов — скрываем если ожидает подтверждения */}
+                        {!isAwaiting && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {['new', 'in_progress', 'done', 'rejected'].map(s => (
+                              <button key={s} onClick={() => setStatus(fb, s)}
+                                style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                                  border: `1px solid ${fb.status === s ? FB_STATUS[s].color : 'var(--mc-border)'}`,
+                                  background: fb.status === s ? FB_STATUS[s].bg : 'var(--mc-surface)',
+                                  color: fb.status === s ? FB_STATUS[s].color : 'var(--mc-muted)' }}>
+                                {FB_STATUS[s].label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
