@@ -1227,6 +1227,16 @@ export function CourierRegistryScreen({ ctx }) {
     showToast('Заказ добавлен в ваш список', 'success');
   };
 
+  const releaseOrder = async (orderId) => {
+    const { error } = await supabase.from('delivery_orders')
+      .update({ courier_id: null, status: 'pending' })
+      .eq('id', orderId)
+      .eq('courier_id', currentUser.id);
+    if (error) { showToast('Ошибка: ' + error.message, 'error'); return; }
+    setDb(d => ({ ...d, deliveryOrders: d.deliveryOrders.map(o => o.id === orderId ? { ...o, courier_id: null, status: 'pending' } : o) }));
+    showToast('Заказ возвращён в свободные', 'success');
+  };
+
   const tabs = [
     ['free',   `Свободные (${freeOrders.length})`],
     ['mine',   `Мои (${myOrders.length})`],
@@ -1308,7 +1318,17 @@ export function CourierRegistryScreen({ ctx }) {
                 <div style={{ fontSize: 12 }}>Нет взятых заказов</div>
               </div>
             )}
-            {myOrders.map(o => <OrderRow key={o.id} order={o} onClick={() => navigate({ name: 'courier_order', orderId: o.id })} />)}
+            {myOrders.map(o => (
+              <OrderRow key={o.id} order={o}
+                onClick={() => navigate({ name: 'courier_order', orderId: o.id })}
+                action={o.status === 'assigned' ? (
+                  <button onClick={e => { e.stopPropagation(); releaseOrder(o.id); }}
+                    style={{ padding: '4px 10px', background: '#FEF2F2', color: '#dc2626', border: '1px solid #FECACA', borderRadius: 8, fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>
+                    Отказаться
+                  </button>
+                ) : null}
+              />
+            ))}
           </>
         )}
         {tab === 'others' && othersOrders.map(o => {
