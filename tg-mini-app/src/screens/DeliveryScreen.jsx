@@ -201,6 +201,11 @@ function OrderRow({ order, action, onClick, dim, courierName }) {
         }
       </div>
       <div style={{ fontSize: 9, color: 'var(--mc-muted)' }}>📍 {[order.city, order.address].filter(Boolean).join(' · ')}</div>
+      {order.payment_info && (
+        <div style={{ fontSize: 9, color: '#C2410C', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginTop: 3 }}>
+          💳 {order.payment_info}
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--mc-text)' }}>{fmtNum(order.amount)} тг</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -814,7 +819,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
   const [selected, setSelected] = useState(new Set());
   const [saving,  setSaving]  = useState(false);
   const [qForm,   setQForm]   = useState({
-    client: '', phone: '', address: '', city: 'Алматы', amount: '', comment: '',
+    client: '', phone: '', address: '', city: 'Алматы', amount: '', payment_info: '', comment: '',
   });
 
   // Заявки, уже привязанные к любому реестру (по source_order_id)
@@ -876,16 +881,17 @@ function AddOrderModal({ ctx, registryId, onClose }) {
     setSaving(true);
     const now = new Date().toISOString();
     const row = {
-      id:          uid(),
-      registry_id: registryId,
-      client:      qForm.client.trim(),
-      contacts:    qForm.phone.trim(),
-      address:     qForm.address.trim(),
-      city:        qForm.city.trim(),
-      amount:      Number(qForm.amount) || 0,
-      extra_info:  qForm.comment.trim(),
-      status:      'pending',
-      created_at:  now,
+      id:           uid(),
+      registry_id:  registryId,
+      client:       qForm.client.trim(),
+      contacts:     qForm.phone.trim(),
+      address:      qForm.address.trim(),
+      city:         qForm.city.trim(),
+      amount:       Number(qForm.amount) || 0,
+      payment_info: qForm.payment_info.trim() || null,
+      extra_info:   qForm.comment.trim(),
+      status:       'pending',
+      created_at:   now,
     };
     const { error } = await supabase.from('delivery_orders').insert([row]);
     if (error) { showToast('Ошибка: ' + error.message, 'error'); setSaving(false); return; }
@@ -1018,6 +1024,23 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                   />
                 </div>
               ))}
+              {/* Оплата */}
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mc-muted)',
+                  textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>Оплата</div>
+                <select
+                  value={qForm.payment_info}
+                  onChange={e => setQForm(f => ({ ...f, payment_info: e.target.value }))}
+                  style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
+                    border: `1.5px solid ${qForm.payment_info ? '#297b8a' : 'var(--mc-border)'}`,
+                    fontSize: 12, color: 'var(--mc-text)', background: 'var(--mc-surface)', outline: 'none' }}>
+                  <option value="">— не указано —</option>
+                  <option value="Оплачен безнал">Оплачен безнал</option>
+                  <option value="Наличные при доставке">Наличные при доставке</option>
+                  <option value="Не оплачен">Не оплачен</option>
+                  <option value="Частично оплачен">Частично оплачен</option>
+                </select>
+              </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 {[['city', 'Город'], ['amount', 'Сумма, тг']].map(([field, label]) => (
                   <div key={field} style={{ flex: 1 }}>
