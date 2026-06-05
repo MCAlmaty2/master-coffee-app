@@ -8,6 +8,7 @@ import { ChevronLeft, Plus, X, ChevronRight } from 'lucide-react';
 import { supabase } from '../supabase/client';
 
 const ACCESS_ROLES = ['admin', 'director', 'senior_manager'];
+const NO_CREATE_ROLES = ['observer', 'pending'];
 
 const MT_STATUS = {
   new:         { label: 'Новый',     color: '#3390EC', bg: '#E7F3FE' },
@@ -35,6 +36,7 @@ const userName = (db, id) => { const u = db.users?.find(x => x.id === id); retur
 export function ManagerTasksScreen({ ctx }) {
   const { db, currentUser, goBack, setDb, showToast, notify } = ctx;
   const isManager = ACCESS_ROLES.includes(currentUser?.role);
+  const canCreate = !NO_CREATE_ROLES.includes(currentUser?.role);
 
   const all = db.managerTasks || [];
   // руководители видят всё; остальные — только где они ответственные/постановщики
@@ -53,7 +55,7 @@ export function ManagerTasksScreen({ ctx }) {
 
   const openCount = visible.filter(t => t.status === 'new' || t.status === 'in_progress').length;
 
-  if (!isManager && visible.length === 0) {
+  if (!isManager && !canCreate && visible.length === 0) {
     return (
       <div>
         <button onClick={goBack} style={backBtn}><ChevronLeft size={15} /> Назад</button>
@@ -122,7 +124,7 @@ export function ManagerTasksScreen({ ctx }) {
           <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--mc-text)', margin: 0 }}>📌 Вопросы / поручения</h1>
           <div style={{ fontSize: 11, color: 'var(--mc-muted)', marginTop: 2 }}>{openCount} открытых</div>
         </div>
-        {isManager && (
+        {canCreate && (
           <button onClick={() => setCreateOpen(true)}
             style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 14px', background: '#297b8a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             <Plus size={15} /> Новый
@@ -287,10 +289,11 @@ function MTDetailModal({ ctx, task, isManager, onClose, onStatus }) {
 export function ManagerTasksHomeTile({ ctx }) {
   const { db, currentUser, navigate } = ctx;
   const isManager = ACCESS_ROLES.includes(currentUser?.role);
+  const canCreate = !NO_CREATE_ROLES.includes(currentUser?.role);
   const all = db.managerTasks || [];
   const mine = isManager ? all : all.filter(t => t.assignee_id === currentUser.id || t.created_by === currentUser.id);
   const open = mine.filter(t => t.status === 'new' || t.status === 'in_progress');
-  if (!isManager && mine.length === 0) return null;
+  if (!isManager && !canCreate && mine.length === 0) return null;
 
   return (
     <div onClick={() => navigate({ name: 'manager_tasks' })}
