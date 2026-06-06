@@ -2774,36 +2774,47 @@ function App() {
         .like('number', `POM-${year}-%`).order('number', { ascending: false }).limit(1);
       if (rows?.[0]?.number) dbMax = parseInt(rows[0].number.split('-')[2], 10) || 0;
     } catch { /* fallback to localMax */ }
-    const number = `POM-${year}-${String(Math.max(localMax, dbMax) + 1).padStart(3, '0')}`;
+    let nextNum = Math.max(localMax, dbMax) + 1;
 
-    const grind = {
-      id: uid(),
-      number,
+    const grindId = uid();
+    const grindBase = {
+      id: grindId,
       status: 'new',
       created_by: currentUser.id,
       created_at: new Date().toISOString(),
-      // Клиент
       client_name: (data.client_name || '').trim(),
-      // Товар
       product_id: data.product_id || null,
       product_name: data.product_name.trim(),
       custom_product: !data.product_id,
-      // Количество и помол
       quantity: qty,
       unit: data.unit || 'кг',
       grind_type: data.grind_type,
       grind_custom: data.grind_type === 'custom' ? (data.grind_custom || '').trim() : '',
-      // Номер заказа в 1С
       order_1c: (data.order_1c || '').trim(),
-      // Комментарий
       comment: (data.comment || '').trim(),
-      // Исполнение
       warehouse_user_id: null,
       ready_at: null,
       completed_at: null,
       cancelled_at: null,
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
     };
+
+    // Вставка с retry при дублировании номера (race condition)
+    let number;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      number = `POM-${year}-${String(nextNum).padStart(3, '0')}`;
+      const grindRow = { ...grindBase, number };
+      const { error: insErr } = await supabase.from('grind_requests').insert(grindRow);
+      if (!insErr) break;
+      if (insErr.message?.includes('duplicate key') || insErr.message?.includes('unique constraint')) {
+        nextNum++;
+        continue;
+      }
+      // Другая ошибка — пробрасываем
+      return { error: insErr.message };
+    }
+
+    const grind = { ...grindBase, number };
 
     setDb(d => {
       const warehouseUsers = d.users.filter(u => u.active && hasPermission(d, u, 'grind_fulfill') && u.id !== currentUser.id);
