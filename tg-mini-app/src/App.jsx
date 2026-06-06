@@ -1185,7 +1185,7 @@ function App() {
       syncSnapshotRef.current[stateKey] = currArr;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions]);
+  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes]);
 
   const currentUser = session ? db.users.find(u => u.id === session.user_id) : null;
   // effectiveRole — роль, под которой Admin сейчас "видит" приложение
@@ -6660,11 +6660,17 @@ function FieldRow({ label, value }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function CreateOrderScreen({ ctx }) {
-  const { goBack, navigate, createOrder, showToast, orderDraft, setOrderDraft, resetOrderDraft } = ctx;
+  const { db, goBack, navigate, createOrder, createGrindRequest, showToast, orderDraft, setOrderDraft, resetOrderDraft } = ctx;
+  const products = db.products || [];
   const form = orderDraft;
   const setForm = setOrderDraft;
   const [errors, setErrors] = useState({});
   const [showClientPicker, setShowClientPicker] = useState(false);
+
+  const isGrindable = (productId) => {
+    const p = products.find(x => x.id === productId);
+    return p && p.cat === 'Кофе зерно';
+  };
 
   const update = patch => setForm(f => ({ ...f, ...patch }));
 
@@ -6726,7 +6732,27 @@ function CreateOrderScreen({ ctx }) {
       comment: form.comment.trim(),
     };
     const order = await createOrder(payload);
-    showToast(`Заявка №${order.order_number} создана`);
+    // Автоматически создаём заявки на помол для товаров с grind_type
+    const grindItems = form.items.filter(it => it.grind_type);
+    for (const it of grindItems) {
+      const prod = products.find(p => p.id === it.product_id);
+      await createGrindRequest({
+        product_id: it.product_id || null,
+        product_name: it.name || prod?.name || '—',
+        quantity: Number(it.quantity),
+        unit: it.unit || prod?.unit || 'кг',
+        grind_type: it.grind_type,
+        grind_custom: it.grind_custom || '',
+        client_type: form.client_type,
+        client_name: form.client_type === 'individual' ? (form.full_name || '').trim() : (form.company_name || '').trim(),
+        delivery_method: form.delivery_method,
+        address: (form.address || '').trim(),
+        phone: form.phone || '',
+        comment: `Из заявки ${order.order_number}`,
+      });
+    }
+    const grindNote = grindItems.length > 0 ? ` · ${grindItems.length} помол` : '';
+    showToast(`Заявка №${order.order_number} создана${grindNote}`);
     resetOrderDraft();
     goBack();
   };
@@ -6854,6 +6880,38 @@ function CreateOrderScreen({ ctx }) {
                   <div className="text-right text-sm font-bold mt-2" style={{ color: 'var(--mc-text)' }}>
                     {fmtNum((Number(it.quantity) || 0) * (Number(it.price) || 0))} тг
                   </div>
+                  {/* Помол — для кофе в зерне */}
+                  {isGrindable(it.product_id) && !it.grind_type && (
+                    <button onClick={() => updateItem(i, { grind_type: 'espresso' })}
+                      className="text-xs px-2 py-1 rounded-lg mt-2"
+                      style={{ background: '#EAF4F6', color: '#297b8a', border: '1px dashed #297b8a' }}>
+                      + Нужен помол
+                    </button>
+                  )}
+                  {it.grind_type && (
+                    <div className="mt-2 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[11px] font-semibold" style={{ color: '#297b8a' }}>☕ Помол</div>
+                        <button onClick={() => updateItem(i, { grind_type: '', grind_custom: '' })}
+                          className="text-[10px]" style={{ color: '#EB5757', background: 'none', border: 'none', cursor: 'pointer' }}>Убрать</button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(GRIND_TYPES).map(([k, v]) => (
+                          <button key={k} onClick={() => updateItem(i, { grind_type: k, ...(k !== 'custom' ? { grind_custom: '' } : {}) })}
+                            className="px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                            style={{ background: it.grind_type === k ? '#297b8a' : 'var(--mc-active-item)', color: it.grind_type === k ? 'white' : 'var(--mc-muted)', border: `1px solid ${it.grind_type === k ? '#297b8a' : 'var(--mc-border)'}` }}>
+                            {v.label}
+                          </button>
+                        ))}
+                      </div>
+                      {it.grind_type === 'custom' && (
+                        <input value={it.grind_custom || ''} onChange={e => updateItem(i, { grind_custom: e.target.value })}
+                          placeholder="Опишите помол..."
+                          className="w-full px-2.5 py-1.5 rounded-md text-xs outline-none"
+                          style={{ border: '1px solid var(--mc-border)' }} />
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
