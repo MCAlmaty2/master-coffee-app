@@ -7136,9 +7136,24 @@ function CreateQuickScreen({ ctx }) {
       seg = seg.trim();
       const item = emptyItem();
 
-      // Флаг помола — "молотый", "с помолом", "ground"
+      // Флаг помола — "молотый", "с помолом", "ground", "для эспрессо"
       if (/с\s+помолом|помол|молотый|молот[ыа]|ground/i.test(seg)) {
         item.needs_grind = true;
+        // Авто-определяем тип помола из контекста
+        if (/молотый|молот[ыа]/i.test(seg) && !(/турк|v.?60|фильтр|filter|пуров|френч|french|press|эспрессо|espresso|рожков/i.test(seg))) {
+          item.grind_type = 'espresso'; // молотый без уточнения → эспрессо по умолчанию
+        }
+      }
+      // "для эспрессо", "для турки" и т.д. — тоже помол
+      const grindHintMatch = seg.match(/для\s+(эспрессо|турк\w*|фильтр\w*|пуров\w*|френч\w*|v.?60)/i);
+      if (grindHintMatch) {
+        item.needs_grind = true;
+        const hint = grindHintMatch[1].toLowerCase();
+        if (/эспрессо/.test(hint))         item.grind_type = 'espresso';
+        else if (/турк/.test(hint))        item.grind_type = 'turka';
+        else if (/v.?60/.test(hint))       item.grind_type = 'v60';
+        else if (/фильтр|пуров/.test(hint)) item.grind_type = 'filter';
+        else if (/френч/.test(hint))       item.grind_type = 'french';
       }
 
       // Количество — форматы: "- 5кг", "5 кг", "0,500гр", "0.5"
@@ -7178,6 +7193,8 @@ function CreateQuickScreen({ ctx }) {
         .replace(/[-–]\s*[\d.,]+\s*(?:кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)?.*$/i, '')
         .replace(/[\d]+(?:[.,]\d+)?\s*(?:кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)\s*.*/i, '')
         .replace(/с\s+помолом|помол\w*/gi, '')
+        .replace(/,?\s*для\s+(эспрессо|турк\w*|фильтр\w*|пуров\w*|френч\w*|v.?60)/gi, '')
+        .replace(/,?\s*молотый|,?\s*молот[ыа]/gi, '')
         .replace(/[,;]$/, '').trim();
       if (nameRaw.length < 2) nameRaw = seg.replace(/[,;]$/, '').trim().slice(0, 60);
       item.name = nameRaw;
@@ -7316,6 +7333,8 @@ function CreateQuickScreen({ ctx }) {
 
   // Автопарс с дебаунсом — пользователь вставляет текст, через ~300мс поля заполняются.
   // Если менеджер уже редактировал товары вручную (parseLocked) — не перезаписываем items.
+  // Парсер запускается ТОЛЬКО при изменении raw_text, НЕ при parseLocked — чтобы ручные
+  // правки полей (имя, адрес и т.д.) не перезаписывались обратно парсером.
   useEffect(() => {
     const text = form.raw_text;
     if (!text || text.trim().length === 0) {
@@ -7326,10 +7345,9 @@ function CreateQuickScreen({ ctx }) {
       setForm(currentForm => {
         const { result, det } = runParse(text, currentForm);
         if (parseLocked) {
-          // Обновляем все поля кроме items — их трогать нельзя
-          const { items: _ignored, ...restResult } = result;
+          // Не трогаем ни items, ни вручную заполненные поля
           setDetected(new Set([...det].filter(k => k !== 'items')));
-          return { ...currentForm, ...restResult };
+          return currentForm;
         }
         setDetected(det);
         return result;
@@ -7337,7 +7355,7 @@ function CreateQuickScreen({ ctx }) {
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.raw_text, parseLocked]);
+  }, [form.raw_text]);
 
   // Ручной запуск парсера (кнопка "Разобрать") — всегда сбрасывает блокировку
   const parseNow = () => {
