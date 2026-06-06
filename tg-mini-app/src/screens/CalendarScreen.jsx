@@ -527,7 +527,10 @@ export function FieldCalendarScreen({ ctx }) {
   const [weekStart,  setWeekStart]  = useState(() => getMonday(todayISO()));
   const [selectedDay,setSelectedDay]= useState(() => todayISO());
   const [monthISO,   setMonthISO]   = useState(() => todayISO().substring(0, 7));
-  const [filter,     setFilter]     = useState('all');
+  // Бариста/техник по умолчанию видят только свои задачи
+  const [filter,     setFilter]     = useState(() =>
+    FIELD_ROLES.includes(currentUser?.role) ? currentUser.id : 'all'
+  );
 
   const fieldUsers = db.users.filter(u => u.active && FIELD_ROLES.includes(u.role));
 
