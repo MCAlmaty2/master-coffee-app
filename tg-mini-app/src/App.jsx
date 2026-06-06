@@ -6978,7 +6978,12 @@ function CreateQuickScreen({ ctx }) {
     }
   }, []);
 
-  const update = patch => setForm(f => ({ ...f, ...patch }));
+  const update = (patch) => {
+    // Если пользователь редактирует что-то кроме raw_text → блокируем авто-парс,
+    // чтобы ручные правки не сбрасывались парсером обратно
+    if (!('raw_text' in patch)) setParseLocked(true);
+    setForm(f => ({ ...f, ...patch }));
+  };
 
   // Обновить поле конкретного item (блокирует авто-ре-парс)
   const updateItem = (localId, patch) => {
@@ -7136,24 +7141,9 @@ function CreateQuickScreen({ ctx }) {
       seg = seg.trim();
       const item = emptyItem();
 
-      // Флаг помола — "молотый", "с помолом", "ground", "для эспрессо"
+      // Флаг помола — "молотый", "с помолом", "ground"
       if (/с\s+помолом|помол|молотый|молот[ыа]|ground/i.test(seg)) {
         item.needs_grind = true;
-        // Авто-определяем тип помола из контекста
-        if (/молотый|молот[ыа]/i.test(seg) && !(/турк|v.?60|фильтр|filter|пуров|френч|french|press|эспрессо|espresso|рожков/i.test(seg))) {
-          item.grind_type = 'espresso'; // молотый без уточнения → эспрессо по умолчанию
-        }
-      }
-      // "для эспрессо", "для турки" и т.д. — тоже помол
-      const grindHintMatch = seg.match(/для\s+(эспрессо|турк\w*|фильтр\w*|пуров\w*|френч\w*|v.?60)/i);
-      if (grindHintMatch) {
-        item.needs_grind = true;
-        const hint = grindHintMatch[1].toLowerCase();
-        if (/эспрессо/.test(hint))         item.grind_type = 'espresso';
-        else if (/турк/.test(hint))        item.grind_type = 'turka';
-        else if (/v.?60/.test(hint))       item.grind_type = 'v60';
-        else if (/фильтр|пуров/.test(hint)) item.grind_type = 'filter';
-        else if (/френч/.test(hint))       item.grind_type = 'french';
       }
 
       // Количество — форматы: "- 5кг", "5 кг", "0,500гр", "0.5"
@@ -7193,8 +7183,6 @@ function CreateQuickScreen({ ctx }) {
         .replace(/[-–]\s*[\d.,]+\s*(?:кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)?.*$/i, '')
         .replace(/[\d]+(?:[.,]\d+)?\s*(?:кг|гр|г\b|шт|упак|пач\w*|короб\w*|kg)\s*.*/i, '')
         .replace(/с\s+помолом|помол\w*/gi, '')
-        .replace(/,?\s*для\s+(эспрессо|турк\w*|фильтр\w*|пуров\w*|френч\w*|v.?60)/gi, '')
-        .replace(/,?\s*молотый|,?\s*молот[ыа]/gi, '')
         .replace(/[,;]$/, '').trim();
       if (nameRaw.length < 2) nameRaw = seg.replace(/[,;]$/, '').trim().slice(0, 60);
       item.name = nameRaw;
