@@ -83,6 +83,7 @@ export function ClientsScreen({ ctx }) {
   const { db, navigate, currentUser } = ctx;
   const [search, setSearch] = useState('');
   const [tab, setTab]       = useState('all');
+  const searchRef = React.useRef(null);
 
   const clients = db.clients || [];
   const legalN  = clients.filter(c => c.type === 'legal').length;
@@ -98,7 +99,8 @@ export function ClientsScreen({ ctx }) {
         (c.phone   || '').replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
         (c.bin     || '').includes(q) ||
         (c.address || '').toLowerCase().includes(q) ||
-        (c.contact_person || '').toLowerCase().includes(q)
+        (c.contact_person || '').toLowerCase().includes(q) ||
+        (c.notes   || '').toLowerCase().includes(q)
       );
     }
     return [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
@@ -120,11 +122,14 @@ export function ClientsScreen({ ctx }) {
       {/* Поиск */}
       <div style={{ position: 'relative', marginBottom: 10 }}>
         <Search size={15} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--mc-muted)', pointerEvents: 'none' }} />
-        <input value={search} onChange={e => setSearch(e.target.value)}
+        <input
+          ref={searchRef}
+          defaultValue={search}
+          onInput={e => setSearch(e.target.value)}
           placeholder="Поиск: название, телефон, БИН..."
-          style={{ width: '100%', padding: '10px 36px', border: '1px solid var(--mc-border)', borderRadius: 10, fontSize: 13, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', boxSizing: 'border-box' }} />
+          style={{ width: '100%', padding: '10px 36px', border: '1px solid var(--mc-border)', borderRadius: 10, fontSize: 16, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', boxSizing: 'border-box' }} />
         {search && (
-          <button onClick={() => setSearch('')}
+          <button onClick={() => { setSearch(''); if (searchRef.current) searchRef.current.value = ''; }}
             style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)', lineHeight: 1 }}>
             <X size={14} />
           </button>
