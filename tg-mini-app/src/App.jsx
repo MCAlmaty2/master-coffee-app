@@ -972,9 +972,10 @@ function App() {
   const emptyTaskDraft = { kind: 'visit', department: 'barista', assignee_id: '', client_name: '', address: '', phone: '', problem: '', visit_date: '', visit_time: '', visit_time_end: '', duration_min: 60, tasting_location: 'school', tasting_contact: '', coffee_preferences: '' };
   const [orderDraft, setOrderDraft] = useState(emptyOrderDraft);
   const [quickDraft, setQuickDraft] = useState(emptyQuickDraft);
+  const [quickParseLocked, setQuickParseLocked] = useState(false);
   const [taskDraft, setTaskDraft] = useState(emptyTaskDraft);
   const resetOrderDraft = () => setOrderDraft(emptyOrderDraft);
-  const resetQuickDraft = () => setQuickDraft(emptyQuickDraft);
+  const resetQuickDraft = () => { setQuickDraft(emptyQuickDraft); setQuickParseLocked(false); };
   const resetTaskDraft = () => setTaskDraft(emptyTaskDraft);
 
   // Admin может работать "от имени" любой роли. По умолчанию — своя роль.
@@ -3244,7 +3245,7 @@ function App() {
     resetDB,
     sendFeedback, reportError,
     orderDraft, setOrderDraft, resetOrderDraft,
-    quickDraft, setQuickDraft, resetQuickDraft,
+    quickDraft, setQuickDraft, resetQuickDraft, quickParseLocked, setQuickParseLocked,
     taskDraft, setTaskDraft, resetTaskDraft,
     generateWebToken,
     loginViaPin, setPinForUser, resetPinForUser,
@@ -6932,7 +6933,7 @@ function CreateOrderScreen({ ctx }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function CreateQuickScreen({ ctx }) {
-  const { db, currentUser, goBack, navigate, createOrder, changeStatus, createGrindRequest, showToast, quickDraft, setQuickDraft, resetQuickDraft } = ctx;
+  const { db, currentUser, goBack, navigate, createOrder, changeStatus, createGrindRequest, showToast, quickDraft, setQuickDraft, resetQuickDraft, quickParseLocked, setQuickParseLocked } = ctx;
   if (!hasPermission(db, currentUser, 'orders_create_quick')) {
     return (
       <div>
@@ -6950,7 +6951,9 @@ function CreateQuickScreen({ ctx }) {
   const textareaRef = React.useRef(null);
   // parseLocked = true означает что менеджер вручную отредактировал товары →
   // авто-парс не перезаписывает. Сбрасывается кнопкой "Разобрать".
-  const [parseLocked, setParseLocked] = useState(false);
+  // Хранится в ctx (App-level), чтобы переживать навигацию на product_picker.
+  const parseLocked = quickParseLocked;
+  const setParseLocked = setQuickParseLocked;
 
   // Создать пустой item для ручного добавления
   const emptyItem = () => ({
@@ -7187,12 +7190,18 @@ function CreateQuickScreen({ ctx }) {
       if (nameRaw.length < 2) nameRaw = seg.replace(/[,;]$/, '').trim().slice(0, 60);
       item.name = nameRaw;
 
-      // Матч с каталогом по ключевым словам (>3 символа)
+      // Матч с каталогом — нужно минимум 2 совпадающих слова (>3 символов),
+      // чтобы избежать ложных срабатываний (напр. «эспрессо» → Basic Blend 50/50)
       const segLower = seg.toLowerCase();
-      const matched = products.filter(p => p.active).find(p => {
-        const keywords = p.name.split(/[\s,()]+/).filter(w => w.length > 3);
-        return keywords.some(k => segLower.includes(k.toLowerCase()));
-      });
+      const matched = products.filter(p => p.active)
+        .map(p => {
+          const keywords = p.name.split(/[\s,()]+/).filter(w => w.length > 3);
+          const hits = keywords.filter(k => segLower.includes(k.toLowerCase())).length;
+          return { product: p, hits, total: keywords.length };
+        })
+        .filter(m => m.hits >= 2 || (m.total === 1 && m.hits === 1))
+        .sort((a, b) => b.hits - a.hits)
+        [0]?.product || null;
       if (matched) {
         item.product_id = matched.id;
         item.name = matched.name;
@@ -7258,10 +7267,15 @@ function CreateQuickScreen({ ctx }) {
           fbItem.quantity = m2[1].replace(',', '.');
           fbItem.price = priceCandidate;
           // Матч по каталогу
-          const matched2 = products.filter(p => p.active).find(p => {
-            const kws = p.name.split(/[\s,]+/).filter(w => w.length > 3);
-            return kws.some(k => lowerText.includes(k.toLowerCase()));
-          });
+          const matched2 = products.filter(p => p.active)
+            .map(p => {
+              const kws = p.name.split(/[\s,]+/).filter(w => w.length > 3);
+              const hits = kws.filter(k => lowerText.includes(k.toLowerCase())).length;
+              return { product: p, hits, total: kws.length };
+            })
+            .filter(m => m.hits >= 2 || (m.total === 1 && m.hits === 1))
+            .sort((a, b) => b.hits - a.hits)
+            [0]?.product || null;
           if (matched2) {
             fbItem.product_id = matched2.id;
             fbItem.name = matched2.name;
@@ -7276,10 +7290,15 @@ function CreateQuickScreen({ ctx }) {
         }
       } else {
         // Просто матч товара из каталога
-        const matched3 = products.filter(p => p.active).find(p => {
-          const kws = p.name.split(/[\s,]+/).filter(w => w.length > 3);
-          return kws.some(k => lowerText.includes(k.toLowerCase()));
-        });
+        const matched3 = products.filter(p => p.active)
+          .map(p => {
+            const kws = p.name.split(/[\s,]+/).filter(w => w.length > 3);
+            const hits = kws.filter(k => lowerText.includes(k.toLowerCase())).length;
+            return { product: p, hits, total: kws.length };
+          })
+          .filter(m => m.hits >= 2 || (m.total === 1 && m.hits === 1))
+          .sort((a, b) => b.hits - a.hits)
+          [0]?.product || null;
         if (matched3) {
           const fbItem = emptyItem();
           fbItem.product_id = matched3.id;
@@ -8007,6 +8026,8 @@ function ProductPickerScreen({ ctx, pickerTarget }) {
       setOrderDraft(f => ({ ...f, items: [...f.items, { product_id: p.id, name: p.name, unit: p.unit, cat: p.cat, price: p.price, original_price: p.price, quantity: 1 }] }));
     } else if (pickerTarget === 'quick') {
       const idx = ctx.route?.quickItemIdx;
+      // Блокируем авто-парс — пользователь вручную выбрал товар
+      ctx.setQuickParseLocked?.(true);
       if (idx === undefined || idx === null) {
         // Совместимость со старыми вызовами (не должно случаться)
         setQuickDraft(f => ({ ...f }));
