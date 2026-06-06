@@ -8782,8 +8782,8 @@ function CreateTaskScreen({ ctx }) {
   // Кандидаты на исполнителя — пользователи активные с ролью соответствующего отдела
   const assignees = db.users.filter(u => u.active && u.role === form.department);
 
-  const isInstall  = !isFieldWorker && form.kind === 'install';
-  const isTasting  = !isFieldWorker && form.kind === 'tasting';
+  const isInstall  = form.kind === 'install';
+  const isTasting  = form.kind === 'tasting';
 
   const handleSubmit = async () => {
     const e = {};
@@ -8837,7 +8837,7 @@ function CreateTaskScreen({ ctx }) {
     <div>
       <PageHeader
         title={isFieldWorker ? 'Запланировать в календарь' : 'Поставить задачу'}
-        subtitle={isFieldWorker ? 'Себе в календарь' : isTasting ? 'Дегустация для клиента' : isInstall ? 'Установка оборудования у клиента' : 'Бариста или техник едет к клиенту'}
+        subtitle={isTasting ? 'Дегустация для клиента' : isInstall ? 'Установка оборудования' : isFieldWorker ? 'Себе в календарь' : 'Бариста или техник едет к клиенту'}
         onBack={goBack}
       />
 
@@ -8883,12 +8883,15 @@ function CreateTaskScreen({ ctx }) {
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { v: 'visit', label: 'Визит к клиенту', icon: Truck },
+                    { v: 'install', label: 'Установка', icon: Settings },
+                    { v: 'tasting', label: 'Дегустация', icon: Coffee, onlyBarista: true },
                     { v: 'internal', label: 'Внутренняя задача', icon: Lock },
-                  ].map(opt => {
+                  ].filter(opt => !opt.onlyBarista || effectiveRole === 'barista')
+                  .map(opt => {
                     const Icon = opt.icon;
                     const active = (form.kind || 'visit') === opt.v;
                     return (
-                      <button key={opt.v} onClick={() => update({ kind: opt.v })}
+                      <button key={opt.v} onClick={() => update({ kind: opt.v, ...(opt.v === 'tasting' ? { department: 'barista' } : {}) })}
                         className="rounded-lg p-3 flex items-center justify-center gap-2 font-semibold text-sm"
                         style={{ background: active ? '#297b8a' : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)' }}>
                         <Icon size={16} /> {opt.label}
