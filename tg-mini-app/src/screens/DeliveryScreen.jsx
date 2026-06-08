@@ -188,26 +188,42 @@ function ProgressBar({ done, total }) {
 }
 
 function OrderRow({ order, action, onClick, dim, courierName }) {
+  const isErrand = order.document === 'ERRAND';
   return (
     <div onClick={onClick}
       style={{ background: 'var(--mc-surface)', borderRadius: 12, padding: '10px 12px', marginBottom: 6,
-        border: '1px solid var(--mc-border-light)',
+        border: isErrand ? '1px solid #C4B5FD' : '1px solid var(--mc-border-light)',
         opacity: dim ? .55 : 1, cursor: onClick ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
-        <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--mc-text)', flex: 1, marginRight: 6 }}>{order.client}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, marginRight: 6 }}>
+          {isErrand && (
+            <span style={{ background: '#EDE9FE', color: '#7C3AED', fontSize: 8, fontWeight: 800,
+              padding: '2px 6px', borderRadius: 5, flexShrink: 0 }}>📋 Поручение</span>
+          )}
+          <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--mc-text)' }}>{order.client}</div>
+        </div>
         {courierName
           ? <span style={{ background: '#EFF6FF', color: '#1D4ED8', borderRadius: 8, padding: '2px 7px', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{courierName}</span>
           : <StatusBadge status={order.status} />
         }
       </div>
       <div style={{ fontSize: 9, color: 'var(--mc-muted)' }}>📍 {[order.city, order.address].filter(Boolean).join(' · ')}</div>
-      {order.payment_info && (
+      {order.extra_info && isErrand && (
+        <div style={{ fontSize: 10, color: '#5B21B6', background: '#F5F3FF', borderRadius: 6, padding: '3px 7px', marginTop: 3 }}>
+          {order.extra_info}
+        </div>
+      )}
+      {order.payment_info && !isErrand && (
         <div style={{ fontSize: 9, color: '#C2410C', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginTop: 3 }}>
           💳 {order.payment_info}
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--mc-text)' }}>{fmtNum(order.amount)} тг</span>
+        {!isErrand ? (
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--mc-text)' }}>{fmtNum(order.amount)} тг</span>
+        ) : (
+          <span style={{ fontSize: 9, color: 'var(--mc-muted)' }}>без суммы</span>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {action}
           {onClick && !action && <ChevronRight size={14} style={{ color: 'var(--mc-muted)' }} />}
@@ -498,10 +514,10 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
   const [detailOrder,     setDetailOrder]     = useState(null); // заявка в модале деталей
 
   const isAdmin    = currentUser?.role === 'admin';
-  const isManager  = ['manager', 'senior_manager', 'b2b', 'b2c'].includes(currentUser?.role);
+  const isManager  = ['director', 'senior_manager', 'b2b', 'sales'].includes(currentUser?.role);
   const canArchive = isAdmin || currentUser?.role === 'director';
   const canAdd     = isAdmin || isManager;
-  // Детали заявки + смена адреса (как у админа) — менеджеры, включая B2B и B2C
+  // Детали заявки + смена адреса (как у админа) — менеджеры, включая B2B и Sales
   const canDetail  = isAdmin || isManager;
 
   const handleDeleteRegistry = async () => {
@@ -724,17 +740,30 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
           const canClose      = isAdmin && ['pending', 'assigned'].includes(order.status) && !isAdminClosed;
           const isClosingThis = closingId === order.id;
 
+          const isErrand = order.document === 'ERRAND';
+
           return (
             <div key={order.id} style={{ background: 'var(--mc-surface)', borderRadius: 12, padding: '10px 12px', marginBottom: 6,
-              borderLeft: isAdminClosed ? '3px solid #9CA3AF' : order.status === 'failed' ? '3px solid #dc2626' : 'none',
+              borderLeft: isAdminClosed ? '3px solid #9CA3AF' : order.status === 'failed' ? '3px solid #dc2626' : isErrand ? '3px solid #C4B5FD' : 'none',
               boxShadow: '0 1px 3px rgba(0,0,0,.05)', opacity: isAdminClosed ? 0.75 : 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
-                <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--mc-text)', flex: 1, marginRight: 6 }}>{order.client}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, marginRight: 6 }}>
+                  {isErrand && (
+                    <span style={{ background: '#EDE9FE', color: '#7C3AED', fontSize: 8, fontWeight: 800,
+                      padding: '2px 6px', borderRadius: 5, flexShrink: 0 }}>📋 Поручение</span>
+                  )}
+                  <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--mc-text)' }}>{order.client}</div>
+                </div>
                 <StatusBadge status={order.status} managerDecision={order.manager_decision} />
               </div>
               <div style={{ fontSize: 9, color: 'var(--mc-muted)' }}>📍 {order.city}</div>
               <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: order.payment_info ? 3 : 4 }}>{order.address}</div>
-              {order.payment_info && (
+              {isErrand && order.extra_info && (
+                <div style={{ fontSize: 10, color: '#5B21B6', background: '#F5F3FF', borderRadius: 6, padding: '3px 7px', marginBottom: 4 }}>
+                  {order.extra_info}
+                </div>
+              )}
+              {order.payment_info && !isErrand && (
                 <div style={{ fontSize: 9, color: '#C2410C', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginBottom: 4 }}>
                   💳 {order.payment_info}
                 </div>
@@ -753,9 +782,12 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-text)' }}>{fmtNum(order.amount)} тг</span>
+                {isErrand
+                  ? <span style={{ fontSize: 9, color: 'var(--mc-muted)' }}>без суммы</span>
+                  : <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-text)' }}>{fmtNum(order.amount)} тг</span>
+                }
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  {order.cash_received && (
+                  {order.cash_received && !isErrand && (
                     <span style={{ background: '#DCFCE7', color: '#16a34a', padding: '2px 7px', borderRadius: 8, fontSize: 9, fontWeight: 700 }}>💵 {fmtNum(order.cash_amount)} нал.</span>
                   )}
                   {courier && <span style={{ fontSize: 9, color: 'var(--mc-muted)' }}>{courier.first_name}</span>}
@@ -820,6 +852,9 @@ function AddOrderModal({ ctx, registryId, onClose }) {
   const [saving,  setSaving]  = useState(false);
   const [qForm,   setQForm]   = useState({
     client: '', phone: '', address: '', city: 'Алматы', amount: '', payment_info: '', comment: '',
+  });
+  const [errandForm, setErrandForm] = useState({
+    description: '', address: '', contact: '', phone: '', city: 'Алматы', comment: '',
   });
 
   // Заявки, уже привязанные к любому реестру (по source_order_id)
@@ -900,6 +935,38 @@ function AddOrderModal({ ctx, registryId, onClose }) {
     onClose();
   };
 
+  const handleAddErrand = async () => {
+    if (!errandForm.description.trim()) {
+      showToast('Опишите что нужно сделать / доставить', 'error');
+      return;
+    }
+    if (!errandForm.address.trim()) {
+      showToast('Укажите адрес', 'error');
+      return;
+    }
+    if (saving) return;
+    setSaving(true);
+    const now = new Date().toISOString();
+    const row = {
+      id:           uid(),
+      registry_id:  registryId,
+      document:     'ERRAND',
+      client:       errandForm.contact.trim() || 'Поручение',
+      contacts:     errandForm.phone.trim(),
+      address:      errandForm.address.trim(),
+      city:         errandForm.city.trim(),
+      extra_info:   errandForm.description.trim() + (errandForm.comment.trim() ? '\n' + errandForm.comment.trim() : ''),
+      amount:       0,
+      status:       'pending',
+      created_at:   now,
+    };
+    const { error } = await supabase.from('delivery_orders').insert([row]);
+    if (error) { showToast('Ошибка: ' + error.message, 'error'); setSaving(false); return; }
+    setDb(d => ({ ...d, deliveryOrders: [row, ...d.deliveryOrders] }));
+    showToast('Поручение добавлено в реестр', 'success');
+    onClose();
+  };
+
   const regNumber = (db.deliveryRegistries || []).find(r => r.id === registryId)?.number || '';
 
   return (
@@ -923,9 +990,9 @@ function AddOrderModal({ ctx, registryId, onClose }) {
 
         {/* Вкладки */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
-          {[['existing', '📋 Из заявок'], ['quick', '✍️ Быстрая']].map(([k, l]) => (
+          {[['existing', '📋 Из заявок'], ['quick', '✍️ Быстрая'], ['errand', '📦 Поручение']].map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)}
-              style={{ flex: 1, padding: '10px 4px', fontSize: 12, fontWeight: 700,
+              style={{ flex: 1, padding: '10px 4px', fontSize: 11, fontWeight: 700,
                 background: 'none', border: 'none', cursor: 'pointer',
                 color: tab === k ? '#297b8a' : '#94a3b8',
                 borderBottom: `2px solid ${tab === k ? '#297b8a' : 'transparent'}` }}>
@@ -934,7 +1001,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
           ))}
         </div>
 
-        {tab === 'existing' ? (
+        {tab === 'existing' && (
           <>
             {/* Поиск */}
             <div style={{ padding: '10px 12px 6px', flexShrink: 0 }}>
@@ -1001,7 +1068,9 @@ function AddOrderModal({ ctx, registryId, onClose }) {
               </button>
             </div>
           </>
-        ) : (
+        )}
+
+        {tab === 'quick' && (
           <>
             {/* Быстрая форма */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px 0' }}>
@@ -1081,6 +1150,89 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                   fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
                   background: saving ? '#CBD5E1' : '#297b8a', color: '#fff' }}>
                 {saving ? '⏳ Создаём…' : '➕ Создать и добавить в реестр'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {tab === 'errand' && (
+          <>
+            {/* Подсказка */}
+            <div style={{ padding: '10px 12px 0', flexShrink: 0 }}>
+              <div style={{ background: '#F5F3FF', border: '1px solid #C4B5FD', borderRadius: 10, padding: '8px 10px', fontSize: 10, color: '#5B21B6' }}>
+                📋 Поручение — отвезти документы, забрать что-то, любая задача для курьера без привязки к заявке из 1С
+              </div>
+            </div>
+
+            {/* Форма поручения */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px 0' }}>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mc-muted)',
+                  textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>Что нужно сделать *</div>
+                <textarea
+                  value={errandForm.description}
+                  onChange={e => setErrandForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Отвезти документы в офис / Забрать накладные / Доставить образцы…"
+                  rows={2}
+                  style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
+                    border: `1.5px solid ${errandForm.description ? '#7C3AED' : 'var(--mc-border)'}`,
+                    fontSize: 12, color: 'var(--mc-text)', background: 'var(--mc-surface)', outline: 'none', resize: 'none' }}
+                />
+              </div>
+              {[
+                ['address', 'Адрес *',           'text', 'ул. Абая 25, оф. 3'],
+                ['contact', 'Контактное лицо',   'text', 'Иван Петров'],
+                ['phone',   'Телефон',            'tel',  '+7 ___ ___ __ __'],
+              ].map(([field, label, type, ph]) => (
+                <div key={field} style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mc-muted)',
+                    textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>{label}</div>
+                  <input
+                    type={type}
+                    value={errandForm[field]}
+                    onChange={e => setErrandForm(f => ({ ...f, [field]: e.target.value }))}
+                    placeholder={ph}
+                    style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
+                      border: `1.5px solid ${errandForm[field] ? '#7C3AED' : 'var(--mc-border)'}`,
+                      fontSize: 12, color: 'var(--mc-text)', background: 'var(--mc-surface)', outline: 'none' }}
+                  />
+                </div>
+              ))}
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mc-muted)',
+                  textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>Город</div>
+                <input
+                  type="text"
+                  value={errandForm.city}
+                  onChange={e => setErrandForm(f => ({ ...f, city: e.target.value }))}
+                  style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
+                    border: '1.5px solid #E2EAF0', fontSize: 12, color: 'var(--mc-text)',
+                    background: 'var(--mc-surface)', outline: 'none' }}
+                />
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mc-muted)',
+                  textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>Комментарий</div>
+                <textarea
+                  value={errandForm.comment}
+                  onChange={e => setErrandForm(f => ({ ...f, comment: e.target.value }))}
+                  placeholder="Позвонить заранее, забрать подпись…"
+                  rows={2}
+                  style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
+                    border: '1.5px solid #E2EAF0', fontSize: 12, color: 'var(--mc-text)',
+                    background: '#fff', outline: 'none', resize: 'none' }}
+                />
+              </div>
+            </div>
+
+            {/* Кнопка */}
+            <div style={{ padding: '10px 12px 28px', borderTop: '1px solid var(--mc-border-light)', flexShrink: 0 }}>
+              <button onClick={handleAddErrand}
+                disabled={saving}
+                style={{ width: '100%', padding: 12, borderRadius: 12, border: 'none',
+                  fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
+                  background: saving ? '#CBD5E1' : '#7C3AED', color: '#fff' }}>
+                {saving ? '⏳ Создаём…' : '📋 Добавить поручение в реестр'}
               </button>
             </div>
           </>
