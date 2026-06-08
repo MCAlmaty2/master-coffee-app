@@ -449,6 +449,8 @@ const PERMISSIONS = {
   shipment_view:        { group: 'Отчёты', label: 'Видеть реестр отгрузок' },
   shipment_edit:        { group: 'Отчёты', label: 'Вносить накладные в реестр отгрузок' },
   shipment_pay:         { group: 'Отчёты', label: 'Отмечать оплату в реестре отгрузок (кассир)' },
+  // Товары / прайс
+  products_edit:        { group: 'Товары', label: 'Редактировать и добавлять товары / прайс' },
   // Админ
   admin_users:          { group: 'Администрирование', label: 'Управлять пользователями' },
   admin_roles:          { group: 'Администрирование', label: 'Создавать и редактировать роли' },
@@ -466,7 +468,7 @@ function defaultPermissionsFor(roleKey) {
       return Object.keys(PERMISSIONS);
     case 'director':
     case 'senior_manager':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit'];
     case 'courier':
       return ['delivery_courier'];
     case 'b2b':
@@ -2927,6 +2929,7 @@ function App() {
   /* ═══════════ Товары (прайс-лист) ═══════════ */
 
   const createProduct = async (data) => {
+    if (!hasPermission(db, currentUser, 'products_edit')) return { error: 'Нет прав на редактирование товаров' };
     const name = (data.name || '').trim();
     if (!name) return { error: 'Укажите название' };
     const cat = (data.cat || '').trim();
@@ -2956,7 +2959,7 @@ function App() {
 
   // Массовый импорт товаров: принимает массив {name, cat, unit, price}
   const importProducts = async (rows) => {
-    if (currentUser?.role !== 'admin') return { error: 'Только для админа' };
+    if (!hasPermission(db, currentUser, 'products_edit')) return { error: 'Нет прав на редактирование товаров' };
     const errors = [];
     const added = [];
     const existingIds = new Set((db.products || []).map(p => p.id));
@@ -2987,6 +2990,7 @@ function App() {
   };
 
   const updateProduct = async (productId, patch) => {
+    if (!hasPermission(db, currentUser, 'products_edit')) { showToast('Нет прав на редактирование товаров'); return; }
     // оптимистично
     const prev = db.products.find(p => p.id === productId);
     setDb(d => ({ ...d, products: (d.products || []).map(p => p.id === productId ? { ...p, ...patch } : p) }));
@@ -3004,7 +3008,7 @@ function App() {
    * Для админа.
    */
   const renameCategory = async (oldName, newName) => {
-    if (currentUser?.role !== 'admin') return { error: 'Только для админа' };
+    if (!hasPermission(db, currentUser, 'products_edit')) return { error: 'Нет прав на редактирование товаров' };
     const oldTrim = (oldName || '').trim();
     const newTrim = (newName || '').trim();
     if (!oldTrim || !newTrim) return { error: 'Введите имя' };
@@ -3027,7 +3031,7 @@ function App() {
    * Категория без товаров не существует физически — это просто distinct значение из products.
    */
   const createCategory = async (name) => {
-    if (currentUser?.role !== 'admin') return { error: 'Только для админа' };
+    if (!hasPermission(db, currentUser, 'products_edit')) return { error: 'Нет прав на редактирование товаров' };
     const trim = (name || '').trim();
     if (!trim) return { error: 'Введите имя категории' };
     const existing = new Set((db.products || []).map(p => p.cat));
@@ -3055,6 +3059,7 @@ function App() {
   };
 
   const toggleProductActive = async (productId) => {
+    if (!hasPermission(db, currentUser, 'products_edit')) { showToast('Нет прав на редактирование товаров'); return; }
     const prev = db.products.find(p => p.id === productId);
     if (!prev) return;
     const next = { ...prev, active: !prev.active };
@@ -3068,6 +3073,7 @@ function App() {
   };
 
   const deleteProduct = async (productId) => {
+    if (!hasPermission(db, currentUser, 'products_edit')) { showToast('Нет прав на удаление товаров'); return; }
     const prev = db.products.find(p => p.id === productId);
     setDb(d => ({ ...d, products: (d.products || []).filter(p => p.id !== productId) }));
     try {
@@ -4107,13 +4113,19 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     }
     if (ops.length > 0) groups.push({ title: 'Операции', items: ops });
 
+    // ── ТОВАРЫ / ПРАЙС (по праву products_edit) ────────────────────────────
+    if (hasPermission(db, currentUser, 'products_edit')) {
+      const prodItems = [];
+      prodItems.push({ id: 'admin_products', label: 'Товары / прайс',     icon: Package });
+      prodItems.push({ id: 'admin_categories', label: 'Категории товаров', icon: Tag });
+      groups.push({ title: 'Товары', items: prodItems });
+    }
+
     // ── АДМИН ────────────────────────────
     if (currentUser.role === 'admin') {
       const admin = [];
       admin.push({ id: 'admin_users',    label: 'Пользователи',       icon: Users });
       admin.push({ id: 'admin_roles',    label: 'Роли и права',       icon: KeyRound });
-      admin.push({ id: 'admin_products', label: 'Товары / прайс',     icon: Package });
-      admin.push({ id: 'admin_categories', label: 'Категории товаров', icon: Tag });
       admin.push({ id: 'admin_requests', label: 'Запросы доступа',    icon: Bell });
       admin.push({ id: 'admin_telegram', label: 'Telegram-уведомления', icon: Send });
       admin.push({ id: 'admin_feedback', label: 'Сообщения сотрудников', icon: Mail });
@@ -4854,7 +4866,7 @@ function HomeCustomizeScreen({ ctx }) {
     { key: 'shipment',   label: 'Реестр отгрузок',     show: () => has('shipment_view'), section: 'Плитки' },
     { key: 'requests',   label: 'Запросы доступа',     show: () => isAdmin, section: 'Плитки' },
     { key: 'users',      label: 'Пользователи',        show: () => isAdmin, section: 'Плитки' },
-    { key: 'products',   label: 'Товары / прайс',      show: () => isAdmin, section: 'Плитки' },
+    { key: 'products',   label: 'Товары / прайс',      show: () => has('products_edit'), section: 'Плитки' },
   ].filter(it => it.show());
 
   const [prefs, setPrefs] = useState(() => ({ ...(currentUser?.home_prefs || {}) }));
@@ -5079,6 +5091,9 @@ function DashboardHome({ ctx, title }) {
       color: '#10B981',
       go: () => navigate({ name: 'admin_users' }),
     });
+  }
+  // Товары / прайс — по праву products_edit
+  if (has('products_edit')) {
     tiles.push({
       key: 'products', icon: Package, label: 'Товары / прайс',
       value: stats.totalProducts,
