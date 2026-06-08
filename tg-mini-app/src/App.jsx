@@ -1419,14 +1419,14 @@ function App() {
     if (newStatus === 'shipped' && meta.doc_no && !isValidDocNo(meta.doc_no)) {
       return { error: 'Номер документа должен быть в формате 00ЦТ-NNNNNN' };
     }
-    // Подтвердить оплату (invoiced → paid): кассир, admin, или b2b в субботу для физлица
+    // Подтвердить оплату (invoiced → paid): кассир, admin, или b2b для физлица-самовывоз
     const order = (db.orders || []).find(o => o.id === orderId);
     if (order?.status === 'invoiced' && newStatus === 'paid') {
-      const isSaturday = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Almaty' })).getDay() === 6;
       const isIndividual = order.client_type === 'individual';
-      const saturdayB2B = isSaturday && isIndividual && currentUser.role === 'b2b';
-      if (currentUser.role !== 'cashier' && currentUser.role !== 'admin' && !saturdayB2B) {
-        return { error: 'Подтвердить оплату может только кассир' + (isIndividual ? ' (или B2B-менеджер по субботам)' : '') };
+      const isPickup = order.delivery_method === 'pickup';
+      const b2bPickup = isIndividual && isPickup && currentUser.role === 'b2b';
+      if (currentUser.role !== 'cashier' && currentUser.role !== 'admin' && !b2bPickup) {
+        return { error: 'Подтвердить оплату может только кассир' + (isIndividual && isPickup ? ' (или B2B-менеджер для самовывоза)' : '') };
       }
     }
     setDb(d => {
@@ -5966,10 +5966,9 @@ function OrderDetailScreen({ ctx, orderId }) {
     && !['archived', 'shipped', 'ready', 'invoiced'].includes(order.status);
 
   // Кассир (и admin) — шаг invoiced→paid
-  // Исключение: b2b + admin по субботам для физических лиц
-  const isSaturday = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Almaty' })).getDay() === 6;
-  const saturdayB2BException = isSaturday && order.client_type === 'individual' && effectiveRole === 'b2b';
-  const canCashierConfirm = (effectiveRole === 'cashier' || effectiveRole === 'admin' || saturdayB2BException)
+  // B2B-менеджер может подтверждать оплату для физлиц с самовывозом
+  const b2bPickupException = order.client_type === 'individual' && order.delivery_method === 'pickup' && effectiveRole === 'b2b';
+  const canCashierConfirm = (effectiveRole === 'cashier' || effectiveRole === 'admin' || b2bPickupException)
     && order.status === 'invoiced';
 
   // Следующий статус для менеджера (skip invoiced state — там только кассир)
@@ -6201,9 +6200,9 @@ function OrderDetailScreen({ ctx, orderId }) {
               </div>
               <div className="text-sm mb-3" style={{ color: '#166534' }}>
                 Счёт выставлен клиенту. После подтверждения оплаты менеджер оформит отгрузку.
-                {saturdayB2BException && (
+                {b2bPickupException && (
                   <span className="block mt-1 text-xs" style={{ color: '#15803D', opacity: 0.8 }}>
-                    📅 Суббота · физлицо — доступно без кассира
+                    🏪 Физлицо · самовывоз — доступно B2B-менеджеру
                   </span>
                 )}
               </div>
