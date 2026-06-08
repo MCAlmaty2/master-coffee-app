@@ -383,10 +383,10 @@ const STATUS = {
 const STATUS_ORDER = ['new', 'in_work', 'invoiced', 'paid', 'shipped'];
 
 // Поток статусов зависит от способа оплаты.
-// «При получении» (on_delivery): оплата у курьера → счёт/оплата пропускаются:
-// Новая → В работе → Отгружен.
+// «При получении» (on_delivery) и «Отсрочка платежа» (deferred_payment):
+// счёт/оплата пропускаются → Новая → В работе → Отгружен.
 function statusFlow(order) {
-  if (order?.payment_method === 'on_delivery') return ['new', 'in_work', 'shipped'];
+  if (order?.payment_method === 'on_delivery' || order?.payment_method === 'deferred_payment') return ['new', 'in_work', 'shipped'];
   return STATUS_ORDER;
 }
 
@@ -6114,15 +6114,17 @@ function OrderDetailScreen({ ctx, orderId }) {
               <div className="flex items-center gap-2">
                 <Banknote size={16} style={{ color: '#297b8a' }} />
                 <span className="font-semibold" style={{ color: 'var(--mc-text)' }}>
-                  {order.payment_method === 'on_delivery'    && 'При получении'}
-                  {order.payment_method === 'kaspi_remote'   && 'Удалённый счёт Kaspi'}
-                  {order.payment_method === 'prepay_invoice' && 'Счёт на предоплату'}
+                  {order.payment_method === 'on_delivery'       && 'При получении'}
+                  {order.payment_method === 'kaspi_remote'      && 'Удалённый счёт Kaspi'}
+                  {order.payment_method === 'prepay_invoice'    && 'Счёт на предоплату'}
+                  {order.payment_method === 'deferred_payment'  && 'Отсрочка платежа'}
                 </span>
               </div>
               <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>
-                {order.payment_method === 'on_delivery'    && 'Оплата при выдаче. Можно сразу отгружать.'}
-                {order.payment_method === 'kaspi_remote'   && 'Клиент оплачивает по ссылке/QR. Отгружать после подтверждения оплаты.'}
-                {order.payment_method === 'prepay_invoice' && 'Отгрузка только после поступления денег по счёту.'}
+                {order.payment_method === 'on_delivery'       && 'Оплата при выдаче. Можно сразу отгружать.'}
+                {order.payment_method === 'kaspi_remote'      && 'Клиент оплачивает по ссылке/QR. Отгружать после подтверждения оплаты.'}
+                {order.payment_method === 'prepay_invoice'    && 'Отгрузка только после поступления денег по счёту.'}
+                {order.payment_method === 'deferred_payment'  && 'Оплата позже. Счёт и оплата пропускаются — сразу отгрузка.'}
               </div>
             </Card>
           )}
@@ -6686,7 +6688,14 @@ function CreateOrderScreen({ ctx }) {
     return p && p.cat === 'Кофе зерно';
   };
 
-  const update = patch => setForm(f => ({ ...f, ...patch }));
+  const update = patch => setForm(f => {
+    const next = { ...f, ...patch };
+    // Сбросить deferred_payment при переключении с самовывоза на доставку
+    if (patch.delivery_method && patch.delivery_method !== 'pickup' && f.payment_method === 'deferred_payment') {
+      next.payment_method = '';
+    }
+    return next;
+  });
 
   const handleClientSelect = (client) => {
     const preferredAsItems = (client.preferred_items || []).map(pi => ({
@@ -6980,6 +6989,7 @@ function CreateOrderScreen({ ctx }) {
                 {[
                   { v: 'on_delivery', label: 'При получении', desc: 'Оплата при выдаче' },
                   { v: 'kaspi_remote', label: 'Kaspi счёт', desc: 'По ссылке/QR' },
+                  ...(form.delivery_method === 'pickup' ? [{ v: 'deferred_payment', label: 'Отсрочка платежа', desc: 'Оплата позже (счёт и оплата пропускаются)' }] : []),
                 ].map(opt => {
                   const active = form.payment_method === opt.v;
                   return (
@@ -7068,7 +7078,14 @@ function CreateQuickScreen({ ctx }) {
     // Если пользователь редактирует что-то кроме raw_text → блокируем авто-парс,
     // чтобы ручные правки не сбрасывались парсером обратно
     if (!('raw_text' in patch)) setParseLocked(true);
-    setForm(f => ({ ...f, ...patch }));
+    setForm(f => {
+      const next = { ...f, ...patch };
+      // Сбросить deferred_payment при переключении с самовывоза на доставку
+      if (patch.delivery_method && patch.delivery_method !== 'pickup' && f.payment_method === 'deferred_payment') {
+        next.payment_method = '';
+      }
+      return next;
+    });
   };
 
   // Обновить поле конкретного item (блокирует авто-ре-парс)
@@ -7150,6 +7167,9 @@ function CreateQuickScreen({ ctx }) {
       det.add('client_type');
     } else if (/kaspi|каспи|qr|ссылку?|удалённый\s+счёт/i.test(text)) {
       result.payment_method = 'kaspi_remote';
+      det.add('payment_method');
+    } else if (/отсрочк[аиуе]?\s+платеж|отсрочк[аиуе]?\s+оплат/i.test(text)) {
+      result.payment_method = 'deferred_payment';
       det.add('payment_method');
     } else if (/при\s+получени|наличными|на\s+месте|при\s+вручени/i.test(text)) {
       result.payment_method = 'on_delivery';
@@ -7714,9 +7734,10 @@ function CreateQuickScreen({ ctx }) {
               </label>
               <div className="grid grid-cols-1 gap-1.5">
                 {[
-                  { v: 'on_delivery',     label: 'При получении',           hint: 'Оплата в момент выдачи (физ./юр. с отсрочкой)' },
-                  { v: 'kaspi_remote',    label: 'Удалённый счёт Kaspi',    hint: 'Клиент оплачивает по ссылке/QR до доставки' },
-                  { v: 'prepay_invoice',  label: 'Счёт на предоплату',      hint: 'Доставка после поступления денег' },
+                  { v: 'on_delivery',      label: 'При получении',           hint: 'Оплата в момент выдачи (физ./юр. с отсрочкой)' },
+                  { v: 'kaspi_remote',     label: 'Удалённый счёт Kaspi',    hint: 'Клиент оплачивает по ссылке/QR до доставки' },
+                  { v: 'prepay_invoice',   label: 'Счёт на предоплату',      hint: 'Доставка после поступления денег' },
+                  ...(form.delivery_method === 'pickup' ? [{ v: 'deferred_payment', label: 'Отсрочка платежа',  hint: 'Самовывоз — оплата позже (счёт и оплата пропускаются)' }] : []),
                 ].map(opt => {
                   const active = form.payment_method === opt.v;
                   return (
