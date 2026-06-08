@@ -10699,13 +10699,16 @@ function WriteOffProductPickerModal({ db, onPick, onClose }) {
 }
 
 function WriteOffDetailScreen({ ctx, writeOffId }) {
-  const { db, currentUser, goBack, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, showToast } = ctx;
+  const { db, currentUser, goBack, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, showToast, setDb } = ctx;
   const wo = db.writeOffs.find(w => w.id === writeOffId);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
   const [prepareOpen, setPrepareOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editItems, setEditItems] = useState([]);
+  const [editReason, setEditReason] = useState('');
 
   if (!wo) return <div className="p-6">Заявка не найдена</div>;
 
@@ -10740,6 +10743,32 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
   const canApprove = wo.status === 'pending' && hasPermission(db, currentUser, 'writeoff_approve');
   const canComplete = wo.status === 'approved' && hasPermission(db, currentUser, 'writeoff_finalize');
   const canCancel = wo.status === 'pending' && (wo.created_by === currentUser.id || currentUser.role === 'admin');
+  const canEdit = wo.status === 'pending' && (wo.created_by === currentUser.id || currentUser.role === 'admin');
+
+  const startEditing = () => {
+    setEditItems(wo.items.map(it => ({ ...it })));
+    setEditReason(wo.reason || '');
+    setEditing(true);
+  };
+
+  const saveEdits = () => {
+    const cleaned = editItems.filter(it => it.name && Number(it.quantity) > 0);
+    if (cleaned.length === 0) { showToast('Добавьте хотя бы одну позицию'); return; }
+    if (!editReason.trim()) { showToast('Укажите причину списания'); return; }
+    const newLog = [...wo.log, { event: 'edited', actor: currentUser.id, at: new Date().toISOString() }];
+    setDb(d => ({
+      ...d,
+      writeOffs: d.writeOffs.map(w => w.id === wo.id
+        ? { ...w, items: cleaned, reason: editReason.trim(), log: newLog }
+        : w
+      ),
+    }));
+    setEditing(false);
+    showToast('Заявка обновлена');
+  };
+
+  const updateEditItem = (idx, patch) => setEditItems(items => items.map((it, i) => i === idx ? { ...it, ...patch } : it));
+  const removeEditItem = (idx) => setEditItems(items => items.filter((_, i) => i !== idx));
 
   return (
     <div>
@@ -10751,28 +10780,78 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
             <WriteOffTimeline status={wo.status} />
           </Card>
 
-          <Card title={`Позиции (${wo.items.length})`}>
-            <div className="space-y-2">
-              {wo.items.map(it => (
-                <div key={it.id} className="flex items-start justify-between gap-3 py-2" style={{ borderBottom: '1px solid #F1F5F9' }}>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-sm" style={{ color: 'var(--mc-text)' }}>{it.name}</div>
-                    <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>{it.category || '—'}</div>
+          <Card title={<span className="flex items-center justify-between w-full">
+            <span>Позиции ({editing ? editItems.length : wo.items.length})</span>
+            {canEdit && !editing && (
+              <button onClick={startEditing} className="text-xs font-semibold px-3 py-1 rounded-lg" style={{ background: '#EAF4F6', color: '#297b8a', border: '1px solid #b0dce5' }}>
+                ✏️ Редактировать
+              </button>
+            )}
+          </span>}>
+            {editing ? (
+              <div className="space-y-2">
+                {editItems.map((it, idx) => (
+                  <div key={it.id || idx} className="rounded-lg p-3" style={{ background: '#F8FAFB', border: '1px solid var(--mc-border)' }}>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="font-semibold text-sm flex-1" style={{ color: 'var(--mc-text)' }}>{it.name}</div>
+                      <button onClick={() => removeEditItem(idx)} style={{ color: '#EB5757', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={14} /></button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[11px]" style={{ color: 'var(--mc-muted)' }}>Количество</label>
+                        <input value={it.quantity} onChange={e => updateEditItem(idx, { quantity: e.target.value.replace(/[^0-9.,]/g, '') })}
+                          className="w-full px-2.5 py-1.5 rounded-md text-sm outline-none" style={{ border: '1px solid var(--mc-border)' }} />
+                      </div>
+                      <div>
+                        <label className="text-[11px]" style={{ color: 'var(--mc-muted)' }}>Единица</label>
+                        <select value={it.unit} onChange={e => updateEditItem(idx, { unit: e.target.value })}
+                          className="w-full px-2.5 py-1.5 rounded-md text-sm outline-none" style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)' }}>
+                          <option value="кг">кг</option><option value="г">г</option><option value="шт">шт</option><option value="л">л</option><option value="упак">упак</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                  <div className="font-bold mono-font text-sm whitespace-nowrap" style={{ color: 'var(--mc-text)' }}>
-                    {fmtNum(it.quantity)} {it.unit}
-                  </div>
+                ))}
+                <div className="flex gap-2 pt-2">
+                  <button onClick={saveEdits} className="flex-1 py-2.5 rounded-lg font-semibold text-white text-sm" style={{ background: '#297b8a' }}>
+                    💾 Сохранить
+                  </button>
+                  <button onClick={() => setEditing(false)} className="px-4 py-2.5 rounded-lg font-semibold text-sm" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
+                    Отмена
+                  </button>
                 </div>
-              ))}
-              <div className="flex items-center justify-between pt-2" style={{ borderTop: '1px solid var(--mc-border)' }}>
-                <span className="text-sm font-semibold" style={{ color: 'var(--mc-muted)' }}>Итого позиций / единиц</span>
-                <span className="text-sm font-bold" style={{ color: 'var(--mc-text)' }}>{wo.items.length} / {fmtNum(itemsTotal)}</span>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                {wo.items.map(it => (
+                  <div key={it.id} className="flex items-start justify-between gap-3 py-2" style={{ borderBottom: '1px solid #F1F5F9' }}>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-sm" style={{ color: 'var(--mc-text)' }}>{it.name}</div>
+                      <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>{it.category || '—'}</div>
+                    </div>
+                    <div className="font-bold mono-font text-sm whitespace-nowrap" style={{ color: 'var(--mc-text)' }}>
+                      {fmtNum(it.quantity)} {it.unit}
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-2" style={{ borderTop: '1px solid var(--mc-border)' }}>
+                  <span className="text-sm font-semibold" style={{ color: 'var(--mc-muted)' }}>Итого позиций / единиц</span>
+                  <span className="text-sm font-bold" style={{ color: 'var(--mc-text)' }}>{wo.items.length} / {fmtNum(itemsTotal)}</span>
+                </div>
+              </div>
+            )}
           </Card>
 
-          <Card title="Причина списания">
-            <div className="text-sm whitespace-pre-wrap" style={{ color: 'var(--mc-text)' }}>{wo.reason}</div>
+          <Card title={<span className="flex items-center justify-between w-full">
+            <span>Причина списания</span>
+            {canEdit && !editing && null}
+          </span>}>
+            {editing ? (
+              <textarea value={editReason} onChange={e => setEditReason(e.target.value)} rows={3}
+                className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={{ border: '1px solid var(--mc-border)', resize: 'vertical' }} />
+            ) : (
+              <div className="text-sm whitespace-pre-wrap" style={{ color: 'var(--mc-text)' }}>{wo.reason}</div>
+            )}
           </Card>
 
           {wo.approval_comment && (
