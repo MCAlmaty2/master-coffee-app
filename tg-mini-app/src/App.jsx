@@ -13,6 +13,7 @@ import { SalesReportScreen, SalesReportHomeTile } from './screens/SalesReportScr
 import { ShipmentRegistryScreen, ShipmentRegistryHomeTile } from './screens/ShipmentRegistryScreen';
 import { DailyRevenueScreen } from './screens/DailyRevenueScreen';
 import { ManagerTasksScreen, ManagerTasksHomeTile } from './screens/ManagerTasksScreen';
+import { ScheduleScreen, ScheduleHomeBanner } from './screens/ScheduleScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -451,6 +452,8 @@ const PERMISSIONS = {
   shipment_pay:         { group: 'Отчёты', label: 'Отмечать оплату в реестре отгрузок (кассир)' },
   // Товары / прайс
   products_edit:        { group: 'Товары', label: 'Редактировать и добавлять товары / прайс' },
+  // Расписание
+  schedule_access:      { group: 'Расписание', label: 'Доступ к регулярным задачам (расписание)' },
   // Админ
   admin_users:          { group: 'Администрирование', label: 'Управлять пользователями' },
   admin_roles:          { group: 'Администрирование', label: 'Создавать и редактировать роли' },
@@ -468,7 +471,7 @@ function defaultPermissionsFor(roleKey) {
       return Object.keys(PERMISSIONS);
     case 'director':
     case 'senior_manager':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access'];
     case 'courier':
       return ['delivery_courier'];
     case 'b2b':
@@ -834,6 +837,8 @@ function seedDB() {
     deliveryRegistries: [],
     deliveryOrders: [],
     clients: [],
+    scheduleTasks: [],
+    scheduleCompletions: [],
     roleDefinitions: SYSTEM_ROLES.map(key => ({
       key,
       label: ROLES[key].label,
@@ -1187,7 +1192,7 @@ function App() {
       syncSnapshotRef.current[stateKey] = currArr;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes]);
+  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions]);
 
   const currentUser = session ? db.users.find(u => u.id === session.user_id) : null;
   // effectiveRole — роль, под которой Admin сейчас "видит" приложение
@@ -3245,7 +3250,7 @@ function App() {
 
   const ctx = {
     db, setDb, currentUser, effectiveRole, actAs, setActAs,
-    route, navigate, goBack, showToast,
+    route, navigate, goBack, showToast, hasPermission: (perm) => hasPermission(db, currentUser, perm),
     bootStatus,
     loginViaTelegram, logout,
     createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, cancelOrder, editOrder, revertLastAction,
@@ -4121,6 +4126,13 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       groups.push({ title: 'Товары', items: prodItems });
     }
 
+    // ── РАСПИСАНИЕ (по разрешению schedule_access) ────────────────────
+    if (hasPermission(db, currentUser, 'schedule_access')) {
+      groups.push({ title: 'Расписание', items: [
+        { id: 'schedule', label: 'Регулярные задачи', icon: Calendar },
+      ] });
+    }
+
     // ── АДМИН ────────────────────────────
     if (currentUser.role === 'admin') {
       const admin = [];
@@ -4543,6 +4555,8 @@ function Screen({ ctx }) {
     // ─── Доставка (курьер) ───
     case 'courier_registry': return <CourierRegistryScreen ctx={ctx} />;
     case 'courier_order':    return <CourierOrderDetailScreen ctx={ctx} orderId={route.orderId} />;
+    // ─── Расписание / регулярные задачи ───
+    case 'schedule': return <ScheduleScreen ctx={ctx} />;
     // ─── Клиенты ───
     case 'clients':       return <ClientsScreen ctx={ctx} />;
     case 'client_detail': return <ClientDetailScreen ctx={ctx} clientId={route.clientId} />;
@@ -4927,7 +4941,7 @@ function HomeCustomizeScreen({ ctx }) {
 }
 
 function DashboardHome({ ctx, title }) {
-  const { db, currentUser, navigate } = ctx;
+  const { db, currentUser, navigate, effectiveRole } = ctx;
 
   // ─── Счётчики по всем темам ───
   const stats = useMemo(() => {
@@ -5123,6 +5137,11 @@ function DashboardHome({ ctx, title }) {
     <div>
       {/* Карточка профиля пользователя — первой */}
       <UserHeroCard user={currentUser} db={db} />
+
+      {/* ── НЕ ЗАБУДЬ ВЫПОЛНИТЬ — баннер регулярных задач ── */}
+      {hasPermission(db, currentUser, 'schedule_access') && (
+        <ScheduleHomeBanner ctx={ctx} />
+      )}
 
       {/* ── Отчёт ОП — крупный акцентный тайл ── */}
       {!hidden('w_sales') && <SalesReportHomeTile ctx={ctx} />}
