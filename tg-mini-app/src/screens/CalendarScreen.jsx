@@ -235,6 +235,7 @@ function EventCard({ task: t, db, currentUser, mode, navigate, compact, colIdx =
   const kindLabel = t.kind === 'internal' ? 'Внутренняя'
     : t.kind === 'install'  ? `⚙️ ${t.client_name}`
     : t.kind === 'tasting'  ? `🍵 ${t.client_name}`
+    : t.kind === 'training' ? `🎓 ${t.client_name}`
     : t.client_name;
 
   return (
@@ -411,7 +412,7 @@ function MonthCalendarView({ tasks, monthISO, ctx, onDayClick }) {
               </div>
               {activeTasks.slice(0, 3).map(t => {
                 const color = getUserTaskColor(t.assignee_id, db);
-                const prefix = t.kind === 'tasting' ? '🍵' : t.kind === 'install' ? '⚙️' : '';
+                const prefix = t.kind === 'tasting' ? '🍵' : t.kind === 'install' ? '⚙️' : t.kind === 'training' ? '🎓' : '';
                 return (
                   <div key={t.id}
                     onClick={e => { e.stopPropagation(); navigate({ name: 'task_detail', taskId: t.id }); }}
@@ -477,6 +478,7 @@ function DayCalendarView({ tasks, date, ctx, mode, onSlotClick }) {
             const kindLabel = t.kind === 'internal' ? 'Внутренняя'
               : t.kind === 'install' ? `⚙️ ${t.client_name}`
               : t.kind === 'tasting' ? `🍵 ${t.client_name}`
+              : t.kind === 'training' ? `🎓 ${t.client_name}`
               : t.client_name;
             return (
               <div key={t.id}
@@ -744,7 +746,7 @@ export function FieldHome({ ctx }) {
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="font-bold text-sm" style={{ color: '#3390EC' }}>{t.task_number}</span>
                   <span className="font-semibold text-sm truncate" style={{ color: 'var(--mc-text)' }}>
-                    {t.kind === 'internal' ? 'Внутренняя задача' : t.kind === 'install' ? `⚙️ Установка — ${t.client_name}` : t.client_name}
+                    {t.kind === 'internal' ? 'Внутренняя задача' : t.kind === 'install' ? `⚙️ Установка — ${t.client_name}` : t.kind === 'training' ? `🎓 Обучение — ${t.client_name}` : t.client_name}
                   </span>
                 </div>
                 {t.problem && (
