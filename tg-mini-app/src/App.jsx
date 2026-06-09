@@ -5,7 +5,7 @@ import {
   ChevronRight, Trash2, Eye, Users, ArrowRight, Hash, ChevronDown,
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
-  Calendar, Monitor,
+  Calendar, Monitor, Gift, GraduationCap, Users2, Wallet,
 } from 'lucide-react';
 import { supabase } from './supabase/client';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
@@ -14,6 +14,7 @@ import { ShipmentRegistryScreen, ShipmentRegistryHomeTile } from './screens/Ship
 import { DailyRevenueScreen } from './screens/DailyRevenueScreen';
 import { ManagerTasksScreen, ManagerTasksHomeTile } from './screens/ManagerTasksScreen';
 import { ScheduleScreen, ScheduleHomeBanner } from './screens/ScheduleScreen';
+import { GiftsScreen, GiftsHomeBanner } from './screens/GiftsScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -452,6 +453,11 @@ const PERMISSIONS = {
   shipment_pay:         { group: 'Отчёты', label: 'Отмечать оплату в реестре отгрузок (кассир)' },
   // Товары / прайс
   products_edit:        { group: 'Товары', label: 'Редактировать и добавлять товары / прайс' },
+  // Подарки
+  gift_create:          { group: 'Подарки', label: 'Создавать заявки на подарки' },
+  gift_approve:         { group: 'Подарки', label: 'Одобрять / отклонять заявки на подарки' },
+  gift_process:         { group: 'Подарки', label: 'Списывать подарки (после одобрения)' },
+  gift_view_all:        { group: 'Подарки', label: 'Видеть все заявки на подарки' },
   // Расписание
   schedule_access:      { group: 'Расписание', label: 'Доступ к регулярным задачам (расписание)' },
   // Админ
@@ -470,21 +476,22 @@ function defaultPermissionsFor(roleKey) {
       // admin всё равно имеет всё, но для согласованности — все права
       return Object.keys(PERMISSIONS);
     case 'director':
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all'];
     case 'senior_manager':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all'];
     case 'courier':
       return ['delivery_courier'];
     case 'b2b':
-      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit'];
+      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'gift_create'];
     case 'sales':
-      return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create'];
+      return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'gift_create'];
     case 'warehouse':
       return ['orders_view_all', 'orders_change_status', 'warehouse_pickup', 'grind_fulfill', 'grind_view_all'];
     case 'cashier':
-      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay'];
+      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay', 'gift_create'];
     case 'barista':
     case 'technician':
-      return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create'];
+      return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create', 'gift_create'];
     default:
       return [];
   }
@@ -510,6 +517,38 @@ const TASK_STATUS = {
   done:     { label: 'Выполнена',       short: 'Выполнена', color: '#22C55E', bg: '#DCFCE7', icon: CheckCircle2 },
 };
 const TASK_STATUS_ORDER = ['new', 'in_work', 'done'];
+
+// ─── Курсы обучения бариста ───
+const TRAINING_COURSES = {
+  basic_plus: {
+    label: 'Базовый+',
+    days: 3, hoursPerDay: 3,
+    price: { individual: 80000, group: 60000 },
+    maxGroup: 3,
+    slots: ['09:00-12:00', '12:00-15:00', '15:00-18:00'],
+  },
+  latte_art: {
+    label: 'Латте Арт',
+    days: 2, hoursPerDay: 3,
+    price: { individual: 80000, group: 80000 },
+    maxGroup: 3,
+    slots: ['09:00-12:00', '12:00-15:00', '15:00-18:00'],
+  },
+  brewing: {
+    label: 'Альтернатива (Brewing)',
+    days: 2, hoursPerDay: 2,
+    price: { individual: 50000, group: 40000 },
+    maxGroup: 3,
+    slots: ['09:00-11:00', '12:00-14:00', '15:00-17:00'],
+  },
+  home_brew: {
+    label: 'Home Brew',
+    days: 1, hoursPerDay: 3,
+    price: { individual: 30000, group: 20000 },
+    maxGroup: 3,
+    slots: ['09:00-12:00', '12:00-15:00', '15:00-18:00'],
+  },
+};
 
 // Стадии заявок на списание
 const WRITEOFF_STATUS = {
@@ -839,6 +878,7 @@ function seedDB() {
     clients: [],
     scheduleTasks: [],
     scheduleCompletions: [],
+    gifts: [],
     roleDefinitions: SYSTEM_ROLES.map(key => ({
       key,
       label: ROLES[key].label,
@@ -976,7 +1016,7 @@ function App() {
     doc_no: '',
     raw_text: '',
   };
-  const emptyTaskDraft = { kind: 'visit', department: 'barista', assignee_id: '', client_name: '', address: '', phone: '', problem: '', visit_date: '', visit_time: '', visit_time_end: '', duration_min: 60, tasting_location: 'school', tasting_contact: '', coffee_preferences: '' };
+  const emptyTaskDraft = { kind: 'visit', department: 'barista', assignee_id: '', client_name: '', address: '', phone: '', problem: '', visit_date: '', visit_time: '', visit_time_end: '', duration_min: 60, tasting_location: 'school', tasting_contact: '', coffee_preferences: '', training_course: '', training_format: 'individual', training_students: 1, training_prepaid: false, training_contact: '' };
   const [orderDraft, setOrderDraft] = useState(emptyOrderDraft);
   const [quickDraft, setQuickDraft] = useState(emptyQuickDraft);
   const [quickParseLocked, setQuickParseLocked] = useState(false);
@@ -1062,6 +1102,7 @@ function App() {
     const type = startParam.slice(0, idx);
     const id   = startParam.slice(idx + 1);
     if (type === 'writeoff') navigate({ name: 'writeoff_detail', writeOffId: id });
+    else if (type === 'gift') navigate({ name: 'gift_detail', giftId: id });
     else if (type === 'contract') navigate({ name: 'contract_detail', contractId: id });
   }, [bootStatus.phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1171,7 +1212,18 @@ function App() {
               && !(db.deliveryRegistries || []).some(r => r.id === row.registry_id)) {
             continue;
           }
+          // Защита: не пушим scheduleCompletions, если задача удалена из локального state
+          if (stateKey === 'scheduleCompletions' && row.task_id
+              && !(db.scheduleTasks || []).some(t => t.id === row.task_id)) {
+            continue;
+          }
           upsertRow(stateKey, row).catch(e => {
+            const msg = String(e?.message || e);
+            // При duplicate key — «призрак» в локальном state: убираем, чтобы не засорять error_reports
+            if (msg.includes('duplicate key value violates unique constraint')) {
+              setDb(d => ({ ...d, [stateKey]: (d[stateKey] || []).filter(r => r[cfg.pk] !== id) }));
+              return; // не репортим — это ожидаемая ситуация при race condition
+            }
             // eslint-disable-next-line no-console
             console.error(`[sync] ${stateKey} upsert ${id}:`, e);
             reportError({
@@ -1192,7 +1244,7 @@ function App() {
       syncSnapshotRef.current[stateKey] = currArr;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions]);
+  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts]);
 
   const currentUser = session ? db.users.find(u => u.id === session.user_id) : null;
   // effectiveRole — роль, под которой Admin сейчас "видит" приложение
@@ -1923,15 +1975,19 @@ function App() {
     const task = {
       id: uid(),
       task_number: taskNumber,
-      kind: data.kind || 'visit',        // 'visit' | 'install' (установка оборудования) | 'internal' (внутренняя — блок слота)
+      kind: data.kind || 'visit',        // 'visit' | 'install' | 'internal' | 'tasting' | 'training'
       department: data.department, // 'barista' | 'technician'
       assignee_id: data.assignee_id, // обязательно — конкретный исполнитель
       client_name: data.client_name.trim(),
       address: (data.kind === 'tasting' && (data.tasting_location || 'school') === 'school')
         ? 'ШКОЛА БАРИСТА'
-        : data.address.trim(),
+        : data.kind === 'training'
+          ? 'ШКОЛА БАРИСТА'
+          : data.address.trim(),
       phone: normalizePhone(data.phone) || data.phone,
-      problem: data.kind === 'tasting' ? 'Дегустация' : data.problem.trim(),
+      problem: data.kind === 'tasting' ? 'Дегустация'
+        : data.kind === 'training' ? `Обучение: ${TRAINING_COURSES[data.training_course]?.label || data.training_course}`
+        : data.problem.trim(),
       visit_date: data.visit_date || null,        // YYYY-MM-DD
       visit_time: data.visit_time || null,          // HH:MM начало
       visit_time_end: data.visit_time_end || null, // HH:MM конец
@@ -1941,6 +1997,20 @@ function App() {
         tasting_location: data.tasting_location || 'school',
         contact_name: (data.tasting_contact || '').trim(),
         coffee_preferences: (data.coffee_preferences || '').trim(),
+      } : data.kind === 'training' ? {
+        training_course: data.training_course,
+        training_format: data.training_format || 'individual',
+        training_students: data.training_students || 1,
+        training_price: (() => {
+          const c = TRAINING_COURSES[data.training_course];
+          if (!c) return 0;
+          return data.training_format === 'group'
+            ? c.price.group * (data.training_students || 1)
+            : c.price.individual;
+        })(),
+        training_prepaid: !!data.training_prepaid,
+        training_contact: (data.training_contact || '').trim(),
+        training_days: TRAINING_COURSES[data.training_course]?.days || 1,
       } : {},
       status: hasTime ? 'in_work' : 'new',
       created_at: new Date().toISOString(),
@@ -1963,7 +2033,9 @@ function App() {
       }
       const tgEvent = data.kind === 'tasting'
         ? 'new_task_tasting'
-        : (data.department === 'barista' ? 'new_task_barista' : 'new_task_technician');
+        : data.kind === 'training'
+          ? 'new_task_training'
+          : (data.department === 'barista' ? 'new_task_barista' : 'new_task_technician');
       const tgEntry = makeTgLogEntry(d, tgEvent, data.kind === 'tasting' ? {
         task_number: task.task_number,
         client: task.client_name,
@@ -2457,6 +2529,164 @@ function App() {
         approved_at: new Date().toISOString(),
         log: [...w.log, { event: 'status', from: 'pending', to: 'rejected', actor: currentUser.id, at: new Date().toISOString(), meta: { comment: 'Отменено автором' } }],
       } : w),
+    }));
+    return { ok: true };
+  };
+
+  /* ═══════════ Подарки клиентам ═══════════ */
+
+  const createGift = async (data) => {
+    if (!hasPermission(db, currentUser, 'gift_create')) return { error: 'Нет прав на создание заявки на подарок' };
+    if (!data.client_name?.trim()) return { error: 'Укажите клиента' };
+    if (!data.product_name?.trim()) return { error: 'Укажите товар' };
+    if (!Number(data.quantity) || Number(data.quantity) <= 0) return { error: 'Кол-во должно быть больше 0' };
+    if (data.delivery_type === 'delivery' && !data.address?.trim()) return { error: 'Укажите адрес доставки' };
+
+    const year = new Date().getFullYear();
+    const localMax = (db.gifts || [])
+      .filter(g => g.number?.startsWith(`GF-${year}-`))
+      .map(g => parseInt(g.number.split('-')[2], 10))
+      .reduce((m, n) => Math.max(m, n), 0);
+    let dbMax = 0;
+    try {
+      const { data: rows } = await supabase.from('gifts').select('number')
+        .like('number', `GF-${year}-%`).order('number', { ascending: false }).limit(1);
+      if (rows?.[0]?.number) dbMax = parseInt(rows[0].number.split('-')[2], 10) || 0;
+    } catch { /* fallback to localMax */ }
+    const number = `GF-${year}-${String(Math.max(localMax, dbMax) + 1).padStart(3, '0')}`;
+
+    const gift = {
+      id: uid(), number, status: 'pending',
+      created_by: currentUser.id, created_at: new Date().toISOString(),
+      client_name: data.client_name.trim(), client_phone: data.client_phone || null,
+      product_id: data.product_id || null, product_name: data.product_name.trim(),
+      quantity: Number(data.quantity), unit: data.unit || 'шт',
+      delivery_type: data.delivery_type || 'pickup', address: data.address || null,
+      comment: data.comment || null,
+      approved_by: null, approved_at: null, approval_comment: null,
+      processed_by: null, processed_at: null, prepared_by: null, prepared_at: null,
+      pickup_code: null, delivered_by: null, delivered_at: null,
+      log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
+    };
+    setDb(d => {
+      const directors = d.users.filter(u => u.active && u.role === 'director' && u.id !== currentUser.id);
+      const admins = d.users.filter(u => u.active && u.role === 'admin' && u.id !== currentUser.id);
+      const notifTargets = [...directors, ...admins];
+      const newNotifs = notifTargets.map(a => makeNotif(d, {
+        recipient_id: a.id,
+        title: '🎁 Заявка на подарок',
+        body: `${number}: ${gift.product_name} × ${gift.quantity} для ${gift.client_name}`,
+        link_kind: 'gift', link_id: gift.id,
+      }));
+      return { ...d, gifts: [gift, ...(d.gifts || [])], notifications: [...newNotifs, ...d.notifications] };
+    });
+    return { gift };
+  };
+
+  const approveGift = (giftId, comment) => {
+    if (!hasPermission(db, currentUser, 'gift_approve')) return { error: 'Нет прав одобрять подарки' };
+    const g = (db.gifts || []).find(x => x.id === giftId);
+    if (!g) return { error: 'Заявка не найдена' };
+    if (g.status !== 'pending') return { error: 'Заявка уже обработана' };
+    setDb(d => {
+      const updatedList = (d.gifts || []).map(x => x.id !== giftId ? x : {
+        ...x, status: 'approved', approved_by: currentUser.id,
+        approved_at: new Date().toISOString(), approval_comment: (comment || '').trim() || null,
+        log: [...x.log, { event: 'status', from: 'pending', to: 'approved', actor: currentUser.id, at: new Date().toISOString() }],
+      });
+      const processors = d.users.filter(u => u.active && (u.role === 'admin' || u.role === 'senior_manager') && u.id !== currentUser.id);
+      const newNotifs = [
+        makeNotif(d, { recipient_id: g.created_by, title: 'Подарок одобрен', body: `${g.number}: одобрен`, link_kind: 'gift', link_id: g.id }),
+        ...processors.map(p => makeNotif(d, { recipient_id: p.id, title: '🎁 Подарок к списанию', body: `${g.number}: ${g.product_name} для ${g.client_name}`, link_kind: 'gift', link_id: g.id })),
+      ];
+      return { ...d, gifts: updatedList, notifications: [...newNotifs, ...d.notifications] };
+    });
+    return { ok: true };
+  };
+
+  const rejectGift = (giftId, comment) => {
+    if (!hasPermission(db, currentUser, 'gift_approve')) return { error: 'Нет прав отклонять подарки' };
+    if (!comment || comment.trim().length < 3) return { error: 'Укажите причину (мин. 3 символа)' };
+    const g = (db.gifts || []).find(x => x.id === giftId);
+    if (!g) return { error: 'Заявка не найдена' };
+    if (g.status !== 'pending') return { error: 'Заявка уже обработана' };
+    setDb(d => {
+      const updatedList = (d.gifts || []).map(x => x.id !== giftId ? x : {
+        ...x, status: 'rejected', approved_by: currentUser.id,
+        approved_at: new Date().toISOString(), approval_comment: comment.trim(),
+        log: [...x.log, { event: 'status', from: 'pending', to: 'rejected', actor: currentUser.id, at: new Date().toISOString(), meta: { comment: comment.trim() } }],
+      });
+      const newNotifs = [makeNotif(d, { recipient_id: g.created_by, title: 'Подарок отклонён', body: `${g.number}: ${comment.trim().slice(0, 80)}`, link_kind: 'gift', link_id: g.id })];
+      return { ...d, gifts: updatedList, notifications: [...newNotifs, ...d.notifications] };
+    });
+    return { ok: true };
+  };
+
+  const processGift = (giftId) => {
+    if (!hasPermission(db, currentUser, 'gift_process')) return { error: 'Нет прав списывать подарки' };
+    const g = (db.gifts || []).find(x => x.id === giftId);
+    if (!g) return { error: 'Заявка не найдена' };
+    if (g.status !== 'approved') return { error: 'Списать можно только одобренные подарки' };
+    setDb(d => {
+      const updatedList = (d.gifts || []).map(x => x.id !== giftId ? x : {
+        ...x, status: 'processed', processed_by: currentUser.id, processed_at: new Date().toISOString(),
+        log: [...x.log, { event: 'status', from: 'approved', to: 'processed', actor: currentUser.id, at: new Date().toISOString() }],
+      });
+      const warehouseUsers = d.users.filter(u => u.active && u.role === 'warehouse' && u.id !== currentUser.id);
+      const newNotifs = [
+        makeNotif(d, { recipient_id: g.created_by, title: 'Подарок списан', body: `${g.number}: передан на склад`, link_kind: 'gift', link_id: g.id }),
+        ...warehouseUsers.map(wu => makeNotif(d, { recipient_id: wu.id, title: '🎁 Подарок · собрать', body: `${g.number}: ${g.product_name} × ${g.quantity} для ${g.client_name}`, link_kind: 'gift', link_id: g.id })),
+      ];
+      return { ...d, gifts: updatedList, notifications: [...newNotifs, ...d.notifications] };
+    });
+    return { ok: true };
+  };
+
+  const prepareGift = (giftId) => {
+    if (currentUser.role !== 'warehouse' && currentUser.role !== 'admin') return { error: 'Только склад' };
+    const g = (db.gifts || []).find(x => x.id === giftId);
+    if (!g) return { error: 'Заявка не найдена' };
+    if (g.status !== 'processed') return { error: 'Заявка ещё не списана' };
+    const existingCodes = (db.gifts || []).filter(x => x.pickup_code).map(x => x.pickup_code);
+    const code = gen4DigitCode(existingCodes);
+    setDb(d => {
+      const updatedList = (d.gifts || []).map(x => x.id !== giftId ? x : {
+        ...x, status: 'prepared', pickup_code: code, prepared_by: currentUser.id, prepared_at: new Date().toISOString(),
+        log: [...x.log, { event: 'status', from: 'processed', to: 'prepared', actor: currentUser.id, at: new Date().toISOString(), meta: { pickup_code: code } }],
+      });
+      const newNotifs = [makeNotif(d, { recipient_id: g.created_by, title: '🎁 Подарок готов к выдаче', body: `${g.number}: код ${code}`, link_kind: 'gift', link_id: g.id })];
+      return { ...d, gifts: updatedList, notifications: [...newNotifs, ...d.notifications] };
+    });
+    return { ok: true, code };
+  };
+
+  const deliverGift = (giftId, code) => {
+    if (currentUser.role !== 'warehouse' && currentUser.role !== 'admin') return { error: 'Только склад' };
+    const g = (db.gifts || []).find(x => x.id === giftId);
+    if (!g) return { error: 'Заявка не найдена' };
+    if (g.status !== 'prepared') return { error: 'Подарок ещё не подготовлен' };
+    if (g.pickup_code && (code || '').trim() !== g.pickup_code) return { error: 'Код выдачи не совпадает' };
+    setDb(d => {
+      const updatedList = (d.gifts || []).map(x => x.id !== giftId ? x : {
+        ...x, status: 'delivered', delivered_by: currentUser.id, delivered_at: new Date().toISOString(),
+        log: [...x.log, { event: 'status', from: 'prepared', to: 'delivered', actor: currentUser.id, at: new Date().toISOString() }],
+      });
+      const newNotifs = [makeNotif(d, { recipient_id: g.created_by, title: '🎁 Подарок выдан', body: `${g.number}: ${g.delivery_type === 'delivery' ? 'доставлен' : 'выдан на складе'}`, link_kind: 'gift', link_id: g.id })];
+      return { ...d, gifts: updatedList, notifications: [...newNotifs, ...d.notifications] };
+    });
+    return { ok: true };
+  };
+
+  const cancelGift = (giftId) => {
+    const g = (db.gifts || []).find(x => x.id === giftId);
+    if (!g) return { error: 'Заявка не найдена' };
+    if (g.created_by !== currentUser.id && currentUser.role !== 'admin') return { error: 'Отменить может только автор' };
+    if (g.status !== 'pending') return { error: 'Отменить можно только заявки на одобрении' };
+    setDb(d => ({
+      ...d, gifts: (d.gifts || []).map(x => x.id === giftId ? {
+        ...x, status: 'rejected', approval_comment: 'Отменено автором', approved_by: currentUser.id, approved_at: new Date().toISOString(),
+        log: [...x.log, { event: 'status', from: 'pending', to: 'rejected', actor: currentUser.id, at: new Date().toISOString(), meta: { comment: 'Отменено автором' } }],
+      } : x),
     }));
     return { ok: true };
   };
@@ -3257,6 +3487,7 @@ function App() {
     approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, updateMyTgPrefs, updateMyHomePrefs, transferAdmin,
     createTask, startTask, completeTask, rescheduleTask, deleteTask, reassignTask, editTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
+    createGift, approveGift, rejectGift, processGift, prepareGift, deliverGift, cancelGift,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createGrindRequest, takeGrindRequest, markGrindReady, cancelGrindRequest,
     createCustomRole, updateRolePermissions, updateRoleMeta, deleteCustomRole,
@@ -4093,6 +4324,12 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
         || hasPermission(db, currentUser, 'writeoff_view_all') || hasPermission(db, currentUser, 'writeoff_create')) {
       ops.push({ id: 'writeoffs', label: 'Списания', icon: Trash2 });
     }
+    // Подарки
+    if (hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
+        || hasPermission(db, currentUser, 'gift_process') || hasPermission(db, currentUser, 'gift_view_all')
+        || role === 'warehouse') {
+      ops.push({ id: 'gifts', label: 'Подарки', icon: Gift });
+    }
     // Договоры
     if (hasPermission(db, currentUser, 'contract_view_all') || hasPermission(db, currentUser, 'contract_create')) {
       ops.push({ id: 'contracts', label: 'Договоры', icon: FileText });
@@ -4557,6 +4794,10 @@ function Screen({ ctx }) {
     case 'courier_order':    return <CourierOrderDetailScreen ctx={ctx} orderId={route.orderId} />;
     // ─── Расписание / регулярные задачи ───
     case 'schedule': return <ScheduleScreen ctx={ctx} />;
+    // ─── Подарки клиентам ───
+    case 'gifts':        return <GiftsScreen ctx={ctx} />;
+    case 'create_gift':  return <GiftsScreen ctx={ctx} />;
+    case 'gift_detail':  return <GiftsScreen ctx={ctx} />;
     // ─── Клиенты ───
     case 'clients':       return <ClientsScreen ctx={ctx} />;
     case 'client_detail': return <ClientDetailScreen ctx={ctx} clientId={route.clientId} />;
@@ -5141,6 +5382,12 @@ function DashboardHome({ ctx, title }) {
       {/* ── НЕ ЗАБУДЬ ВЫПОЛНИТЬ — баннер регулярных задач ── */}
       {hasPermission(db, currentUser, 'schedule_access') && (
         <ScheduleHomeBanner ctx={ctx} />
+      )}
+
+      {/* ── Подарки клиентам — баннер ── */}
+      {(hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
+        || hasPermission(db, currentUser, 'gift_process') || currentUser.role === 'warehouse') && (
+        <GiftsHomeBanner ctx={ctx} />
       )}
 
       {/* ── Отчёт ОП — крупный акцентный тайл ── */}
@@ -8928,25 +9175,36 @@ function CreateTaskScreen({ ctx }) {
 
   const isInstall  = form.kind === 'install';
   const isTasting  = form.kind === 'tasting';
+  const isTraining = form.kind === 'training';
+  const courseInfo  = isTraining && form.training_course ? TRAINING_COURSES[form.training_course] : null;
+  const trainingPrice = courseInfo
+    ? (form.training_format === 'group'
+        ? courseInfo.price.group * (form.training_students || 1)
+        : courseInfo.price.individual)
+    : 0;
 
   const handleSubmit = async () => {
     const e = {};
     if (!form.department) e.department = 'Выберите отдел';
     if (!form.assignee_id) e.assignee_id = 'Выберите исполнителя';
-    if (isTasting) {
+    if (isTraining) {
+      if (!form.training_course) e.training_course = 'Выберите курс обучения';
+      if (!form.client_name || form.client_name.trim().length < 2) e.client_name = 'Укажите ФИО ученика';
+      if (!form.phone || !normalizePhone(form.phone)) e.phone = 'Укажите телефон ученика';
+      if (!form.visit_date || !form.visit_time) e.visit_time = 'Для обучения дата и время обязательны';
+      if (courseInfo?.days === 1 && !form.training_prepaid) e.training_prepaid = 'Для однодневного курса необходима полная предоплата';
+    } else if (isTasting) {
       if (!form.client_name || form.client_name.trim().length < 2) e.client_name = 'Укажите наименование заведения';
       if ((form.tasting_location || 'school') === 'offsite' && (!form.address || form.address.trim().length < 4)) {
         e.address = 'Укажите адрес выездной дегустации';
       }
       if (!form.visit_date || !form.visit_time) e.visit_time = 'Для дегустации дата и время обязательны';
     } else if (!isInternal) {
-      // Поля клиента валидируем только для обычной (выездной) задачи
       if (!form.client_name || form.client_name.trim().length < 2) e.client_name = 'Укажите клиента';
       if (!form.address || form.address.trim().length < 4) e.address = 'Укажите адрес';
       if (!form.phone || !normalizePhone(form.phone)) e.phone = 'Некорректный номер';
     }
-    if (!isTasting && (!form.problem || form.problem.trim().length < 5)) e.problem = 'Опишите задачу подробнее';
-    // Время визита: правила зависят от типа задачи
+    if (!isTasting && !isTraining && (!form.problem || form.problem.trim().length < 5)) e.problem = 'Опишите задачу подробнее';
     if (isInternal) {
       if (!form.visit_date || !form.visit_time) {
         e.visit_time = 'Для внутренней задачи укажите дату и время (это блокирует слот в календаре)';
@@ -8954,23 +9212,29 @@ function CreateTaskScreen({ ctx }) {
     } else if (isInstall) {
       if (!form.visit_date) e.visit_date = 'Для установки оборудования дата обязательна';
       if (!form.visit_time) e.visit_time = 'Для установки оборудования время обязательно';
+    } else if (isTraining) {
+      if (!form.visit_date) e.visit_date = 'Укажите дату первого занятия';
+      if (!form.visit_time) e.visit_time = 'Выберите слот времени';
     } else if (isFieldWorker) {
-      // Выездник сам себе: оба поля или ни одного
       if ((form.visit_date && !form.visit_time) || (!form.visit_date && form.visit_time)) {
         e.visit_time = 'Укажите и дату, и время (или оставьте оба пустыми)';
       }
     }
-    // Для обычного визита, назначенного менеджером — время НЕ проверяется (исполнитель назначит сам)
     setErrors(e);
     if (Object.keys(e).length > 0) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
-    const payload = isInternal
-      ? { ...form, kind: 'internal', client_name: 'Внутренняя задача', address: '—', phone: '—' }
-      : isTasting
-        ? { ...form, kind: 'tasting', department: 'barista' }
-        : { ...form, kind: isInstall ? 'install' : 'visit' };
+    let payload;
+    if (isInternal) {
+      payload = { ...form, kind: 'internal', client_name: 'Внутренняя задача', address: '—', phone: '—' };
+    } else if (isTasting) {
+      payload = { ...form, kind: 'tasting', department: 'barista' };
+    } else if (isTraining) {
+      payload = { ...form, kind: 'training', department: 'barista' };
+    } else {
+      payload = { ...form, kind: isInstall ? 'install' : 'visit' };
+    }
     const t = await createTask(payload);
     showToast(`Задача ${t.task_number} ${form.visit_date ? 'запланирована' : 'создана'}`);
     resetTaskDraft();
@@ -8981,7 +9245,7 @@ function CreateTaskScreen({ ctx }) {
     <div>
       <PageHeader
         title={isFieldWorker ? 'Запланировать в календарь' : 'Поставить задачу'}
-        subtitle={isTasting ? 'Дегустация для клиента' : isInstall ? 'Установка оборудования' : isFieldWorker ? 'Себе в календарь' : 'Бариста или техник едет к клиенту'}
+        subtitle={isTasting ? 'Дегустация для клиента' : isTraining ? 'Обучение в школе бариста' : isInstall ? 'Установка оборудования' : isFieldWorker ? 'Себе в календарь' : 'Бариста или техник едет к клиенту'}
         onBack={goBack}
       />
 
@@ -8990,17 +9254,18 @@ function CreateTaskScreen({ ctx }) {
           {/* Тип задачи — только для менеджеров (не выездных специалистов) */}
           {!isFieldWorker && !isSelfAssign && (
             <Card title="Тип задачи">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
                   { v: 'visit',    label: 'Выезд',        icon: Truck },
                   { v: 'install',  label: 'Установка',    icon: Settings },
                   { v: 'tasting',  label: 'Дегустация',   icon: Coffee },
+                  { v: 'training', label: 'Обучение',     icon: GraduationCap },
                 ].map(opt => {
                   const Icon = opt.icon;
                   const active = (form.kind || 'visit') === opt.v;
                   return (
                     <button key={opt.v}
-                      onClick={() => update({ kind: opt.v, ...(opt.v === 'tasting' ? { department: 'barista' } : {}) })}
+                      onClick={() => update({ kind: opt.v, ...((opt.v === 'tasting' || opt.v === 'training') ? { department: 'barista' } : {}) })}
                       className="rounded-lg p-3 flex flex-col items-center justify-center gap-1 font-semibold text-xs"
                       style={{ background: active ? '#297b8a' : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)' }}>
                       <Icon size={16} /> {opt.label}
@@ -9018,6 +9283,11 @@ function CreateTaskScreen({ ctx }) {
                   🍵 Для дегустации дата и время обязательны. Отдел автоматически — Бариста.
                 </div>
               )}
+              {isTraining && (
+                <div className="mt-2 text-xs p-2.5 rounded-lg" style={{ background: '#FDF4FF', color: '#7E22CE' }}>
+                  🎓 Обучение всегда в школе бариста. Дата и время обязательны.
+                </div>
+              )}
             </Card>
           )}
           {isSelfAssign ? (
@@ -9029,13 +9299,14 @@ function CreateTaskScreen({ ctx }) {
                     { v: 'visit', label: 'Визит к клиенту', icon: Truck },
                     { v: 'install', label: 'Установка', icon: Settings },
                     { v: 'tasting', label: 'Дегустация', icon: Coffee, onlyBarista: true },
+                    { v: 'training', label: 'Обучение', icon: GraduationCap, onlyBarista: true },
                     { v: 'internal', label: 'Внутренняя задача', icon: Lock },
                   ].filter(opt => !opt.onlyBarista || effectiveRole === 'barista')
                   .map(opt => {
                     const Icon = opt.icon;
                     const active = (form.kind || 'visit') === opt.v;
                     return (
-                      <button key={opt.v} onClick={() => update({ kind: opt.v, ...(opt.v === 'tasting' ? { department: 'barista' } : {}) })}
+                      <button key={opt.v} onClick={() => update({ kind: opt.v, ...((opt.v === 'tasting' || opt.v === 'training') ? { department: 'barista' } : {}) })}
                         className="rounded-lg p-3 flex items-center justify-center gap-2 font-semibold text-sm"
                         style={{ background: active ? '#297b8a' : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)' }}>
                         <Icon size={16} /> {opt.label}
@@ -9071,8 +9342,8 @@ function CreateTaskScreen({ ctx }) {
                   ].map(opt => {
                     const Icon = opt.icon;
                     const active = form.department === opt.v;
-                    // Выездник не может менять департамент со своего; дегустация всегда барист
-                    const disabled = (isFieldWorker && opt.v !== effectiveRole) || (isTasting && opt.v !== 'barista');
+                    // Выездник не может менять департамент; дегустация/обучение всегда барист
+                    const disabled = (isFieldWorker && opt.v !== effectiveRole) || ((isTasting || isTraining) && opt.v !== 'barista');
                     return (
                       <button key={opt.v} onClick={() => !disabled && update({ department: opt.v, assignee_id: isFieldWorker ? currentUser.id : '' })}
                         disabled={disabled}
@@ -9117,7 +9388,7 @@ function CreateTaskScreen({ ctx }) {
             </Card>
           )}
 
-          <Card title={isInternal ? 'Когда' : (isInstall || isTasting) ? 'Дата и время' : 'Дата визита'}>
+          <Card title={isInternal ? 'Когда' : (isInstall || isTasting || isTraining) ? 'Дата и время' : 'Дата визита'}>
             <div className="space-y-3">
               <div className="text-xs p-3 rounded-lg" style={{ background: '#EAF4F6', color: 'var(--mc-text)' }}>
                 {isInternal
@@ -9126,25 +9397,27 @@ function CreateTaskScreen({ ctx }) {
                     ? 'Для установки оборудования дата и время обязательны — это согласованный визит.'
                     : isTasting
                       ? 'Для дегустации дата и время обязательны — бариста готовится заранее.'
-                      : 'Укажите дату если она известна. Точное время назначит исполнитель самостоятельно.'}
+                      : isTraining
+                        ? 'Дата первого занятия и время обязательны. Выберите слот из доступных.'
+                        : 'Укажите дату если она известна. Точное время назначит исполнитель самостоятельно.'}
               </div>
               {/* Дата */}
               <div>
                 <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>
-                  Дата{(isInternal || isInstall || isTasting) ? ' *' : ' (необязательно)'}
+                  Дата{(isInternal || isInstall || isTasting || isTraining) ? ' *' : ' (необязательно)'}
                 </label>
                 <input type="date" value={form.visit_date || ''} onChange={e => update({ visit_date: e.target.value })}
                   className="w-full px-3 py-2.5 rounded-lg outline-none"
                   style={{ border: `1px solid ${errors.visit_date ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 15 }} />
                 {errors.visit_date && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.visit_date}</div>}
               </div>
-              {/* Время С → По — для internal/install/tasting/field worker */}
-              {(isInternal || isInstall || isTasting || isFieldWorker) && (
+              {/* Время С → По — для internal/install/tasting/training/field worker */}
+              {(isInternal || isInstall || isTasting || isTraining || isFieldWorker) && (
                 <>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>
-                        С{(isInternal || isInstall || isTasting) ? ' *' : ''}
+                        С{(isInternal || isInstall || isTasting || isTraining) ? ' *' : ''}
                       </label>
                       <input type="time" value={form.visit_time || ''}
                         onChange={e => {
@@ -9169,31 +9442,51 @@ function CreateTaskScreen({ ctx }) {
                         className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid var(--mc-border)', fontSize: 15 }} />
                     </div>
                   </div>
-                  {/* Быстрый выбор длительности */}
-                  <div>
-                    <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Длительность</label>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {[30, 60, 90, 120, 180].map(min => (
-                        <button key={min} onClick={() => {
-                          const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-                          const frM = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
-                          const end = form.visit_time ? frM(toM(form.visit_time) + min) : form.visit_time_end;
-                          update({ duration_min: min, visit_time_end: end });
-                        }}
-                          className="rounded-full px-3 py-1.5 text-xs font-semibold"
-                          style={{ background: form.duration_min === min ? '#297b8a' : 'var(--mc-active-item)', color: form.duration_min === min ? 'white' : '#64748B' }}>
-                          {min < 60 ? `${min} мин` : min === 60 ? '1 ч' : `${min / 60} ч`}
-                        </button>
-                      ))}
+                  {/* Быстрый выбор: для обучения — слоты курса, иначе — длительность */}
+                  {isTraining && courseInfo ? (
+                    <div>
+                      <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Слот времени *</label>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {courseInfo.slots.map(slot => {
+                          const [s, e] = slot.split('-');
+                          const active = form.visit_time === s && form.visit_time_end === e;
+                          const toM = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+                          return (
+                            <button key={slot} onClick={() => update({ visit_time: s, visit_time_end: e, duration_min: toM(e) - toM(s) })}
+                              className="rounded-full px-3 py-1.5 text-xs font-semibold"
+                              style={{ background: active ? '#7E22CE' : 'var(--mc-active-item)', color: active ? 'white' : '#64748B' }}>
+                              {slot}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div>
+                      <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Длительность</label>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {[30, 60, 90, 120, 180].map(min => (
+                          <button key={min} onClick={() => {
+                            const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+                            const frM = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+                            const end = form.visit_time ? frM(toM(form.visit_time) + min) : form.visit_time_end;
+                            update({ duration_min: min, visit_time_end: end });
+                          }}
+                            className="rounded-full px-3 py-1.5 text-xs font-semibold"
+                            style={{ background: form.duration_min === min ? '#297b8a' : 'var(--mc-active-item)', color: form.duration_min === min ? 'white' : '#64748B' }}>
+                            {min < 60 ? `${min} мин` : min === 60 ? '1 ч' : `${min / 60} ч`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
               {errors.visit_time && <div className="text-xs" style={{ color: '#EB5757' }}>{errors.visit_time}</div>}
             </div>
           </Card>
 
-          {!isInternal && !isTasting && (
+          {!isInternal && !isTasting && !isTraining && (
             <Card title="Информация о клиенте">
               <div className="space-y-3">
                 <SiteInput label="Наименование компании или клиента" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Coffee Boom Almaty" />
@@ -9239,7 +9532,131 @@ function CreateTaskScreen({ ctx }) {
             </Card>
           )}
 
-          {!isTasting && (
+          {isTraining && (
+            <Card title="Курс обучения">
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Тип курса *</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(TRAINING_COURSES).map(([k, c]) => {
+                      const active = form.training_course === k;
+                      return (
+                        <button key={k} onClick={() => {
+                          const dur = c.hoursPerDay * 60;
+                          update({ training_course: k, duration_min: dur, visit_time: '', visit_time_end: '' });
+                        }}
+                          className="rounded-lg p-2.5 text-left"
+                          style={{ background: active ? '#7E22CE' : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)', border: `2px solid ${active ? '#7E22CE' : 'transparent'}` }}>
+                          <div className="text-sm font-semibold">{c.label}</div>
+                          <div className="text-[11px] mt-0.5" style={{ color: active ? '#E9D5FF' : 'var(--mc-muted)' }}>
+                            {c.days} {c.days === 1 ? 'день' : c.days < 5 ? 'дня' : 'дней'} × {c.hoursPerDay} ч
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {errors.training_course && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.training_course}</div>}
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Формат *</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { v: 'individual', label: 'Индивидуальное', icon: User },
+                      { v: 'group',      label: 'Групповое (2-3)', icon: Users2 },
+                    ].map(opt => {
+                      const Icon = opt.icon;
+                      const active = form.training_format === opt.v;
+                      return (
+                        <button key={opt.v} onClick={() => update({ training_format: opt.v, training_students: opt.v === 'individual' ? 1 : 2 })}
+                          className="rounded-lg p-2.5 flex items-center justify-center gap-2 text-sm font-semibold"
+                          style={{ background: active ? '#7E22CE' : 'var(--mc-active-item)', color: active ? 'white' : 'var(--mc-text)' }}>
+                          <Icon size={16} /> {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {form.training_format === 'group' && (
+                  <div>
+                    <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Кол-во учеников</label>
+                    <div className="flex gap-2">
+                      {[2, 3].map(n => (
+                        <button key={n} onClick={() => update({ training_students: n })}
+                          className="rounded-full px-4 py-1.5 text-sm font-semibold"
+                          style={{ background: form.training_students === n ? '#7E22CE' : 'var(--mc-active-item)', color: form.training_students === n ? 'white' : '#64748B' }}>
+                          {n} чел.
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {courseInfo && (
+                  <div className="p-3 rounded-lg" style={{ background: '#FDF4FF', border: '1px solid #E9D5FF' }}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold" style={{ color: '#7E22CE' }}>Стоимость</span>
+                      <span className="text-lg font-bold" style={{ color: '#7E22CE' }}>
+                        {trainingPrice.toLocaleString('ru')} ₸
+                      </span>
+                    </div>
+                    <div className="text-[11px] mt-1" style={{ color: 'var(--mc-muted)' }}>
+                      {form.training_format === 'group'
+                        ? `${courseInfo.price.group.toLocaleString('ru')} ₸ × ${form.training_students} чел.`
+                        : 'Индивидуальное обучение'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {isTraining && (
+            <Card title="Ученик / клиент">
+              <div className="space-y-3">
+                <SiteInput label="ФИО ученика *" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Иванов Иван" />
+                <SiteInput label="Телефон *" value={form.phone} onChange={v => update({ phone: v })} error={errors.phone} placeholder="+7 777 ..." />
+                <SiteInput label="Контактное лицо (если отличается)" value={form.training_contact || ''} onChange={v => update({ training_contact: v })} placeholder="Менеджер, родитель..." />
+              </div>
+            </Card>
+          )}
+
+          {isTraining && (
+            <Card title="Оплата">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
+                  <div>
+                    <div className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>Предоплата получена</div>
+                    <div className="text-[11px]" style={{ color: 'var(--mc-muted)' }}>
+                      {courseInfo?.days === 1
+                        ? 'Для однодневного курса — полная предоплата обязательна'
+                        : 'Если нет — нужно собрать до начала занятий'}
+                    </div>
+                  </div>
+                  <button onClick={() => update({ training_prepaid: !form.training_prepaid })}
+                    className="w-12 h-7 rounded-full flex items-center px-0.5 transition-colors"
+                    style={{ background: form.training_prepaid ? '#22C55E' : '#CBD5E1' }}>
+                    <div className="w-6 h-6 rounded-full bg-white shadow transition-transform"
+                      style={{ transform: form.training_prepaid ? 'translateX(20px)' : 'translateX(0)' }} />
+                  </button>
+                </div>
+                {!form.training_prepaid && courseInfo?.days === 1 && (
+                  <div className="text-xs p-2.5 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+                    ⚠️ Однодневный курс требует полной предоплаты до начала занятия.
+                  </div>
+                )}
+                {!form.training_prepaid && courseInfo?.days > 1 && (
+                  <div className="text-xs p-2.5 rounded-lg" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                    💰 Предоплату нужно собрать до первого занятия. После первого урока — доплата остатка.
+                  </div>
+                )}
+                {errors.training_prepaid && <div className="text-xs" style={{ color: '#EB5757' }}>{errors.training_prepaid}</div>}
+              </div>
+            </Card>
+          )}
+
+          {!isTasting && !isTraining && (
             <Card title={isInternal ? 'Описание задачи' : 'Суть проблемы'}>
               <div>
                 <textarea value={form.problem || ''} onChange={e => update({ problem: e.target.value })} rows={4}
@@ -9255,22 +9672,33 @@ function CreateTaskScreen({ ctx }) {
           <Card title="Сводка">
             {isInternal && <FieldRow label="Тип" value="Внутренняя задача" />}
             {isTasting && <FieldRow label="Тип" value="🍵 Дегустация" />}
+            {isTraining && <FieldRow label="Тип" value="🎓 Обучение" />}
             {isTasting && <FieldRow label="Место" value={(form.tasting_location || 'school') === 'school' ? 'В школе бариста' : 'Выездная'} />}
+            {isTraining && courseInfo && <FieldRow label="Курс" value={courseInfo.label} />}
+            {isTraining && courseInfo && (
+              <FieldRow label="Формат" value={form.training_format === 'group' ? `Группа (${form.training_students} чел.)` : 'Индивидуальное'} />
+            )}
+            {isTraining && trainingPrice > 0 && <FieldRow label="Стоимость" value={`${trainingPrice.toLocaleString('ru')} ₸`} />}
+            {isTraining && <FieldRow label="Предоплата" value={form.training_prepaid ? '✅ Получена' : '❌ Не получена'} />}
             <FieldRow label="Отдел" value={ROLES[form.department]?.label} />
             {form.assignee_id && <FieldRow label="Исполнитель" value={getUserName(db, form.assignee_id) + (form.assignee_id === currentUser.id ? ' (я)' : '')} />}
             {form.visit_date && form.visit_time && (
-              <FieldRow label={isInternal ? 'Когда' : 'Визит'} value={
+              <FieldRow label={isInternal ? 'Когда' : isTraining ? 'Первое занятие' : 'Визит'} value={
                 `${fmtDate(form.visit_date)} ${form.visit_time}${form.visit_time_end ? `–${form.visit_time_end}` : ` · ${form.duration_min} мин`}`
               } />
             )}
-            {!isInternal && !isTasting && form.client_name && <FieldRow label="Клиент" value={form.client_name} />}
+            {isTraining && courseInfo && courseInfo.days > 1 && (
+              <FieldRow label="Длительность" value={`${courseInfo.days} дня × ${courseInfo.hoursPerDay} ч`} />
+            )}
+            {!isInternal && !isTasting && !isTraining && form.client_name && <FieldRow label="Клиент" value={form.client_name} />}
             {isTasting && form.client_name && <FieldRow label="Заведение" value={form.client_name} />}
-            {!isInternal && form.address && <FieldRow label="Адрес" value={form.address} />}
-            {!isInternal && !isTasting && form.phone && <FieldRow label="Телефон" value={form.phone} />}
+            {isTraining && form.client_name && <FieldRow label="Ученик" value={form.client_name} />}
+            {!isInternal && !isTraining && form.address && <FieldRow label="Адрес" value={form.address} />}
+            {!isInternal && !isTasting && !isTraining && form.phone && <FieldRow label="Телефон" value={form.phone} />}
           </Card>
 
           <button onClick={handleSubmit} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#297b8a' }}>
-            {isInternal ? 'Заблокировать слот' : isTasting ? 'Назначить дегустацию' : (form.visit_date && form.visit_time ? 'Запланировать визит' : 'Назначить задачу')}
+            {isInternal ? 'Заблокировать слот' : isTasting ? 'Назначить дегустацию' : isTraining ? 'Запланировать обучение' : (form.visit_date && form.visit_time ? 'Запланировать визит' : 'Назначить задачу')}
           </button>
         </div>
       </div>
@@ -9337,7 +9765,7 @@ function TaskDetailScreen({ ctx, taskId }) {
 
   return (
     <div>
-      <PageHeader title={task.task_number} subtitle={`${task.kind === 'tasting' ? '🍵 Дегустация · ' : task.kind === 'install' ? '⚙️ Установка · ' : ''}${ROLES[task.department].label} · ${s.label}`} onBack={goBack} />
+      <PageHeader title={task.task_number} subtitle={`${task.kind === 'tasting' ? '🍵 Дегустация · ' : task.kind === 'install' ? '⚙️ Установка · ' : task.kind === 'training' ? '🎓 Обучение · ' : ''}${ROLES[task.department].label} · ${s.label}`} onBack={goBack} />
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
@@ -9345,9 +9773,9 @@ function TaskDetailScreen({ ctx, taskId }) {
             <TaskTimeline status={task.status} />
           </Card>
 
-          <Card title={task.kind === 'tasting' ? 'Заведение' : 'Клиент'}>
-            <FieldRow label="Наименование" value={<strong style={{ color: 'var(--mc-text)' }}>{task.client_name}</strong>} />
-            <FieldRow label="Адрес" value={task.address} />
+          <Card title={task.kind === 'tasting' ? 'Заведение' : task.kind === 'training' ? 'Ученик' : 'Клиент'}>
+            <FieldRow label={task.kind === 'training' ? 'ФИО' : 'Наименование'} value={<strong style={{ color: 'var(--mc-text)' }}>{task.client_name}</strong>} />
+            {task.kind !== 'training' && <FieldRow label="Адрес" value={task.address} />}
             <FieldRow label="Телефон" value={task.phone} />
             {task.kind === 'tasting' && task.meta?.contact_name && (
               <FieldRow label="Контактное лицо" value={task.meta.contact_name} />
@@ -9358,9 +9786,22 @@ function TaskDetailScreen({ ctx, taskId }) {
             {task.kind === 'tasting' && task.meta?.coffee_preferences && (
               <FieldRow label="Предпочтения" value={task.meta.coffee_preferences} />
             )}
+            {task.kind === 'training' && task.meta?.training_contact && (
+              <FieldRow label="Контактное лицо" value={task.meta.training_contact} />
+            )}
           </Card>
 
-          {task.kind !== 'tasting' && (
+          {task.kind === 'training' && task.meta?.training_course && (
+            <Card title="Обучение">
+              <FieldRow label="Курс" value={TRAINING_COURSES[task.meta.training_course]?.label || task.meta.training_course} />
+              <FieldRow label="Формат" value={task.meta.training_format === 'group' ? `Групповое (${task.meta.training_students} чел.)` : 'Индивидуальное'} />
+              <FieldRow label="Длительность" value={`${task.meta.training_days || '?'} ${(task.meta.training_days || 0) === 1 ? 'день' : 'дня'} × ${TRAINING_COURSES[task.meta.training_course]?.hoursPerDay || '?'} ч`} />
+              <FieldRow label="Стоимость" value={<strong style={{ color: '#7E22CE' }}>{(task.meta.training_price || 0).toLocaleString('ru')} ₸</strong>} />
+              <FieldRow label="Предоплата" value={task.meta.training_prepaid ? '✅ Получена' : '❌ Не получена'} />
+            </Card>
+          )}
+
+          {task.kind !== 'tasting' && task.kind !== 'training' && (
             <Card title="Суть проблемы">
               <div className="text-sm whitespace-pre-wrap" style={{ color: 'var(--mc-text)' }}>{task.problem}</div>
             </Card>
@@ -13481,6 +13922,7 @@ function NotificationsScreen({ ctx }) {
         case 'task':     return navigate({ name: 'task_detail',     taskId:     n.link_id });
         case 'grind':    return navigate({ name: 'grind_detail',    grindId:    n.link_id });
         case 'writeoff': return navigate({ name: 'writeoff_detail', writeOffId: n.link_id });
+        case 'gift':     return navigate({ name: 'gift_detail',     giftId:     n.link_id });
         case 'contract': return navigate({ name: 'contract_detail', contractId: n.link_id });
         case 'shipment': return navigate({ name: 'shipment_registry' });
         case 'manager_task': return navigate({ name: 'manager_tasks' });

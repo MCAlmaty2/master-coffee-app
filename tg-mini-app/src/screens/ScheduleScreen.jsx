@@ -9,7 +9,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft, Plus, X, ChevronRight, Check, ExternalLink,
-  Calendar, Clock, Trash2, Link2, AlertTriangle,
+  Calendar, Clock, Trash2, Link2, AlertTriangle, Edit3,
 } from 'lucide-react';
 import { supabase } from '../supabase/client';
 
@@ -104,6 +104,7 @@ export function ScheduleScreen({ ctx }) {
 
   const [tab, setTab] = useState('today');
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
   const allTasks = db.scheduleTasks || [];
   const allCompletions = db.scheduleCompletions || [];
   const myTasks = allTasks.filter(t => t.active && isTaskForRole(t, role));
@@ -203,18 +204,18 @@ export function ScheduleScreen({ ctx }) {
         <MonthView tasks={myTasks} completions={allCompletions} userId={currentUser.id} isCompleted={isCompleted} onToggle={toggleComplete} />
       )}
       {tab === 'manage' && (
-        <ManageView tasks={myTasks} allTasks={allTasks} role={role} onDelete={deleteTask} isAdmin={role === 'admin'} scheduleRoles={scheduleRoles} db={db} />
+        <ManageView tasks={myTasks} allTasks={allTasks} role={role} onDelete={deleteTask} onEdit={setEditingTask} isAdmin={role === 'admin'} scheduleRoles={scheduleRoles} db={db} />
       )}
 
       {/* Модал создания */}
       {createOpen && (
-        <CreateTaskModal
+        <TaskFormModal
           role={role}
           isAdmin={role === 'admin'}
           scheduleRoles={scheduleRoles}
           db={db}
           onClose={() => setCreateOpen(false)}
-          onCreate={async (task) => {
+          onSave={async (task) => {
             await supabase.from('schedule_tasks').upsert([task], { onConflict: 'id' });
             setDb(d => ({
               ...d,
@@ -222,6 +223,28 @@ export function ScheduleScreen({ ctx }) {
             }));
             setCreateOpen(false);
             showToast('Задача добавлена');
+          }}
+          currentUserId={currentUser.id}
+        />
+      )}
+
+      {/* Модал редактирования */}
+      {editingTask && (
+        <TaskFormModal
+          role={role}
+          isAdmin={role === 'admin'}
+          scheduleRoles={scheduleRoles}
+          db={db}
+          editTask={editingTask}
+          onClose={() => setEditingTask(null)}
+          onSave={async (updated) => {
+            await supabase.from('schedule_tasks').upsert([updated], { onConflict: 'id' });
+            setDb(d => ({
+              ...d,
+              scheduleTasks: (d.scheduleTasks || []).map(t => t.id === updated.id ? updated : t),
+            }));
+            setEditingTask(null);
+            showToast('Задача обновлена');
           }}
           currentUserId={currentUser.id}
         />
@@ -483,7 +506,7 @@ function MonthView({ tasks, completions, userId, isCompleted, onToggle }) {
   );
 }
 
-function ManageView({ tasks, allTasks, role, onDelete, isAdmin, scheduleRoles, db }) {
+function ManageView({ tasks, allTasks, role, onDelete, onEdit, isAdmin, scheduleRoles, db }) {
   const [confirmId, setConfirmId] = useState(null);
   const [viewRole, setViewRole] = useState(role);
   const displayTasks = isAdmin
@@ -565,9 +588,14 @@ function ManageView({ tasks, allTasks, role, onDelete, isAdmin, scheduleRoles, d
                     <button onClick={() => setConfirmId(null)} className="px-2 py-1 rounded text-xs font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Нет</button>
                   </div>
                 ) : (
-                  <button onClick={() => setConfirmId(t.id)} className="p-1.5 rounded-lg transition hover:bg-red-50" style={{ color: '#DC2626' }}>
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg transition hover:bg-blue-50" style={{ color: '#3390EC' }}>
+                      <Edit3 size={16} />
+                    </button>
+                    <button onClick={() => setConfirmId(t.id)} className="p-1.5 rounded-lg transition hover:bg-red-50" style={{ color: '#DC2626' }}>
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 )}
               </div>
             );
@@ -584,26 +612,28 @@ function FormField({ label, children }) {
   return <div><label className="block text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>{label}</label>{children}</div>;
 }
 
-function CreateTaskModal({ role, isAdmin, scheduleRoles, db, onClose, onCreate, currentUserId }) {
+function TaskFormModal({ role, isAdmin, scheduleRoles, db, onClose, onSave, currentUserId, editTask }) {
+  const isEdit = !!editTask;
   const [form, setForm] = useState({
-    title: '',
-    description: '',
-    frequency: 'weekly',
-    day_of_week: currentDow(),
-    day_of_month: 5,
-    time_at: '09:00',
-    task_type: 'custom',
-    link_url: '',
-    link_label: '',
-    target_role: role,
-    remind_minutes: 15,
+    title: editTask?.title || '',
+    description: editTask?.description || '',
+    frequency: editTask?.frequency || 'weekly',
+    day_of_week: editTask?.day_of_week || currentDow(),
+    day_of_month: editTask?.day_of_month || 5,
+    time_at: editTask?.time_at || '09:00',
+    task_type: editTask?.task_type || 'custom',
+    link_url: editTask?.link_url || '',
+    link_label: editTask?.link_label || '',
+    target_role: editTask?.target_role || role,
+    remind_minutes: editTask?.remind_minutes ?? 15,
+    active: editTask?.active ?? true,
   });
 
   const update = (patch) => setForm(f => ({ ...f, ...patch }));
-  const handleCreate = () => {
+  const handleSave = () => {
     if (!form.title.trim()) return;
     const task = {
-      id: uid(),
+      id: isEdit ? editTask.id : uid(),
       title: form.title.trim(),
       description: form.description.trim(),
       frequency: form.frequency,
@@ -615,20 +645,20 @@ function CreateTaskModal({ role, isAdmin, scheduleRoles, db, onClose, onCreate, 
       link_label: form.link_label.trim(),
       target_role: form.target_role,
       remind_minutes: form.remind_minutes,
-      active: true,
-      sort_order: 0,
-      created_by: currentUserId,
-      created_at: new Date().toISOString(),
+      active: form.active,
+      sort_order: editTask?.sort_order || 0,
+      created_by: editTask?.created_by || currentUserId,
+      created_at: editTask?.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    onCreate(task);
+    onSave(task);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}>
       <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto" style={{ background: 'var(--mc-bg)' }}>
         <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--mc-border)', background: 'var(--mc-bg)' }}>
-          <h2 className="text-lg font-bold" style={{ color: 'var(--mc-text)' }}>Новая задача</h2>
+          <h2 className="text-lg font-bold" style={{ color: 'var(--mc-text)' }}>{isEdit ? 'Редактирование' : 'Новая задача'}</h2>
           <button onClick={onClose} className="p-1" style={{ color: 'var(--mc-muted)' }}><X size={20} /></button>
         </div>
         <div className="p-5 space-y-4">
@@ -703,10 +733,24 @@ function CreateTaskModal({ role, isAdmin, scheduleRoles, db, onClose, onCreate, 
             </select>
           </FormField>
         </div>
-        {/* Кнопка создания */}
+        {/* Активность — только при редактировании */}
+        {isEdit && (
+          <div className="px-5 pb-2">
+            <div className="flex items-center justify-between p-3 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
+              <span className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>Задача активна</span>
+              <button onClick={() => update({ active: !form.active })}
+                className="w-11 h-6 rounded-full flex items-center px-0.5 transition-colors"
+                style={{ background: form.active ? '#22C55E' : '#CBD5E1' }}>
+                <div className="w-5 h-5 rounded-full bg-white shadow transition-transform"
+                  style={{ transform: form.active ? 'translateX(20px)' : 'translateX(0)' }} />
+              </button>
+            </div>
+          </div>
+        )}
+        {/* Кнопка сохранения */}
         <div className="px-5 pb-5">
           <button
-            onClick={handleCreate}
+            onClick={handleSave}
             disabled={!form.title.trim()}
             className="w-full py-3 rounded-xl text-white font-semibold text-sm transition"
             style={{
@@ -714,7 +758,7 @@ function CreateTaskModal({ role, isAdmin, scheduleRoles, db, onClose, onCreate, 
               cursor: form.title.trim() ? 'pointer' : 'not-allowed',
             }}
           >
-            Добавить задачу
+            {isEdit ? 'Сохранить изменения' : 'Добавить задачу'}
           </button>
         </div>
       </div>
