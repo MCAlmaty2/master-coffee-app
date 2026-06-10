@@ -93,7 +93,7 @@ function parsePaste(text) {
   }
   if (field !== '' || row.length > 0) { row.push(field); rawRows.push(row); }
 
-  // Маппинг: Номер · Дата · Сумма · Контрагент · Адрес доставки · Номер заказа
+  // Маппинг: Номер · Дата · Сумма · Контрагент · Адрес доставки · Организация · Номер заказа
   // Строки без номера — продолжение предыдущей (многострочные ячейки без кавычек)
   const result = [];
   for (const c of rawRows) {
@@ -115,7 +115,8 @@ function parsePaste(text) {
       amount:           parseAmount(c[2]),
       counterparty:     (c[3] || '').trim(),
       delivery_address: normalizeAddress(c[4]),
-      site_order_number:(c[5] || '').trim(),
+      organization:     (c[5] || '').trim(),
+      site_order_number:(c[6] || '').trim(),
     });
   }
   return result;
@@ -178,16 +179,21 @@ export function CoffeeShipmentsScreen({ ctx }) {
     })
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.number || '').localeCompare(a.number || ''));
 
-  /* ── Статистика по адресам (долг) ── */
+  /* ── Статистика по адресам → организациям (долг) ── */
   const addressStats = useMemo(() => {
     const all = rows.filter(r => r.month === selectedMonth);
     const byAddr = {};
     for (const r of all) {
       const addr = normalizeAddress(r.delivery_address) || 'Без адреса';
-      if (!byAddr[addr]) byAddr[addr] = { amount: 0, paid: 0, count: 0 };
+      if (!byAddr[addr]) byAddr[addr] = { amount: 0, paid: 0, count: 0, orgs: {} };
       byAddr[addr].amount += Number(r.amount) || 0;
       byAddr[addr].paid   += Number(r.payment_amount) || 0;
       byAddr[addr].count  += 1;
+      const org = (r.organization || '').trim() || 'Без организации';
+      if (!byAddr[addr].orgs[org]) byAddr[addr].orgs[org] = { amount: 0, paid: 0, count: 0 };
+      byAddr[addr].orgs[org].amount += Number(r.amount) || 0;
+      byAddr[addr].orgs[org].paid   += Number(r.payment_amount) || 0;
+      byAddr[addr].orgs[org].count  += 1;
     }
     return byAddr;
   }, [rows, selectedMonth]);
@@ -209,6 +215,7 @@ export function CoffeeShipmentsScreen({ ctx }) {
       amount: p.amount,
       counterparty: p.counterparty,
       delivery_address: p.delivery_address,
+      organization: p.organization || '',
       payment_amount: 0,
       site_order_number: p.site_order_number,
       created_by: currentUser.id,
@@ -293,30 +300,47 @@ export function CoffeeShipmentsScreen({ ctx }) {
           </div>
           {Object.entries(addressStats).map(([addr, s]) => {
             const debt = s.amount - s.paid;
+            const orgs = Object.entries(s.orgs);
             return (
-              <div key={addr}
-                onClick={() => setAddressFilter(addressFilter === addr ? 'all' : addr)}
-                style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '8px 10px', borderRadius: 8, marginBottom: 4, cursor: 'pointer',
-                  background: addressFilter === addr ? '#EFF6FF' : 'transparent',
-                  border: addressFilter === addr ? '1px solid #3390EC' : '1px solid transparent',
-                }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>
-                    {shopName(addr) ? <span style={{ color: '#297b8a' }}>{shopName(addr)}</span> : addr}
+              <div key={addr} style={{ marginBottom: 6 }}>
+                <div
+                  onClick={() => setAddressFilter(addressFilter === addr ? 'all' : addr)}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
+                    background: addressFilter === addr ? '#EFF6FF' : 'transparent',
+                    border: addressFilter === addr ? '1px solid #3390EC' : '1px solid transparent',
+                  }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>
+                      {shopName(addr) ? <span style={{ color: '#297b8a' }}>{shopName(addr)}</span> : addr}
+                    </div>
+                    {shopName(addr) && <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>{addr}</div>}
+                    <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>{s.count} отгрузок</div>
                   </div>
-                  {shopName(addr) && <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>{addr}</div>}
-                  <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>{s.count} отгрузок</div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: debt > 0 ? '#EB5757' : '#10B981' }}>
+                      {debt > 0 ? `−${fmtMoney(debt)} ₸` : '0 ₸'}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>
+                      из {fmtMoney(s.amount)} ₸
+                    </div>
+                  </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: debt > 0 ? '#EB5757' : '#10B981' }}>
-                    {debt > 0 ? `−${fmtMoney(debt)} ₸` : '0 ₸'}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>
-                    из {fmtMoney(s.amount)} ₸
-                  </div>
-                </div>
+                {orgs.length > 1 && orgs.map(([org, o]) => {
+                  const orgDebt = o.amount - o.paid;
+                  return (
+                    <div key={org} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '4px 10px 4px 28px', fontSize: 11,
+                    }}>
+                      <span style={{ color: 'var(--mc-muted)' }}>{org} · {o.count} шт</span>
+                      <span style={{ fontWeight: 600, color: orgDebt > 0 ? '#EB5757' : '#10B981' }}>
+                        {orgDebt > 0 ? `−${fmtMoney(orgDebt)} ₸` : '0 ₸'}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -357,6 +381,7 @@ export function CoffeeShipmentsScreen({ ctx }) {
               <Th>Сумма</Th>
               <Th>Контрагент</Th>
               <Th>Адрес</Th>
+              <Th>Организация</Th>
               <Th>Оплата</Th>
               <Th>Долг</Th>
               <Th>Заказ</Th>
@@ -365,7 +390,7 @@ export function CoffeeShipmentsScreen({ ctx }) {
           </thead>
           <tbody>
             {monthRows.length === 0 && (
-              <tr><td colSpan={canEdit ? 9 : 8} style={{ textAlign: 'center', padding: 24, color: 'var(--mc-muted)' }}>
+              <tr><td colSpan={canEdit ? 10 : 9} style={{ textAlign: 'center', padding: 24, color: 'var(--mc-muted)' }}>
                 Нет записей за этот месяц
               </td></tr>
             )}
@@ -379,6 +404,7 @@ export function CoffeeShipmentsScreen({ ctx }) {
                   <Td style={{ whiteSpace: 'nowrap' }}>{fmtMoney(r.amount)}</Td>
                   <Td>{r.counterparty}</Td>
                   <Td>{r.delivery_address}</Td>
+                  <Td>{r.organization}</Td>
                   <Td>
                     {isEditing ? (
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -489,13 +515,13 @@ function PasteModal({ onClose, onConfirm }) {
         </div>
         <div style={{ padding: '12px 16px', overflowY: 'auto', flex: 1 }}>
           <div style={{ fontSize: 11, color: 'var(--mc-muted)', marginBottom: 8, lineHeight: 1.5 }}>
-            Скопируйте строки из 1С (колонки <strong>Номер · Дата · Сумма · Контрагент · Адрес доставки · Номер заказа</strong>) и вставьте сюда. Каждая строка — отдельная отгрузка.
+            Скопируйте строки из 1С (колонки <strong>Номер · Дата · Сумма · Контрагент · Адрес доставки · Организация · Номер заказа</strong>) и вставьте сюда. Каждая строка — отдельная отгрузка.
           </div>
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
             autoFocus
-            placeholder={'001\t09.06.2026\t150 000\tТОО Кофемания\tул. Абая 10\tWEB-1234'}
+            placeholder={'001\t09.06.2026\t150 000\tТОО Кофемания\tул. Абая 10\tMC FOOD\tWEB-1234'}
             rows={8}
             style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--mc-border)', borderRadius: 10, fontSize: 12, fontFamily: 'monospace', resize: 'vertical', outline: 'none', background: 'var(--mc-active-item, #f8fafc)', color: 'var(--mc-text)', boxSizing: 'border-box' }}
           />
