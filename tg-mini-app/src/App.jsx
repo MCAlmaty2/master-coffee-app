@@ -2097,14 +2097,43 @@ function App() {
     if (hasTime) {
       task.log.push({ event: 'status', from: 'new', to: 'in_work', actor: currentUser.id, at: new Date().toISOString(), meta: { visit_date: data.visit_date, visit_time: data.visit_time } });
     }
+
+    // Для обучения — создаём задачи на все дни курса
+    const trainingDays = data.kind === 'training'
+      ? (TRAINING_COURSES[data.training_course]?.days || 1) : 1;
+    const allTasks = [task];
+    if (trainingDays > 1 && data.visit_date) {
+      const baseNum = Math.max(dbLastNum, localLastNum) + 1;
+      for (let dayIdx = 1; dayIdx < trainingDays; dayIdx++) {
+        const nextDate = new Date(data.visit_date + 'T12:00:00');
+        nextDate.setDate(nextDate.getDate() + dayIdx);
+        const nextISO = nextDate.toISOString().slice(0, 10);
+        const nextNum = `T${year}-${String(baseNum + dayIdx).padStart(3, '0')}`;
+        allTasks.push({
+          ...task,
+          id: uid(),
+          task_number: nextNum,
+          visit_date: nextISO,
+          problem: `Обучение: ${TRAINING_COURSES[data.training_course]?.label || data.training_course} (день ${dayIdx + 1}/${trainingDays})`,
+          meta: { ...task.meta, training_day: dayIdx + 1 },
+          log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
+          status: 'in_work',
+        });
+      }
+      task.problem = `Обучение: ${TRAINING_COURSES[data.training_course]?.label || data.training_course} (день 1/${trainingDays})`;
+    }
+
     setDb(d => {
       const notifs = [];
       // Если ставлю задачу не себе — уведомить исполнителя
       if (data.assignee_id !== currentUser.id) {
+        const daysList = trainingDays > 1
+          ? ` (${trainingDays} дн.)`
+          : '';
         notifs.push(makeNotif(d, {
           recipient_id: data.assignee_id,
           title: 'Новая задача',
-          body: `${task.task_number}: ${task.client_name} — ${task.problem.slice(0, 60)}${task.problem.length > 60 ? '…' : ''}`,
+          body: `${task.task_number}: ${task.client_name} — ${task.problem.slice(0, 60)}${task.problem.length > 60 ? '…' : ''}${daysList}`,
           link_kind: 'task', link_id: task.id,
         }));
       }
@@ -2133,7 +2162,7 @@ function App() {
       });
       return {
         ...d,
-        tasks: [task, ...d.tasks],
+        tasks: [...allTasks, ...d.tasks],
         notifications: [...notifs.filter(Boolean), ...d.notifications],
         telegramLog: [tgEntry, ...d.telegramLog],
       };
