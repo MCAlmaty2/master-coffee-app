@@ -94,11 +94,13 @@ export function ClientsScreen({ ctx }) {
     if (tab !== 'all') list = list.filter(c => c.type === tab);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
+      const qDigits = q.replace(/\D/g, '');
       list = list.filter(c =>
         (c.name    || '').toLowerCase().includes(q) ||
-        (c.phone   || '').replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
+        (c.phone   || '').replace(/\D/g, '').includes(qDigits) ||
         (c.bin     || '').includes(q) ||
         (c.address || '').toLowerCase().includes(q) ||
+        (c.addresses || []).some(a => (a.address || '').toLowerCase().includes(q)) ||
         (c.contact_person || '').toLowerCase().includes(q) ||
         (c.notes   || '').toLowerCase().includes(q)
       );
@@ -124,12 +126,12 @@ export function ClientsScreen({ ctx }) {
         <Search size={15} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--mc-muted)', pointerEvents: 'none' }} />
         <input
           ref={searchRef}
-          defaultValue={search}
-          onInput={e => setSearch(e.target.value)}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
           placeholder="Поиск: название, телефон, БИН..."
           style={{ width: '100%', padding: '10px 36px', border: '1px solid var(--mc-border)', borderRadius: 10, fontSize: 16, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', boxSizing: 'border-box' }} />
         {search && (
-          <button onClick={() => { setSearch(''); if (searchRef.current) searchRef.current.value = ''; }}
+          <button onClick={() => setSearch('')}
             style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)', lineHeight: 1 }}>
             <X size={14} />
           </button>

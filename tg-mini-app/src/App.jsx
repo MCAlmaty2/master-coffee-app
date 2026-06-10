@@ -4363,6 +4363,16 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
   const { currentUser, effectiveRole, actAs, setActAs, route, navigate, logout, db, theme, toggleTheme } = ctx;
   const role = effectiveRole;
   const isManager = MANAGER_ROLES.includes(role);
+  const [collapsedSections, setCollapsedSections] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('mc_collapsed_sections') || '{}'); } catch { return {}; }
+  });
+  const toggleSection = (title) => {
+    setCollapsedSections(prev => {
+      const next = { ...prev, [title]: !prev[title] };
+      localStorage.setItem('mc_collapsed_sections', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const navItems = useMemo(() => {
     // Группы пунктов меню. Пункты создания (+) убраны — они теперь внутри разделов как кнопка.
@@ -4374,68 +4384,69 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     main.push({ id: 'notifications', label: 'Уведомления', icon: Bell });
     groups.push({ title: 'Главное', items: main });
 
-    // ── ОПЕРАЦИИ ──────────────────────────
-    const ops = [];
-    // Заявки
+    // ── ОТДЕЛ ПРОДАЖ ──────────────────────
+    const sales = [];
     if (role === 'admin' || role === 'b2b' || role === 'sales' || role === 'warehouse'
         || hasPermission(db, currentUser, 'orders_view_all') || hasPermission(db, currentUser, 'orders_view_own')) {
-      ops.push({ id: 'orders_list', label: 'Заявки', icon: Inbox });
+      sales.push({ id: 'orders_list', label: 'Заявки', icon: Inbox });
     }
-    // Помол
     if (hasPermission(db, currentUser, 'grind_view_all') || hasPermission(db, currentUser, 'grind_create') || hasPermission(db, currentUser, 'grind_fulfill')) {
-      ops.push({ id: 'grinds', label: 'Помол кофе', icon: Coffee });
+      sales.push({ id: 'grinds', label: 'Помол кофе', icon: Coffee });
     }
-    // Задачи / выезд
+    if (hasPermission(db, currentUser, 'contract_view_all') || hasPermission(db, currentUser, 'contract_create')) {
+      sales.push({ id: 'contracts', label: 'Договоры', icon: FileText });
+    }
+    if (isManager || role === 'director' || role === 'senior_manager') {
+      sales.push({ id: 'clients', label: 'Клиенты', icon: Users });
+    }
+    if (sales.length > 0) groups.push({ title: 'Отдел продаж', items: sales, collapsible: true });
+
+    // ── БАРИСТА И ТЕХНИКИ ────────────────
+    const field = [];
     if (FIELD_ROLES.includes(role) || isManager
         || hasPermission(db, currentUser, 'tasks_view_own') || hasPermission(db, currentUser, 'tasks_self_assign')) {
-      ops.push({ id: 'tasks_list', label: 'Задачи (выезд)', icon: ClipboardList });
+      field.push({ id: 'tasks_list', label: 'Задачи (выезд)', icon: ClipboardList });
     }
-    // Календарь команды
     if (FIELD_ROLES.includes(role) || isManager || hasPermission(db, currentUser, 'tasks_calendar_all')) {
-      ops.push({ id: 'field_calendar', label: 'Календарь команды', icon: Eye });
+      field.push({ id: 'field_calendar', label: 'Календарь команды', icon: Eye });
     }
-    // Списания (включая склад — он собирает и выдаёт)
+    if (field.length > 0) groups.push({ title: 'Бариста и техники', items: field, collapsible: true });
+
+    // ── СКЛАД И ДОСТАВКА ─────────────────
+    const warehouse = [];
+    if (hasPermission(db, currentUser, 'delivery_manage') || hasPermission(db, currentUser, 'delivery_view_all')) {
+      warehouse.push({ id: 'delivery_registries', label: 'Доставки', icon: Truck });
+    }
+    if (hasPermission(db, currentUser, 'delivery_courier')) {
+      warehouse.push({ id: 'courier_registry', label: 'Мои доставки', icon: Truck });
+    }
     if (['cashier', 'director', 'senior_manager', 'warehouse'].includes(role)
         || hasPermission(db, currentUser, 'writeoff_view_all') || hasPermission(db, currentUser, 'writeoff_create')) {
-      ops.push({ id: 'writeoffs', label: 'Списания', icon: Trash2 });
+      warehouse.push({ id: 'writeoffs', label: 'Списания', icon: Trash2 });
     }
-    // Подарки
     if (hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
         || hasPermission(db, currentUser, 'gift_process') || hasPermission(db, currentUser, 'gift_view_all')
         || role === 'warehouse') {
-      ops.push({ id: 'gifts', label: 'Подарки', icon: Gift });
+      warehouse.push({ id: 'gifts', label: 'Подарки', icon: Gift });
     }
-    // Договоры
-    if (hasPermission(db, currentUser, 'contract_view_all') || hasPermission(db, currentUser, 'contract_create')) {
-      ops.push({ id: 'contracts', label: 'Договоры', icon: FileText });
-    }
-    // Доставка
-    if (hasPermission(db, currentUser, 'delivery_manage') || hasPermission(db, currentUser, 'delivery_view_all')) {
-      ops.push({ id: 'delivery_registries', label: 'Доставки', icon: Truck });
-    }
-    if (hasPermission(db, currentUser, 'delivery_courier')) {
-      ops.push({ id: 'courier_registry', label: 'Мои доставки', icon: Truck });
-    }
-    // Клиенты
-    if (isManager || role === 'director' || role === 'senior_manager') {
-      ops.push({ id: 'clients', label: 'Клиенты', icon: Users });
-    }
-    // Архив
+    if (warehouse.length > 0) groups.push({ title: 'Склад и доставка', items: warehouse, collapsible: true });
+
+    // ── АРХИВ / ЭКСПОРТ ──────────────────
+    const archiveItems = [];
     if (role === 'admin' || role === 'b2b' || hasPermission(db, currentUser, 'orders_archive_view')) {
-      ops.push({ id: 'archive', label: 'Архив', icon: Inbox });
+      archiveItems.push({ id: 'archive', label: 'Архив', icon: Inbox });
     }
-    // Экспорт
     if (role === 'admin' || role === 'b2b' || hasPermission(db, currentUser, 'orders_export')) {
-      ops.push({ id: 'export', label: 'Экспорт', icon: Download });
+      archiveItems.push({ id: 'export', label: 'Экспорт', icon: Download });
     }
-    if (ops.length > 0) groups.push({ title: 'Операции', items: ops });
+    if (archiveItems.length > 0) groups.push({ title: 'Архив', items: archiveItems, collapsible: true });
 
     // ── ТОВАРЫ / ПРАЙС (по праву products_edit) ────────────────────────────
     if (hasPermission(db, currentUser, 'products_edit')) {
       const prodItems = [];
       prodItems.push({ id: 'admin_products', label: 'Товары / прайс',     icon: Package });
       prodItems.push({ id: 'admin_categories', label: 'Категории товаров', icon: Tag });
-      groups.push({ title: 'Товары', items: prodItems });
+      groups.push({ title: 'Товары', items: prodItems, collapsible: true });
     }
 
     // ── КОФЕЙНИ (реестр отгрузок кофеен) ────────────────────────────
@@ -4444,21 +4455,21 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
         || hasPermission(db, currentUser, 'coffee_shipments_pay')) {
       groups.push({ title: 'Кофейни', items: [
         { id: 'coffee_shipments', label: 'Реестр отгрузок кофеен', icon: Building2 },
-      ] });
+      ], collapsible: true });
     }
 
     // ── HR-КАЛЕНДАРЬ (отпуска и дни рождения) ────────────────────
     if (hasPermission(db, currentUser, 'hr_calendar_view')) {
       groups.push({ title: 'HR', items: [
         { id: 'hr_calendar', label: 'Отпуска и дни рождения', icon: CalendarDays },
-      ] });
+      ], collapsible: true });
     }
 
     // ── РАСПИСАНИЕ (по разрешению schedule_access) ────────────────────
     if (hasPermission(db, currentUser, 'schedule_access')) {
       groups.push({ title: 'Расписание', items: [
         { id: 'schedule', label: 'Регулярные задачи', icon: Calendar },
-      ] });
+      ], collapsible: true });
     }
 
     // ── АДМИН ────────────────────────────
@@ -4472,13 +4483,13 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       admin.push({ id: 'admin_release_notes', label: 'Что нового (рассылка)', icon: Send });
       admin.push({ id: 'admin_errors',   label: 'Отчёты об ошибках',  icon: AlertTriangle });
       admin.push({ id: 'admin_service',  label: 'Сервис · очистка',   icon: Settings });
-      groups.push({ title: 'Администрирование', items: admin });
+      groups.push({ title: 'Администрирование', items: admin, collapsible: true });
     }
 
     // ── ПРОЧЕЕ ────────────────────────────
     const misc = [];
     misc.push({ id: 'feedback', label: 'Обратная связь', icon: MessageSquare });
-    groups.push({ title: 'Прочее', items: misc });
+    groups.push({ title: 'Прочее', items: misc, collapsible: true });
 
     return groups;
   }, [role, currentUser, isManager, db]);
@@ -4502,12 +4513,28 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
         
 
         <nav className="px-3 flex-1 overflow-y-auto">
-          {navItems.map((group, gIdx) => (
+          {navItems.map((group, gIdx) => {
+            const collapsed = group.collapsible && collapsedSections[group.title];
+            const hasActive = group.items.some(i => route.name === i.id);
+            return (
             <div key={group.title} className={gIdx > 0 ? 'mt-4' : ''}>
-              <div className="text-[10px] uppercase font-bold mb-1 px-2" style={{ color: '#A8A8AE', letterSpacing: '0.1em' }}>
-                {group.title}
-              </div>
-              {group.items.map(item => (
+              {group.collapsible ? (
+                <button
+                  onClick={() => toggleSection(group.title)}
+                  className="w-full flex items-center justify-between px-2 mb-1"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 8px' }}
+                >
+                  <span className="text-[10px] uppercase font-bold" style={{ color: hasActive ? 'var(--mc-text)' : '#A8A8AE', letterSpacing: '0.1em' }}>
+                    {group.title}
+                  </span>
+                  <ChevronDown size={12} style={{ color: '#A8A8AE', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+              ) : (
+                <div className="text-[10px] uppercase font-bold mb-1 px-2" style={{ color: '#A8A8AE', letterSpacing: '0.1em' }}>
+                  {group.title}
+                </div>
+              )}
+              {!collapsed && group.items.map(item => (
                 <SidebarItem
                   key={item.id}
                   icon={item.icon}
@@ -4518,7 +4545,8 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
                 />
               ))}
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="p-3 border-t" style={{ borderColor: 'var(--mc-border-light)' }}>
@@ -4570,12 +4598,28 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
             </div>
             
             <nav className="px-3 flex-1 overflow-y-auto">
-              {navItems.map((group, gIdx) => (
+              {navItems.map((group, gIdx) => {
+                const collapsed = group.collapsible && collapsedSections[group.title];
+                const hasActive = group.items.some(i => route.name === i.id);
+                return (
                 <div key={group.title} className={gIdx > 0 ? 'mt-4' : ''}>
-                  <div className="text-[10px] uppercase font-bold mb-1 px-2" style={{ color: '#A8A8AE', letterSpacing: '0.1em' }}>
-                    {group.title}
-                  </div>
-                  {group.items.map(item => (
+                  {group.collapsible ? (
+                    <button
+                      onClick={() => toggleSection(group.title)}
+                      className="w-full flex items-center justify-between px-2 mb-1"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 8px' }}
+                    >
+                      <span className="text-[10px] uppercase font-bold" style={{ color: hasActive ? 'var(--mc-text)' : '#A8A8AE', letterSpacing: '0.1em' }}>
+                        {group.title}
+                      </span>
+                      <ChevronDown size={12} style={{ color: '#A8A8AE', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }} />
+                    </button>
+                  ) : (
+                    <div className="text-[10px] uppercase font-bold mb-1 px-2" style={{ color: '#A8A8AE', letterSpacing: '0.1em' }}>
+                      {group.title}
+                    </div>
+                  )}
+                  {!collapsed && group.items.map(item => (
                     <SidebarItem
                       key={item.id}
                       icon={item.icon}
@@ -4586,7 +4630,8 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
                     />
                   ))}
                 </div>
-              ))}
+                );
+              })}
             </nav>
             <div className="p-3 border-t flex-shrink-0" style={{ borderColor: 'var(--mc-border-light)' }}>
               <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
