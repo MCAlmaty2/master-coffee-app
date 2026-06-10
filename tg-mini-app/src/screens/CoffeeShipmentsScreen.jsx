@@ -30,6 +30,28 @@ function currentMonthKey() {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/* ── Нормализация адресов кофеен ──────────────────────────── */
+const COFFEE_SHOPS = [
+  { match: '597',          address: 'Сейфуллина 597В/1',  name: 'MC Almaty' },
+  { match: 'Жандосова',    address: 'Жандосова 58/1',      name: 'MC Almaty 2' },
+  { match: '416',          address: 'Сейфуллина 416',      name: 'MC Almaty 3' },
+  { match: 'Розыбакиева',  address: 'Розыбакиева 247а',   name: 'MC Almaty 4' },
+];
+
+function normalizeAddress(raw) {
+  const s = (raw || '').trim();
+  if (!s) return s;
+  for (const shop of COFFEE_SHOPS) {
+    if (s.includes(shop.match)) return shop.address;
+  }
+  return s;
+}
+
+function shopName(address) {
+  const shop = COFFEE_SHOPS.find(s => s.address === address);
+  return shop ? shop.name : null;
+}
+
 function parseAmount(s) {
   if (s === null || s === undefined) return 0;
   const cleaned = String(s).replace(/[\s ]/g, '').replace(',', '.');
@@ -92,7 +114,7 @@ function parsePaste(text) {
       date:             (c[1] || '').trim(),
       amount:           parseAmount(c[2]),
       counterparty:     (c[3] || '').trim(),
-      delivery_address: (c[4] || '').trim(),
+      delivery_address: normalizeAddress(c[4]),
       site_order_number:(c[5] || '').trim(),
     });
   }
@@ -138,14 +160,14 @@ export function CoffeeShipmentsScreen({ ctx }) {
 
   /* ── Уникальные адреса ── */
   const allAddresses = useMemo(() => {
-    const set = new Set(rows.filter(r => r.month === selectedMonth).map(r => r.delivery_address).filter(Boolean));
+    const set = new Set(rows.filter(r => r.month === selectedMonth).map(r => normalizeAddress(r.delivery_address)).filter(Boolean));
     return [...set].sort();
   }, [rows, selectedMonth]);
 
   /* ── Фильтрованные строки ── */
   const monthRows = rows
     .filter(r => r.month === selectedMonth)
-    .filter(r => addressFilter === 'all' || r.delivery_address === addressFilter)
+    .filter(r => addressFilter === 'all' || normalizeAddress(r.delivery_address) === addressFilter)
     .filter(r => {
       if (!search.trim()) return true;
       const q = search.toLowerCase();
@@ -161,7 +183,7 @@ export function CoffeeShipmentsScreen({ ctx }) {
     const all = rows.filter(r => r.month === selectedMonth);
     const byAddr = {};
     for (const r of all) {
-      const addr = r.delivery_address || 'Без адреса';
+      const addr = normalizeAddress(r.delivery_address) || 'Без адреса';
       if (!byAddr[addr]) byAddr[addr] = { amount: 0, paid: 0, count: 0 };
       byAddr[addr].amount += Number(r.amount) || 0;
       byAddr[addr].paid   += Number(r.payment_amount) || 0;
@@ -281,7 +303,10 @@ export function CoffeeShipmentsScreen({ ctx }) {
                   border: addressFilter === addr ? '1px solid #3390EC' : '1px solid transparent',
                 }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{addr}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>
+                    {shopName(addr) ? <span style={{ color: '#297b8a' }}>{shopName(addr)}</span> : addr}
+                  </div>
+                  {shopName(addr) && <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>{addr}</div>}
                   <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>{s.count} отгрузок</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
