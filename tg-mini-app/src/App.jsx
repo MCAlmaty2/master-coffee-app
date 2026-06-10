@@ -15,6 +15,7 @@ import { DailyRevenueScreen } from './screens/DailyRevenueScreen';
 import { ManagerTasksScreen, ManagerTasksHomeTile } from './screens/ManagerTasksScreen';
 import { ScheduleScreen, ScheduleHomeBanner } from './screens/ScheduleScreen';
 import { GiftsScreen, GiftsHomeBanner } from './screens/GiftsScreen';
+import { CoffeeShipmentsScreen, CoffeeShipmentsHomeTile } from './screens/CoffeeShipmentsScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -403,6 +404,7 @@ const ROLES = {
   barista:        { label: 'Бариста',                short: 'Бариста',      color: '#0EA5E9' },
   technician:     { label: 'Техник',                 short: 'Техник',       color: '#16A34A' },
   courier:        { label: 'Курьер',                 short: 'Курьер',       color: '#0891B2' },
+  coffee_manager: { label: 'Управляющий кофейни',   short: 'Кофейня',      color: '#92400E' },
   pending:        { label: 'Ожидает подтверждения',  short: 'Ожидает',      color: '#A8A8AE' },
 };
 
@@ -458,6 +460,10 @@ const PERMISSIONS = {
   gift_approve:         { group: 'Подарки', label: 'Одобрять / отклонять заявки на подарки' },
   gift_process:         { group: 'Подарки', label: 'Списывать подарки (после одобрения)' },
   gift_view_all:        { group: 'Подарки', label: 'Видеть все заявки на подарки' },
+  // Кофейни (реестр отгрузок кофеен)
+  coffee_shipments_view:{ group: 'Кофейни', label: 'Видеть реестр отгрузок кофеен' },
+  coffee_shipments_edit:{ group: 'Кофейни', label: 'Вносить данные из 1С в реестр кофеен' },
+  coffee_shipments_pay: { group: 'Кофейни', label: 'Вносить оплату в реестре кофеен' },
   // Расписание
   schedule_access:      { group: 'Расписание', label: 'Доступ к регулярным задачам (расписание)' },
   // Админ
@@ -468,7 +474,7 @@ const PERMISSIONS = {
 };
 
 // Системные роли — пресеты. Admin их редактирует, но удалить нельзя.
-const SYSTEM_ROLES = ['admin', 'director', 'senior_manager', 'b2b', 'sales', 'warehouse', 'cashier', 'barista', 'technician', 'courier', 'pending'];
+const SYSTEM_ROLES = ['admin', 'director', 'senior_manager', 'b2b', 'sales', 'warehouse', 'cashier', 'barista', 'technician', 'courier', 'coffee_manager', 'pending'];
 
 function defaultPermissionsFor(roleKey) {
   switch (roleKey) {
@@ -476,9 +482,9 @@ function defaultPermissionsFor(roleKey) {
       // admin всё равно имеет всё, но для согласованности — все права
       return Object.keys(PERMISSIONS);
     case 'director':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay'];
     case 'senior_manager':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay'];
     case 'courier':
       return ['delivery_courier'];
     case 'b2b':
@@ -492,6 +498,8 @@ function defaultPermissionsFor(roleKey) {
     case 'barista':
     case 'technician':
       return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create', 'gift_create'];
+    case 'coffee_manager':
+      return ['coffee_shipments_view', 'coffee_shipments_pay'];
     default:
       return [];
   }
@@ -879,6 +887,7 @@ function seedDB() {
     scheduleTasks: [],
     scheduleCompletions: [],
     gifts: [],
+    coffeeShipments: [],
     roleDefinitions: SYSTEM_ROLES.map(key => ({
       key,
       label: ROLES[key].label,
@@ -1244,7 +1253,7 @@ function App() {
       syncSnapshotRef.current[stateKey] = currArr;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts]);
+  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts, db.coffeeShipments]);
 
   const currentUser = session ? db.users.find(u => u.id === session.user_id) : null;
   // effectiveRole — роль, под которой Admin сейчас "видит" приложение
@@ -4363,6 +4372,15 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       groups.push({ title: 'Товары', items: prodItems });
     }
 
+    // ── КОФЕЙНИ (реестр отгрузок кофеен) ────────────────────────────
+    if (hasPermission(db, currentUser, 'coffee_shipments_view')
+        || hasPermission(db, currentUser, 'coffee_shipments_edit')
+        || hasPermission(db, currentUser, 'coffee_shipments_pay')) {
+      groups.push({ title: 'Кофейни', items: [
+        { id: 'coffee_shipments', label: 'Реестр отгрузок кофеен', icon: Building2 },
+      ] });
+    }
+
     // ── РАСПИСАНИЕ (по разрешению schedule_access) ────────────────────
     if (hasPermission(db, currentUser, 'schedule_access')) {
       groups.push({ title: 'Расписание', items: [
@@ -4740,6 +4758,7 @@ function Screen({ ctx }) {
       if (effectiveRole === 'sales') return <DashboardHome ctx={ctx} title="Главная — Продажи" />;
       if (effectiveRole === 'warehouse') return <DashboardHome ctx={ctx} title="Главная — Склад" />;
       if (effectiveRole === 'barista' || effectiveRole === 'technician') return <FieldHome ctx={ctx} />;
+      if (effectiveRole === 'coffee_manager') return <DashboardHome ctx={ctx} title="Главная — Кофейня" />;
       if (effectiveRole === 'director' || effectiveRole === 'senior_manager') return <DashboardHome ctx={ctx} title="Главная — Руководство" />;
       if (effectiveRole === 'cashier') return <DashboardHome ctx={ctx} title="Главная — Касса" />;
       // Кастомная роль — permission-aware фолбэк
@@ -4794,6 +4813,8 @@ function Screen({ ctx }) {
     case 'courier_order':    return <CourierOrderDetailScreen ctx={ctx} orderId={route.orderId} />;
     // ─── Расписание / регулярные задачи ───
     case 'schedule': return <ScheduleScreen ctx={ctx} />;
+    // ─── Кофейни (реестр отгрузок) ───
+    case 'coffee_shipments': return <CoffeeShipmentsScreen ctx={ctx} />;
     // ─── Подарки клиентам ───
     case 'gifts':        return <GiftsScreen ctx={ctx} />;
     case 'create_gift':  return <GiftsScreen ctx={ctx} />;
@@ -5327,6 +5348,20 @@ function DashboardHome({ ctx, title }) {
       color: '#D97706',
       go: () => navigate({ name: 'shipment_registry' }),
       highlight: unpaidShip.length > 0 && currentUser.role === 'cashier',
+    });
+  }
+  // Кофейни — реестр отгрузок кофеен
+  if (has('coffee_shipments_view') || has('coffee_shipments_edit') || has('coffee_shipments_pay')) {
+    const mk = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const allCS = (db.coffeeShipments || []).filter(r => r.month === mk);
+    const totalDebt = allCS.reduce((s, r) => s + ((Number(r.amount) || 0) - (Number(r.payment_amount) || 0)), 0);
+    tiles.push({
+      key: 'coffee_shipments', icon: Building2, label: 'Кофейни',
+      value: totalDebt > 0 ? (totalDebt / 1000).toFixed(0) + 'K' : allCS.length,
+      hint: totalDebt > 0 ? 'долг ₸' : 'отгрузок',
+      color: totalDebt > 0 ? '#EB5757' : '#0891B2',
+      go: () => navigate({ name: 'coffee_shipments' }),
+      highlight: totalDebt > 0,
     });
   }
   // Только для админа
