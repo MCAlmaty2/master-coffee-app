@@ -210,6 +210,8 @@ async function sendPrivateTelegram(user, text) {
 // Создать in-app уведомление + fire-and-forget личный Telegram получателю.
 // button_url / button_text — опционально: добавляет inline-кнопку под сообщением (web_app).
 function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, button_url, button_text }) {
+  const recipient = db?.users?.find(u => u.id === recipient_id);
+  if (recipient?.role === 'coffee_manager') return null;
   const notif = {
     id: uid(),
     recipient_id,
@@ -221,7 +223,6 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, but
     ...(link_id   != null ? { link_id }   : {}),
   };
   const tgs       = db?.telegramSettings;
-  const recipient = db?.users?.find(u => u.id === recipient_id);
   // Личная настройка по категориям (по link_kind). По умолчанию включено.
   const category = link_kind || 'general';
   const prefs = recipient?.tg_notif_prefs || {};
@@ -1389,7 +1390,7 @@ function App() {
                 link_kind: 'access', link_id: '',
                 title: 'Новый запрос на доступ',
                 body: `${user.first_name} ${user.last_name || ''} (Telegram @${tgUser.username || tgUser.id}) запросил доступ`,
-              })),
+              })).filter(Boolean),
               ...d.notifications,
             ],
             telegramLog: [
@@ -1477,7 +1478,7 @@ function App() {
             manager: getUserName(d, currentUser.id),
           })]
         : [];
-      return { ...d, orders: [order, ...d.orders], notifications: [...newNotifs, ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
+      return { ...d, orders: [order, ...d.orders], notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
     return order;
   };
@@ -1590,7 +1591,7 @@ function App() {
         });
       }
       // Прочие смены статуса в Telegram не шлём — это шум по требованию.
-      return { ...d, orders, notifications: [...newNotifs, ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
+      return { ...d, orders, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
   };
 
@@ -1622,7 +1623,7 @@ function App() {
           link_kind: 'order', link_id: order.id,
         }),
         ...d.notifications,
-      ],
+      ].filter(Boolean),
     }));
     return { ok: true };
   };
@@ -1657,7 +1658,7 @@ function App() {
           link_kind: 'order', link_id: order.id,
         }),
         ...d.notifications,
-      ],
+      ].filter(Boolean),
     }));
     return { ok: true };
   };
@@ -1793,7 +1794,7 @@ function App() {
           body: `Заявка ${order.order_number} была отменена. Причина: ${reason.trim() || 'не указана'}`,
         }),
         ...d.notifications,
-      ],
+      ].filter(Boolean),
     }));
     return { ok: true };
   };
@@ -1858,7 +1859,7 @@ function App() {
         notifications: [
           makeNotif(d, { recipient_id: updated.id, title: 'Доступ предоставлен', body: `Роль: ${roleOf(d, role).label}. Откройте бота в Telegram и зайдите снова.` }),
           ...d.notifications,
-        ],
+        ].filter(Boolean),
       }));
       // TG уведомление отправляется автоматически через makeNotif
       return { ok: true };
@@ -2066,7 +2067,7 @@ function App() {
       return {
         ...d,
         tasks: [task, ...d.tasks],
-        notifications: [...notifs, ...d.notifications],
+        notifications: [...notifs.filter(Boolean), ...d.notifications],
         telegramLog: [tgEntry, ...d.telegramLog],
       };
     });
@@ -2134,14 +2135,12 @@ function App() {
         };
       }),
       notifications: [
-        // Уведомляем постановщика если переносит исполнитель
         ...(isAssignee && task.created_by !== currentUser.id ? [makeNotif(d, {
           recipient_id: task.created_by,
           title: 'Задача перенесена',
           body: `${task.task_number}: ${newDate}${newTime ? ' ' + newTime : ''}${reason ? ` · ${reason.trim()}` : ''}`,
           link_kind: 'task', link_id: task.id,
         })] : []),
-        // Уведомляем исполнителя если переносит менеджер
         ...(!isAssignee && task.assignee_id !== currentUser.id ? [makeNotif(d, {
           recipient_id: task.assignee_id,
           title: 'Задача перенесена',
@@ -2149,7 +2148,7 @@ function App() {
           link_kind: 'task', link_id: task.id,
         })] : []),
         ...d.notifications,
-      ],
+      ].filter(Boolean),
     }));
     return { ok: true };
   };
@@ -2326,7 +2325,7 @@ function App() {
         items_count: String(items.length),
         reason: writeOff.reason.slice(0, 80),
       });
-      return { ...d, writeOffs: [writeOff, ...d.writeOffs], notifications: [...newNotifs, ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
+      return { ...d, writeOffs: [writeOff, ...d.writeOffs], notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
     });
     return { writeOff };
   };
@@ -2371,7 +2370,7 @@ function App() {
         items: itemsSummary,
         reason: wo.reason,
       });
-      return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
+      return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
     });
     return { ok: true };
   };
@@ -2400,7 +2399,7 @@ function App() {
         link_kind: 'writeoff', link_id: wo.id,
         body: `${wo.number}: причина — ${comment.trim().slice(0, 80)}`,
       })];
-      return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications] };
+      return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
     return { ok: true };
   };
@@ -2446,7 +2445,7 @@ function App() {
         items_short: trimmed,
         recipient: author ? `${author.first_name} ${author.last_name || ''}`.trim() : '—',
       })];
-      return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
+      return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
     return { ok: true };
   };
@@ -2482,7 +2481,7 @@ function App() {
         link_kind: 'writeoff', link_id: wo.id,
       })];
       const tgEntries = [makeTgLogEntry(d, 'writeoff_ready', { wo_number: wo.number, pickup_code: code })];
-      return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
+      return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
     return { ok: true, code };
   };
@@ -2518,7 +2517,7 @@ function App() {
         body: `${wo.number}: вы получили на складе.`,
         link_kind: 'writeoff', link_id: wo.id,
       })];
-      return { ...d, writeOffs: updatedList, notifications: [...newNotifs, ...d.notifications] };
+      return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
     return { ok: true };
   };
@@ -2587,7 +2586,7 @@ function App() {
         body: `${number}: ${gift.product_name} × ${gift.quantity} для ${gift.client_name}`,
         link_kind: 'gift', link_id: gift.id,
       }));
-      return { ...d, gifts: [gift, ...(d.gifts || [])], notifications: [...newNotifs, ...d.notifications] };
+      return { ...d, gifts: [gift, ...(d.gifts || [])], notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
     return { gift };
   };
@@ -2608,7 +2607,7 @@ function App() {
         makeNotif(d, { recipient_id: g.created_by, title: 'Подарок одобрен', body: `${g.number}: одобрен`, link_kind: 'gift', link_id: g.id }),
         ...processors.map(p => makeNotif(d, { recipient_id: p.id, title: '🎁 Подарок к списанию', body: `${g.number}: ${g.product_name} для ${g.client_name}`, link_kind: 'gift', link_id: g.id })),
       ];
-      return { ...d, gifts: updatedList, notifications: [...newNotifs, ...d.notifications] };
+      return { ...d, gifts: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
     return { ok: true };
   };
@@ -2626,7 +2625,7 @@ function App() {
         log: [...x.log, { event: 'status', from: 'pending', to: 'rejected', actor: currentUser.id, at: new Date().toISOString(), meta: { comment: comment.trim() } }],
       });
       const newNotifs = [makeNotif(d, { recipient_id: g.created_by, title: 'Подарок отклонён', body: `${g.number}: ${comment.trim().slice(0, 80)}`, link_kind: 'gift', link_id: g.id })];
-      return { ...d, gifts: updatedList, notifications: [...newNotifs, ...d.notifications] };
+      return { ...d, gifts: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
     return { ok: true };
   };
@@ -2646,7 +2645,7 @@ function App() {
         makeNotif(d, { recipient_id: g.created_by, title: 'Подарок списан', body: `${g.number}: передан на склад`, link_kind: 'gift', link_id: g.id }),
         ...warehouseUsers.map(wu => makeNotif(d, { recipient_id: wu.id, title: '🎁 Подарок · собрать', body: `${g.number}: ${g.product_name} × ${g.quantity} для ${g.client_name}`, link_kind: 'gift', link_id: g.id })),
       ];
-      return { ...d, gifts: updatedList, notifications: [...newNotifs, ...d.notifications] };
+      return { ...d, gifts: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
     return { ok: true };
   };
@@ -2664,7 +2663,7 @@ function App() {
         log: [...x.log, { event: 'status', from: 'processed', to: 'prepared', actor: currentUser.id, at: new Date().toISOString(), meta: { pickup_code: code } }],
       });
       const newNotifs = [makeNotif(d, { recipient_id: g.created_by, title: '🎁 Подарок готов к выдаче', body: `${g.number}: код ${code}`, link_kind: 'gift', link_id: g.id })];
-      return { ...d, gifts: updatedList, notifications: [...newNotifs, ...d.notifications] };
+      return { ...d, gifts: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
     return { ok: true, code };
   };
@@ -2681,7 +2680,7 @@ function App() {
         log: [...x.log, { event: 'status', from: 'prepared', to: 'delivered', actor: currentUser.id, at: new Date().toISOString() }],
       });
       const newNotifs = [makeNotif(d, { recipient_id: g.created_by, title: '🎁 Подарок выдан', body: `${g.number}: ${g.delivery_type === 'delivery' ? 'доставлен' : 'выдан на складе'}`, link_kind: 'gift', link_id: g.id })];
-      return { ...d, gifts: updatedList, notifications: [...newNotifs, ...d.notifications] };
+      return { ...d, gifts: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
     return { ok: true };
   };
@@ -2775,7 +2774,7 @@ function App() {
       return {
         ...d,
         contractRequests: [cr, ...d.contractRequests],
-        notifications: [...newNotifs, ...d.notifications],
+        notifications: [...newNotifs.filter(Boolean), ...d.notifications],
         telegramLog: [makeTgLogEntry(d, 'contract_new', tgMsg), ...d.telegramLog],
       };
     });
@@ -2800,7 +2799,7 @@ function App() {
         makeNotif(d, { recipient_id: cr.created_by, link_kind: 'contract', link_id: cr.id,
           title: 'Заявка на договор в работе', body: `${cr.number}: ${getUserName(d, currentUser.id)} принял в работу` }),
         ...d.notifications,
-      ],
+      ].filter(Boolean),
     }));
     return { ok: true };
   };
@@ -2838,7 +2837,7 @@ function App() {
         ...(cr.created_by !== currentUser.id ? [makeNotif(d, { recipient_id: cr.created_by, title: `Правка #${revision.version} к договору`, body: `${cr.number}: ${revision.comment.slice(0, 60)}` })] : []),
         ...(cr.taken_by && cr.taken_by !== currentUser.id ? [makeNotif(d, { recipient_id: cr.taken_by, title: `Правка #${revision.version} к договору`, body: `${cr.number}: ${revision.comment.slice(0, 60)}` })] : []),
         ...d.notifications,
-      ],
+      ].filter(Boolean),
     }));
     return { ok: true, revision };
   };
@@ -2876,7 +2875,7 @@ function App() {
         makeNotif(d, { recipient_id: cr.created_by, link_kind: 'contract', link_id: cr.id,
           title: 'Договор подписан', body: `${cr.number} → ${trimmedNo}` }),
         ...d.notifications,
-      ],
+      ].filter(Boolean),
       telegramLog: [makeTgLogEntry(d, 'contract_signed', {
         cr_number: cr.number,
         contract_number: trimmedNo,
@@ -2908,7 +2907,7 @@ function App() {
         makeNotif(d, { recipient_id: cr.created_by, link_kind: 'contract', link_id: cr.id,
           title: 'Заявка на договор отклонена', body: `${cr.number}: ${comment.trim().slice(0, 80)}` }),
         ...d.notifications,
-      ],
+      ].filter(Boolean),
     }));
     return { ok: true };
   };
@@ -3083,7 +3082,7 @@ function App() {
       return {
         ...d,
         grindRequests: [grind, ...(d.grindRequests || [])],
-        notifications: [...newNotifs, ...d.notifications],
+        notifications: [...newNotifs.filter(Boolean), ...d.notifications],
         telegramLog: [tgEntry, ...d.telegramLog].slice(0, 200),
       };
     });
@@ -3144,7 +3143,7 @@ function App() {
       return {
         ...d,
         grindRequests: list,
-        notifications: [...newNotifs, ...d.notifications],
+        notifications: [...newNotifs.filter(Boolean), ...d.notifications],
         telegramLog: [tgEntry, ...d.telegramLog].slice(0, 200),
       };
     });
@@ -14095,7 +14094,7 @@ function FeedbackScreen({ ctx }) {
     const adminUser = db.users.find(u => u.role === 'admin');
     if (adminUser && notify) {
       const n = notify({ recipient_id: adminUser.id, title: '✅ Обратная связь подтверждена', body: `${currentUser.first_name}: подтвердил(а) выполнение`, link_kind: 'feedback', link_id: fb.id });
-      setDb(d => ({ ...d, notifications: [n, ...(d.notifications || [])] }));
+      if (n) setDb(d => ({ ...d, notifications: [n, ...(d.notifications || [])] }));
     }
     showToast('Подтверждено! Задача в архиве');
   };
@@ -14113,7 +14112,7 @@ function FeedbackScreen({ ctx }) {
     const adminUser = db.users.find(u => u.role === 'admin');
     if (adminUser && notify) {
       const n = notify({ recipient_id: adminUser.id, title: '🔄 Обратная связь — не подтверждено', body: `${currentUser.first_name}: ${reply.slice(0, 80)}`, link_kind: 'feedback', link_id: fb.id });
-      setDb(d => ({ ...d, notifications: [n, ...(d.notifications || [])] }));
+      if (n) setDb(d => ({ ...d, notifications: [n, ...(d.notifications || [])] }));
     }
     showToast('Комментарий отправлен, задача возвращена в работу');
   };
@@ -14314,7 +14313,7 @@ function AdminFeedbackScreen({ ctx }) {
         link_kind: 'feedback',
         link_id: fb.id,
       });
-      setDb(d => ({ ...d, notifications: [notifObj, ...(d.notifications || [])] }));
+      if (notifObj) setDb(d => ({ ...d, notifications: [notifObj, ...(d.notifications || [])] }));
     }
     showToast(isFinalizing ? 'Отправлено на подтверждение сотруднику' : `Статус: ${FB_STATUS[realStatus].label}`);
   };
@@ -14501,7 +14500,7 @@ function AdminReleaseNotesScreen({ ctx }) {
       body: note.body || '',
       link_kind: 'release',
     }));
-    setDb(d => ({ ...d, notifications: [...newNotifs, ...d.notifications] }));
+    setDb(d => ({ ...d, notifications: [...newNotifs.filter(Boolean), ...d.notifications] }));
     await supabase.from('release_notes').update({ sent_at: new Date().toISOString() }).eq('id', note.id);
     setDb(d => ({ ...d, releaseNotes: (d.releaseNotes || []).map(n => n.id === note.id ? { ...n, sent_at: new Date().toISOString() } : n) }));
     setSending(false);
