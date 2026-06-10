@@ -959,10 +959,10 @@ function validateOrderForm(form) {
     const cp = (form.contact_person || '').trim();
     if (!cp) errors.contact_person = 'Укажите контактное лицо';
     else if (cp.split(/\s+/).filter(Boolean).length < 2) errors.contact_person = 'Минимум 2 слова';
+    // Налоговый режим — обязателен для юр. лица
+    if (!form.tax_regime || !TAX_REGIME[form.tax_regime]) errors.tax_regime = 'Выберите налоговый режим';
     // Банковские реквизиты — обязательны для юр. лица
     if (!(form.bank || '').trim()) errors.bank = 'Укажите банк';
-    if (!(form.kbe || '').trim()) errors.kbe = 'Укажите КБе';
-    else if (!/^\d{1,2}$/.test((form.kbe || '').trim())) errors.kbe = 'КБе — 1–2 цифры';
     if (!(form.bik || '').trim()) errors.bik = 'Укажите БИК';
     if (!(form.account_number || '').trim()) errors.account_number = 'Укажите номер счёта';
   }
@@ -1019,7 +1019,7 @@ function App() {
   const [bootStatus, setBootStatus] = useState({ phase: 'loading', error: null });
 
   // Черновики форм поднимаем в App, чтобы они переживали навигацию на ProductPicker и обратно
-  const emptyOrderDraft = { client_type: 'legal', items: [], delivery_method: '', comment: '', full_name: '', company_name: '', bin: '', contact_person: '', phone: '', address: '', delivery_address: '', bank: '', kbe: '', bik: '', account_number: '' };
+  const emptyOrderDraft = { client_type: 'legal', items: [], delivery_method: '', comment: '', full_name: '', company_name: '', bin: '', contact_person: '', phone: '', address: '', delivery_address: '', bank: '', bik: '', account_number: '', tax_regime: '' };
   const emptyQuickDraft = {
     client_type: 'individual',
     client_name: '',
@@ -6466,13 +6466,15 @@ function OrderDetailScreen({ ctx, orderId }) {
             <FieldRow label="Телефон" value={prettyPhone(order.phone)} />
             <FieldRow label={isLegal ? 'Юр. адрес' : 'Адрес'} value={order.address} />
             {order.delivery_address && <FieldRow label="📍 Адрес доставки" value={order.delivery_address} />}
-            {isLegal && (order.bank || order.kbe || order.bik || order.account_number) && (
+            {isLegal && order.tax_regime && (
+              <FieldRow label="Налоговый режим" value={`${TAX_REGIME[order.tax_regime]?.label || order.tax_regime} — ${TAX_REGIME[order.tax_regime]?.desc || ''}`} />
+            )}
+            {isLegal && (order.bank || order.bik || order.account_number) && (
               <>
                 <div className="pt-2 mt-1" style={{ borderTop: '1px solid #F1F5F9' }}>
                   <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--mc-muted)' }}>Банковские реквизиты</div>
                 </div>
                 {order.bank           && <FieldRow label="Банк"        value={order.bank} />}
-                {order.kbe            && <FieldRow label="КБе"         value={<span className="mono-font">{order.kbe}</span>} />}
                 {order.bik            && <FieldRow label="БИК"         value={<span className="mono-font">{order.bik}</span>} />}
                 {order.account_number && <FieldRow label="Номер счёта" value={<span className="mono-font">{order.account_number}</span>} />}
               </>
@@ -7160,7 +7162,6 @@ function CreateOrderScreen({ ctx }) {
       phone:          client.phone          || '',
       address:        client.address        || '',
       bank:           client.bank           || '',
-      kbe:            client.kbe            || '',
       bik:            client.bik            || '',
       account_number: client.account_number || '',
       ...(preferredAsItems.length > 0 ? { items: preferredAsItems } : {}),
@@ -7191,8 +7192,8 @@ function CreateOrderScreen({ ctx }) {
             company_name:   form.company_name.trim(),
             bin:            form.bin.trim(),
             contact_person: form.contact_person.trim(),
+            tax_regime:     form.tax_regime,
             bank:           form.bank.trim(),
-            kbe:            form.kbe.trim(),
             bik:            form.bik.trim(),
             account_number: form.account_number.trim(),
           }),
@@ -7305,13 +7306,28 @@ function CreateOrderScreen({ ctx }) {
               {form.client_type === 'legal' && (
                 <>
                   <div className="pt-1" style={{ borderTop: '1px solid #F1F5F9' }}>
+                    <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--mc-muted)' }}>Налоговый режим клиента</div>
+                  </div>
+                  <div className="flex gap-2">
+                    {Object.entries(TAX_REGIME).map(([k, v]) => (
+                      <button key={k} onClick={() => update({ tax_regime: k })}
+                        className="flex-1 py-2.5 rounded-lg text-sm font-semibold"
+                        style={{
+                          background: form.tax_regime === k ? '#297b8a' : 'var(--mc-active-item)',
+                          color: form.tax_regime === k ? 'white' : 'var(--mc-text)',
+                          border: `1px solid ${errors.tax_regime && !form.tax_regime ? '#EB5757' : form.tax_regime === k ? '#297b8a' : 'var(--mc-border)'}`,
+                        }}>
+                        {v.label} — {v.desc}
+                      </button>
+                    ))}
+                  </div>
+                  {errors.tax_regime && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.tax_regime}</div>}
+
+                  <div className="pt-1 mt-2" style={{ borderTop: '1px solid #F1F5F9' }}>
                     <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--mc-muted)' }}>Банковские реквизиты</div>
                   </div>
                   <SiteInput label="Банк" value={form.bank} onChange={v => update({ bank: v })} error={errors.bank} placeholder='АО "Kaspi Bank"' />
-                  <div className="grid grid-cols-2 gap-3">
-                    <SiteInput label="КБе" value={form.kbe} onChange={v => update({ kbe: v.replace(/\D/g, '').slice(0, 2) })} error={errors.kbe} placeholder="16" />
-                    <SiteInput label="БИК" value={form.bik} onChange={v => update({ bik: v })} error={errors.bik} placeholder="CASPKZKA" />
-                  </div>
+                  <SiteInput label="БИК" value={form.bik} onChange={v => update({ bik: v })} error={errors.bik} placeholder="CASPKZKA" />
                   <SiteInput label="Номер счёта" value={form.account_number} onChange={v => update({ account_number: v })} error={errors.account_number} placeholder="KZ24722S000044591862" />
                 </>
               )}
