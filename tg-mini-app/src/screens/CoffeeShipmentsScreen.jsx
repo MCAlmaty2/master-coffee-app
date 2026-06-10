@@ -176,7 +176,7 @@ export function CoffeeShipmentsScreen({ ctx }) {
         || (r.delivery_address || '').toLowerCase().includes(q)
         || (r.site_order_number || '').toLowerCase().includes(q);
     })
-    .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.number || '').localeCompare(b.number || ''));
+    .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.number || '').localeCompare(a.number || ''));
 
   /* ── Статистика по адресам (долг) ── */
   const addressStats = useMemo(() => {
