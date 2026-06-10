@@ -84,7 +84,7 @@ function parsePaste(text) {
         field += ch;
       }
     } else {
-      if (ch === '"')       inQuotes = true;
+      if (ch === '"' && field === '') inQuotes = true;
       else if (ch === '\t') { row.push(field); field = ''; }
       else if (ch === '\r') { /* skip */ }
       else if (ch === '\n') { row.push(field); rawRows.push(row); row = []; field = ''; }

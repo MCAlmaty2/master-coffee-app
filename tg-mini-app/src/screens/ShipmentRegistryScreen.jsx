@@ -72,7 +72,7 @@ function parsePaste(text) {
         field += ch;  // перенос/таб внутри кавычек — часть значения
       }
     } else {
-      if (ch === '"')       inQuotes = true;
+      if (ch === '"' && field === '') inQuotes = true;
       else if (ch === '\t') { row.push(field); field = ''; }
       else if (ch === '\r') { /* пропускаем */ }
       else if (ch === '\n') { row.push(field); rawRows.push(row); row = []; field = ''; }
