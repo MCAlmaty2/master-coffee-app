@@ -9,7 +9,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft, Plus, X, ChevronRight, Check, ExternalLink,
-  Calendar, Clock, Trash2, Link2, AlertTriangle, Edit3,
+  Calendar, Clock, Trash2, Link2, AlertTriangle, Edit3, Eye,
 } from 'lucide-react';
 import { supabase } from '../supabase/client';
 
@@ -105,6 +105,7 @@ export function ScheduleScreen({ ctx }) {
   const [tab, setTab] = useState('today');
   const [createOpen, setCreateOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [viewingTask, setViewingTask] = useState(null);
   const allTasks = db.scheduleTasks || [];
   const allCompletions = db.scheduleCompletions || [];
   const myTasks = allTasks.filter(t => t.active && isTaskForRole(t, role));
@@ -195,7 +196,7 @@ export function ScheduleScreen({ ctx }) {
 
       {/* Содержимое */}
       {tab === 'today' && (
-        <TodayView tasks={todayTasks} isCompleted={isCompleted} onToggle={toggleComplete} />
+        <TodayView tasks={todayTasks} isCompleted={isCompleted} onToggle={toggleComplete} onView={setViewingTask} />
       )}
       {tab === 'weekly' && (
         <WeekView tasks={weeklyTasks} completions={allCompletions} userId={currentUser.id} onToggle={toggleComplete} isCompleted={isCompleted} />
@@ -225,6 +226,16 @@ export function ScheduleScreen({ ctx }) {
             showToast('Задача добавлена');
           }}
           currentUserId={currentUser.id}
+        />
+      )}
+
+      {/* Модал просмотра задачи */}
+      {viewingTask && (
+        <TaskViewModal
+          task={viewingTask}
+          done={isCompleted(viewingTask)}
+          onClose={() => setViewingTask(null)}
+          onToggle={() => { toggleComplete(viewingTask); setViewingTask(null); }}
         />
       )}
 
@@ -272,11 +283,11 @@ function PageHeader({ title, subtitle, action, onBack }) {
   );
 }
 
-function TaskRow({ task, done, onToggle }) {
+function TaskRow({ task, done, onToggle, onView }) {
   const tt = TASK_TYPES[task.task_type] || TASK_TYPES.custom;
   return (
     <div
-      onClick={() => onToggle(task)}
+      onClick={() => onView ? onView(task) : onToggle(task)}
       className="flex items-start gap-3 px-4 py-3 rounded-xl mb-2 cursor-pointer transition hover:shadow-sm"
       style={{
         background: done ? 'var(--mc-active-item)' : 'white',
@@ -287,10 +298,12 @@ function TaskRow({ task, done, onToggle }) {
     >
       {/* Checkbox */}
       <div
+        onClick={e => { e.stopPropagation(); onToggle(task); }}
         className="w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center mt-0.5"
         style={{
           background: done ? tt.color : 'transparent',
           border: done ? 'none' : `2px solid ${tt.color}`,
+          cursor: 'pointer',
         }}
       >
         {done && <Check size={12} color="#fff" strokeWidth={3} />}
@@ -334,7 +347,7 @@ function TaskRow({ task, done, onToggle }) {
   );
 }
 
-function TodayView({ tasks, isCompleted, onToggle }) {
+function TodayView({ tasks, isCompleted, onToggle, onView }) {
   if (tasks.length === 0) {
     return (
       <div className="text-center py-12" style={{ color: 'var(--mc-muted)' }}>
@@ -354,7 +367,7 @@ function TodayView({ tasks, isCompleted, onToggle }) {
           <div className="text-xs font-bold uppercase mb-2" style={{ color: 'var(--mc-muted)', letterSpacing: '0.08em' }}>
             К выполнению ({pending.length})
           </div>
-          {pending.map(t => <TaskRow key={t.id} task={t} done={false} onToggle={onToggle} />)}
+          {pending.map(t => <TaskRow key={t.id} task={t} done={false} onToggle={onToggle} onView={onView} />)}
         </div>
       )}
       {completed.length > 0 && (
@@ -362,7 +375,7 @@ function TodayView({ tasks, isCompleted, onToggle }) {
           <div className="text-xs font-bold uppercase mb-2" style={{ color: 'var(--mc-muted)', letterSpacing: '0.08em' }}>
             Выполнено ({completed.length})
           </div>
-          {completed.map(t => <TaskRow key={t.id} task={t} done={true} onToggle={onToggle} />)}
+          {completed.map(t => <TaskRow key={t.id} task={t} done={true} onToggle={onToggle} onView={onView} />)}
         </div>
       )}
     </div>
@@ -606,6 +619,87 @@ function ManageView({ tasks, allTasks, role, onDelete, onEdit, isAdmin, schedule
   );
 }
 
+function TaskViewModal({ task, done, onClose, onToggle }) {
+  const tt = TASK_TYPES[task.task_type] || TASK_TYPES.custom;
+  const freqLabel = FREQ[task.frequency]?.label || task.frequency;
+  const remindLabel = { 0: 'Без напоминания', 15: 'За 15 минут', 30: 'За 30 минут', 60: 'За 1 час', 1440: 'За 1 день' };
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl overflow-hidden" style={{ background: 'var(--mc-bg)' }}>
+        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--mc-border)', borderLeft: `4px solid ${tt.color}` }}>
+          <div className="flex items-center gap-2">
+            <span style={{ fontSize: 18 }}>{tt.emoji}</span>
+            <h2 className="text-lg font-bold" style={{ color: 'var(--mc-text)' }}>{task.title}</h2>
+          </div>
+          <button onClick={onClose} className="p-1" style={{ color: 'var(--mc-muted)' }}><X size={20} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          {task.description && (
+            <div>
+              <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Описание</div>
+              <div className="text-sm" style={{ color: 'var(--mc-text)' }}>{task.description}</div>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Частота</div>
+              <div className="text-sm" style={{ color: 'var(--mc-text)' }}>{freqLabel}</div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Время</div>
+              <div className="text-sm flex items-center gap-1" style={{ color: 'var(--mc-text)' }}>
+                <Clock size={12} /> {task.time_at || '—'}
+              </div>
+            </div>
+            {task.frequency === 'weekly' && task.day_of_week && (
+              <div>
+                <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>День недели</div>
+                <div className="text-sm" style={{ color: 'var(--mc-text)' }}>{DOW_NAMES[task.day_of_week]}</div>
+              </div>
+            )}
+            {task.frequency === 'monthly' && task.day_of_month && (
+              <div>
+                <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Срок</div>
+                <div className="text-sm" style={{ color: 'var(--mc-text)' }}>до {task.day_of_month}-го</div>
+              </div>
+            )}
+            <div>
+              <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Тип</div>
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: tt.color + '1A', color: tt.color, fontWeight: 600 }}>
+                {tt.emoji} {tt.label}
+              </span>
+            </div>
+            <div>
+              <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Напоминание</div>
+              <div className="text-sm" style={{ color: 'var(--mc-text)' }}>{remindLabel[task.remind_minutes] || 'Без напоминания'}</div>
+            </div>
+          </div>
+          {task.link_url && (
+            <div>
+              <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Ссылка</div>
+              <a href={task.link_url} target="_blank" rel="noopener noreferrer" className="text-sm flex items-center gap-1" style={{ color: '#3390EC' }}>
+                <ExternalLink size={14} /> {task.link_label || 'Открыть'}
+              </a>
+            </div>
+          )}
+          <div className="pt-2 flex items-center justify-between" style={{ borderTop: '1px solid var(--mc-border)' }}>
+            <div className="text-xs font-semibold" style={{ color: done ? '#22C55E' : '#F59E0B' }}>
+              {done ? '✅ Выполнено' : '⏳ Ожидает выполнения'}
+            </div>
+            <button
+              onClick={onToggle}
+              className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+              style={{ background: done ? '#F59E0B' : '#22C55E' }}
+            >
+              {done ? 'Отменить' : 'Выполнить'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const inputCls = 'w-full px-3 py-2.5 rounded-lg text-sm';
 const inputStyle = { border: '1px solid var(--mc-border)', background: 'white', color: 'var(--mc-text)' };
 function FormField({ label, children }) {
@@ -769,6 +863,7 @@ function TaskFormModal({ role, isAdmin, scheduleRoles, db, onClose, onSave, curr
 export function ScheduleHomeBanner({ ctx }) {
   const { db, setDb, currentUser, navigate, effectiveRole } = ctx;
   const role = effectiveRole || currentUser?.role;
+  const [viewingTask, setViewingTask] = useState(null);
 
   if (!ctx.hasPermission?.('schedule_access')) return null;
 
@@ -779,7 +874,7 @@ export function ScheduleHomeBanner({ ctx }) {
     t => t.active && isTaskForRole(t, role) && isTaskForToday(t)
   );
 
-  if (myTodayTasks.length === 0) return null;
+  if (myTodayTasks.length === 0 && !viewingTask) return null;
 
   const isCompleted = (task) => checkCompleted(allCompletions, task, currentUser.id);
   const toggleComplete = (task) => doToggle(allCompletions, task, currentUser.id, setDb);
@@ -788,75 +883,87 @@ export function ScheduleHomeBanner({ ctx }) {
   const allDone = pending.length === 0;
 
   return (
-    <div
-      className="rounded-xl mb-5 overflow-hidden"
-      style={{
-        border: allDone ? '1px solid #BBF7D0' : '1px solid #FDE68A',
-        background: allDone ? '#F0FDF4' : '#FFFBEB',
-      }}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="text-lg">{allDone ? '✅' : '🔔'}</div>
-          <div>
-            <div className="text-sm font-bold" style={{ color: allDone ? '#166534' : '#92400E' }}>
-              {allDone ? 'ВСЕ ЗАДАЧИ ВЫПОЛНЕНЫ' : 'НЕ ЗАБУДЬ ВЫПОЛНИТЬ'}
-            </div>
-            <div className="text-[10px]" style={{ color: allDone ? '#15803D' : '#B45309' }}>
-              {allDone
-                ? `${completed.length} задач на сегодня — молодец!`
-                : `${pending.length} из ${myTodayTasks.length} осталось`
-              }
+    <>
+      <div
+        className="rounded-xl mb-5 overflow-hidden"
+        style={{
+          border: allDone ? '1px solid #BBF7D0' : '1px solid #FDE68A',
+          background: allDone ? '#F0FDF4' : '#FFFBEB',
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="text-lg">{allDone ? '✅' : '🔔'}</div>
+            <div>
+              <div className="text-sm font-bold" style={{ color: allDone ? '#166534' : '#92400E' }}>
+                {allDone ? 'ВСЕ ЗАДАЧИ ВЫПОЛНЕНЫ' : 'НЕ ЗАБУДЬ ВЫПОЛНИТЬ'}
+              </div>
+              <div className="text-[10px]" style={{ color: allDone ? '#15803D' : '#B45309' }}>
+                {allDone
+                  ? `${completed.length} задач на сегодня — молодец!`
+                  : `${pending.length} из ${myTodayTasks.length} осталось`
+                }
+              </div>
             </div>
           </div>
+          <button
+            onClick={() => navigate({ name: 'schedule' })}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            style={{ background: allDone ? '#22C55E' : '#F59E0B', color: '#fff' }}
+          >
+            Открыть
+          </button>
         </div>
-        <button
-          onClick={() => navigate({ name: 'schedule' })}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-          style={{ background: allDone ? '#22C55E' : '#F59E0B', color: '#fff' }}
-        >
-          Открыть
-        </button>
+
+        {/* Задачи (показываем первые 5 невыполненных) */}
+        {pending.length > 0 && (
+          <div className="px-4 pb-3 space-y-1.5">
+            {pending.slice(0, 5).map(t => {
+              const tt = TASK_TYPES[t.task_type] || TASK_TYPES.custom;
+              return (
+                <div
+                  key={t.id}
+                  onClick={() => setViewingTask(t)}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition"
+                  style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.06)' }}
+                >
+                  <div
+                    onClick={e => { e.stopPropagation(); toggleComplete(t); }}
+                    className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center"
+                    style={{ border: `2px solid ${tt.color}`, cursor: 'pointer' }}
+                  />
+                  <div className="flex-1 min-w-0 text-xs font-medium truncate" style={{ color: 'var(--mc-text)' }}>
+                    {t.title}
+                  </div>
+                  {t.time_at && (
+                    <span className="text-[10px] flex-shrink-0" style={{ color: 'var(--mc-muted)' }}>{t.time_at}</span>
+                  )}
+                  {t.link_url && (
+                    <a href={t.link_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="flex-shrink-0" style={{ color: '#3390EC' }}>
+                      <ExternalLink size={12} />
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+            {pending.length > 5 && (
+              <div className="text-[10px] text-center pt-1" style={{ color: '#B45309' }}>
+                и ещё {pending.length - 5}...
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Задачи (показываем первые 5 невыполненных) */}
-      {pending.length > 0 && (
-        <div className="px-4 pb-3 space-y-1.5">
-          {pending.slice(0, 5).map(t => {
-            const tt = TASK_TYPES[t.task_type] || TASK_TYPES.custom;
-            return (
-              <div
-                key={t.id}
-                onClick={() => toggleComplete(t)}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition"
-                style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.06)' }}
-              >
-                <div
-                  className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center"
-                  style={{ border: `2px solid ${tt.color}` }}
-                />
-                <div className="flex-1 min-w-0 text-xs font-medium truncate" style={{ color: 'var(--mc-text)' }}>
-                  {t.title}
-                </div>
-                {t.time_at && (
-                  <span className="text-[10px] flex-shrink-0" style={{ color: 'var(--mc-muted)' }}>{t.time_at}</span>
-                )}
-                {t.link_url && (
-                  <a href={t.link_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="flex-shrink-0" style={{ color: '#3390EC' }}>
-                    <ExternalLink size={12} />
-                  </a>
-                )}
-              </div>
-            );
-          })}
-          {pending.length > 5 && (
-            <div className="text-[10px] text-center pt-1" style={{ color: '#B45309' }}>
-              и ещё {pending.length - 5}...
-            </div>
-          )}
-        </div>
+      {viewingTask && (
+        <TaskViewModal
+          task={viewingTask}
+          done={isCompleted(viewingTask)}
+          onClose={() => setViewingTask(null)}
+          onToggle={() => { toggleComplete(viewingTask); setViewingTask(null); }}
+        />
       )}
-    </div>
+    </>
   );
 }

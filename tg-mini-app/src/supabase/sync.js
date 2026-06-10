@@ -28,6 +28,7 @@ export const SYNC_TABLES = {
   scheduleCompletions:  { table: 'schedule_completions',   pk: 'id' },
   gifts:                { table: 'gifts',                  pk: 'id' },
   coffeeShipments:      { table: 'coffee_shipments',       pk: 'id' },
+  vacations:            { table: 'vacations',              pk: 'id' },
   // feedback_messages и error_reports пишутся напрямую через supabase.from(),
   // поэтому их не включаем в автосинхронизацию.
 };

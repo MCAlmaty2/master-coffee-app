@@ -32,10 +32,10 @@ function currentMonthKey() {
 
 /* ── Нормализация адресов кофеен ──────────────────────────── */
 const COFFEE_SHOPS = [
-  { match: '597',          address: 'Сейфуллина 597В/1',  name: 'MC Almaty' },
-  { match: 'Жандосова',    address: 'Жандосова 58/1',      name: 'MC Almaty 2' },
-  { match: '416',          address: 'Сейфуллина 416',      name: 'MC Almaty 3' },
-  { match: 'Розыбакиева',  address: 'Розыбакиева 247а',   name: 'MC Almaty 4' },
+  { match: '597',          address: 'Сейфуллина 597В/1',  name: 'MC Seifullina' },
+  { match: 'Жандосова',    address: 'Жандосова 58/1',      name: 'MC Aimanova' },
+  { match: '416',          address: 'Сейфуллина 416',      name: 'MC Meredian' },
+  { match: 'Розыбакиева',  address: 'Розыбакиева 247а',   name: 'MC Mega Rozybakieva' },
 ];
 
 function normalizeAddress(raw) {
@@ -147,6 +147,8 @@ export function CoffeeShipmentsScreen({ ctx }) {
   const [addressFilter, setAddressFilter] = useState('all');
   const [editingId, setEditingId]         = useState(null);
   const [editPayment, setEditPayment]     = useState('');
+  const [editRowId, setEditRowId]         = useState(null);
+  const [editRowData, setEditRowData]     = useState({});
 
   if (!canView && !canEdit && !canPay) {
     return (
@@ -252,6 +254,46 @@ export function CoffeeShipmentsScreen({ ctx }) {
     setEditingId(null);
     setEditPayment('');
     showToast('Оплата сохранена');
+  };
+
+  const startEditRow = (r) => {
+    setEditRowId(r.id);
+    setEditRowData({
+      number: r.number || '',
+      date: r.date || '',
+      amount: String(r.amount || ''),
+      counterparty: r.counterparty || '',
+      delivery_address: r.delivery_address || '',
+      organization: r.organization || '',
+      payment_amount: String(r.payment_amount || ''),
+      site_order_number: r.site_order_number || '',
+    });
+  };
+
+  const saveRowEdit = async (id) => {
+    const now = new Date().toISOString();
+    const patch = {
+      number: editRowData.number,
+      date: editRowData.date,
+      amount: parseAmount(editRowData.amount),
+      counterparty: editRowData.counterparty,
+      delivery_address: editRowData.delivery_address,
+      organization: editRowData.organization,
+      payment_amount: parseAmount(editRowData.payment_amount),
+      site_order_number: editRowData.site_order_number,
+      updated_at: now,
+    };
+    const { error } = await supabase.from('coffee_shipments').update(patch).eq('id', id);
+    if (error) { showToast('Ошибка сохранения'); return; }
+    setDb(d => ({
+      ...d,
+      coffeeShipments: (d.coffeeShipments || []).map(r =>
+        r.id === id ? { ...r, ...patch } : r
+      ),
+    }));
+    setEditRowId(null);
+    setEditRowData({});
+    showToast('Запись обновлена');
   };
 
   /* ── Переключение месяца ── */
@@ -397,16 +439,24 @@ export function CoffeeShipmentsScreen({ ctx }) {
             {monthRows.map(r => {
               const debt = (Number(r.amount) || 0) - (Number(r.payment_amount) || 0);
               const isEditing = editingId === r.id;
+              const isRowEdit = editRowId === r.id;
+              const eInput = (field, w = 70) => (
+                <input
+                  value={editRowData[field] || ''}
+                  onChange={e => setEditRowData(d => ({ ...d, [field]: e.target.value }))}
+                  style={{ width: w, padding: '2px 4px', fontSize: 11, borderRadius: 4, border: '1px solid #3390EC', background: '#fff' }}
+                />
+              );
               return (
                 <tr key={r.id} style={{ borderBottom: '1px solid var(--mc-border)' }}>
-                  <Td>{r.number}</Td>
-                  <Td>{r.date}</Td>
-                  <Td style={{ whiteSpace: 'nowrap' }}>{fmtMoney(r.amount)}</Td>
-                  <Td>{r.counterparty}</Td>
-                  <Td>{r.delivery_address}</Td>
-                  <Td>{r.organization}</Td>
+                  <Td>{isRowEdit ? eInput('number', 50) : r.number}</Td>
+                  <Td>{isRowEdit ? eInput('date', 75) : r.date}</Td>
+                  <Td style={{ whiteSpace: 'nowrap' }}>{isRowEdit ? eInput('amount', 70) : fmtMoney(r.amount)}</Td>
+                  <Td>{isRowEdit ? eInput('counterparty', 90) : r.counterparty}</Td>
+                  <Td>{isRowEdit ? eInput('delivery_address', 100) : r.delivery_address}</Td>
+                  <Td>{isRowEdit ? eInput('organization', 80) : r.organization}</Td>
                   <Td>
-                    {isEditing ? (
+                    {isRowEdit ? eInput('payment_amount', 70) : isEditing ? (
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                         <input
                           type="number"
@@ -428,7 +478,7 @@ export function CoffeeShipmentsScreen({ ctx }) {
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <span>{fmtMoney(r.payment_amount)}</span>
-                        {(canPay || canEdit) && (
+                        {(canPay || canEdit) && !isRowEdit && (
                           <button
                             onClick={() => { setEditingId(r.id); setEditPayment(String(r.payment_amount || '')); }}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3390EC', padding: 2 }}>
@@ -446,13 +496,32 @@ export function CoffeeShipmentsScreen({ ctx }) {
                       {debt > 0 ? fmtMoney(debt) : '0'}
                     </span>
                   </Td>
-                  <Td>{r.site_order_number}</Td>
+                  <Td>{isRowEdit ? eInput('site_order_number', 70) : r.site_order_number}</Td>
                   {canEdit && (
                     <Td>
-                      <button onClick={() => { if (confirm('Удалить запись?')) deleteRow(r.id); }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EB5757', padding: 2 }}>
-                        <Trash2 size={13} />
-                      </button>
+                      {isRowEdit ? (
+                        <div style={{ display: 'flex', gap: 2 }}>
+                          <button onClick={() => saveRowEdit(r.id)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#10B981', padding: 2 }}>
+                            <Check size={14} />
+                          </button>
+                          <button onClick={() => { setEditRowId(null); setEditRowData({}); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EB5757', padding: 2 }}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 2 }}>
+                          <button onClick={() => startEditRow(r)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3390EC', padding: 2 }}>
+                            <Edit3 size={13} />
+                          </button>
+                          <button onClick={() => { if (confirm('Удалить запись?')) deleteRow(r.id); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EB5757', padding: 2 }}>
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
                     </Td>
                   )}
                 </tr>

@@ -5,7 +5,7 @@ import {
   ChevronRight, Trash2, Eye, Users, ArrowRight, Hash, ChevronDown,
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
-  Calendar, Monitor, Gift, GraduationCap, Users2, Wallet,
+  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, Wallet,
 } from 'lucide-react';
 import { supabase } from './supabase/client';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
@@ -16,6 +16,7 @@ import { ManagerTasksScreen, ManagerTasksHomeTile } from './screens/ManagerTasks
 import { ScheduleScreen, ScheduleHomeBanner } from './screens/ScheduleScreen';
 import { GiftsScreen, GiftsHomeBanner } from './screens/GiftsScreen';
 import { CoffeeShipmentsScreen, CoffeeShipmentsHomeTile } from './screens/CoffeeShipmentsScreen';
+import HRCalendarScreen from './screens/HRCalendarScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -465,6 +466,10 @@ const PERMISSIONS = {
   coffee_shipments_view:{ group: 'Кофейни', label: 'Видеть реестр отгрузок кофеен' },
   coffee_shipments_edit:{ group: 'Кофейни', label: 'Вносить данные из 1С в реестр кофеен' },
   coffee_shipments_pay: { group: 'Кофейни', label: 'Вносить оплату в реестре кофеен' },
+  // HR
+  hr_calendar_view:     { group: 'HR', label: 'Видеть HR-календарь (отпуска и ДР)' },
+  hr_vacation_manage:   { group: 'HR', label: 'Добавлять и редактировать отпуска' },
+  hr_birthday_manage:   { group: 'HR', label: 'Редактировать даты рождения сотрудников' },
   // Расписание
   schedule_access:      { group: 'Расписание', label: 'Доступ к регулярным задачам (расписание)' },
   // Админ
@@ -889,6 +894,7 @@ function seedDB() {
     scheduleCompletions: [],
     gifts: [],
     coffeeShipments: [],
+    vacations: [],
     roleDefinitions: SYSTEM_ROLES.map(key => ({
       key,
       label: ROLES[key].label,
@@ -1255,6 +1261,67 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts, db.coffeeShipments]);
+
+  // ─── Напоминания по расписанию (personal TG) ───
+  const scheduleRemindSentRef = React.useRef(false);
+  useEffect(() => {
+    if (bootStatus.phase !== 'ready' || scheduleRemindSentRef.current) return;
+    if (!session || !db.users?.length || !(db.scheduleTasks || []).length) return;
+
+    const today = todayISO();
+    const lsKey = `schedule_remind_${today}`;
+    if (localStorage.getItem(lsKey)) { scheduleRemindSentRef.current = true; return; }
+
+    scheduleRemindSentRef.current = true;
+    localStorage.setItem(lsKey, '1');
+
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const dow = now.getDay() === 0 ? 7 : now.getDay();
+    const dom = now.getDate();
+
+    const todayTasks = (db.scheduleTasks || []).filter(t => {
+      if (!t.active || !t.remind_minutes) return false;
+      if (t.frequency === 'daily') return true;
+      if (t.frequency === 'weekly') return t.day_of_week === dow;
+      if (t.frequency === 'monthly') return t.day_of_month === dom;
+      return false;
+    });
+
+    if (!todayTasks.length) return;
+
+    const motivations = [
+      'Ты справишься — начни с малого, и всё пойдёт!',
+      'Каждая выполненная задача — шаг к успеху!',
+      'Отличный день для продуктивной работы!',
+      'Вперёд! Ты делаешь важное дело!',
+      'Не откладывай — сделай сейчас и почувствуй свободу!',
+      'Твоя команда рассчитывает на тебя — ты лучший!',
+      'Маленький шаг сегодня = большой результат завтра!',
+    ];
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+    const byRole = {};
+    for (const t of todayTasks) {
+      if (!byRole[t.target_role]) byRole[t.target_role] = [];
+      byRole[t.target_role].push(t);
+    }
+
+    for (const [role, tasks] of Object.entries(byRole)) {
+      const users = db.users.filter(u => u.role === role && u.telegram_id);
+      if (!users.length) continue;
+
+      const taskLines = tasks
+        .sort((a, b) => (a.time_at || '').localeCompare(b.time_at || ''))
+        .map(t => `  ⏰ ${t.time_at || '—'} — ${t.title}`)
+        .join('\n');
+
+      for (const u of users) {
+        const msg = `🌟 <b>Доброе утро, ${u.first_name}!</b>\n\n📋 Твои задачи на сегодня:\n${taskLines}\n\n💪 ${pick(motivations)}`;
+        sendPrivateTelegram(u, msg);
+      }
+    }
+  }, [bootStatus.phase, db.scheduleTasks, db.users, session]);
 
   const currentUser = session ? db.users.find(u => u.id === session.user_id) : null;
   // effectiveRole — роль, под которой Admin сейчас "видит" приложение
@@ -4380,6 +4447,13 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       ] });
     }
 
+    // ── HR-КАЛЕНДАРЬ (отпуска и дни рождения) ────────────────────
+    if (hasPermission(db, currentUser, 'hr_calendar_view')) {
+      groups.push({ title: 'HR', items: [
+        { id: 'hr_calendar', label: 'Отпуска и дни рождения', icon: CalendarDays },
+      ] });
+    }
+
     // ── РАСПИСАНИЕ (по разрешению schedule_access) ────────────────────
     if (hasPermission(db, currentUser, 'schedule_access')) {
       groups.push({ title: 'Расписание', items: [
@@ -4814,6 +4888,8 @@ function Screen({ ctx }) {
     case 'schedule': return <ScheduleScreen ctx={ctx} />;
     // ─── Кофейни (реестр отгрузок) ───
     case 'coffee_shipments': return <CoffeeShipmentsScreen ctx={ctx} />;
+    // ─── HR-календарь (отпуска и ДР) ───
+    case 'hr_calendar': return <HRCalendarScreen ctx={ctx} />;
     // ─── Подарки клиентам ───
     case 'gifts':        return <GiftsScreen ctx={ctx} />;
     case 'create_gift':  return <GiftsScreen ctx={ctx} />;
