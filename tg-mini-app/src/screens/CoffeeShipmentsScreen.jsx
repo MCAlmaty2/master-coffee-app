@@ -72,12 +72,21 @@ function parsePaste(text) {
   if (field !== '' || row.length > 0) { row.push(field); rawRows.push(row); }
 
   // Маппинг: Номер · Дата · Сумма · Контрагент · Адрес доставки · Номер заказа
+  // Строки без номера — продолжение предыдущей (многострочные ячейки без кавычек)
   const result = [];
   for (const c of rawRows) {
     if (!c.some(x => (x || '').trim() !== '')) continue;
     const num = (c[0] || '').trim();
-    if (!num && result.length > 0) continue; // пустой номер — пропускаем
-    if (c.length < 3) continue;
+    const isDataRow = num && c.length >= 3;
+    if (!isDataRow && result.length > 0) {
+      const tail = c.map(x => (x || '').trim()).filter(Boolean).join(' ');
+      if (tail) {
+        const prev = result[result.length - 1];
+        prev.delivery_address = (prev.delivery_address ? prev.delivery_address + ' ' : '') + tail;
+      }
+      continue;
+    }
+    if (!isDataRow) continue;
     result.push({
       number:           num,
       date:             (c[1] || '').trim(),
