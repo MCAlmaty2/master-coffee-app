@@ -4,7 +4,7 @@
  * Кассир ставит I (оплачено). Все с доступом видят статистику.
  */
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Plus, ClipboardPaste, Trash2, Check, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, ClipboardPaste, Trash2, Check, X, Banknote } from 'lucide-react';
 import { supabase } from '../supabase/client';
 
 /* ── Права ─────────────────────────────────────────────────── */
@@ -139,6 +139,7 @@ export function ShipmentRegistryScreen({ ctx }) {
   const [search, setSearch]               = useState('');
   const [fInvoice, setFInvoice]           = useState('all'); // all | yes | no — накладная вернулась
   const [fPaid, setFPaid]                 = useState('all'); // all | yes | no — оплата
+  const [payModal, setPayModal]           = useState(null);  // { id, amount } — модал оплаты
 
   if (!canView) {
     return (
@@ -192,7 +193,7 @@ export function ShipmentRegistryScreen({ ctx }) {
       month: selectedMonth,
       doc_no: p.doc_no, doc_date: p.doc_date, amount: p.amount,
       partner: p.partner, organization: p.organization, comment: p.comment,
-      invoice_returned: false, delivery_date: null, paid: false,
+      invoice_returned: false, delivery_date: null, paid: false, paid_amount: null,
       seq: maxSeq + i + 1,
       created_by: currentUser.id, created_at: new Date().toISOString(),
     }));
@@ -213,10 +214,24 @@ export function ShipmentRegistryScreen({ ctx }) {
     if (field === 'paid') {
       patch.paid_by = value ? currentUser.id : null;
       patch.paid_at = value ? new Date().toISOString() : null;
+      if (!value) patch.paid_amount = null;
     }
     const { error } = await supabase.from('shipment_registry').update(patch).eq('id', id);
     if (error) { showToast('Ошибка: ' + error.message); return; }
     setDb(d => ({ ...d, shipmentRegistry: (d.shipmentRegistry || []).map(r => r.id === id ? { ...r, ...patch } : r) }));
+  };
+
+  const markPaid = async (id, paidAmount) => {
+    const patch = {
+      paid: true,
+      paid_amount: paidAmount,
+      paid_by: currentUser.id,
+      paid_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('shipment_registry').update(patch).eq('id', id);
+    if (error) { showToast('Ошибка: ' + error.message); return; }
+    setDb(d => ({ ...d, shipmentRegistry: (d.shipmentRegistry || []).map(r => r.id === id ? { ...r, ...patch } : r) }));
+    showToast('Оплата подтверждена');
   };
 
   const deleteRow = async (id) => {
@@ -328,8 +343,24 @@ export function ShipmentRegistryScreen({ ctx }) {
                   <td style={td('left', 'var(--mc-muted)')}>{r.delivery_date || '—'}</td>
                   {/* I: оплачено (кассир) */}
                   <td style={td('center')}>
-                    <Toggle checked={!!r.paid} disabled={!canPay} color="#16a34a"
-                      onChange={v => updateField(r.id, 'paid', v)} />
+                    {r.paid ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                        <Toggle checked color="#16a34a" disabled={!canPay}
+                          onChange={() => updateField(r.id, 'paid', false)} />
+                        {r.paid_amount != null && (
+                          <span style={{ fontSize: 9, color: r.paid_amount < (Number(r.amount) || 0) ? '#dc2626' : '#16a34a', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            {fmtMoney(r.paid_amount)} ₸
+                          </span>
+                        )}
+                      </div>
+                    ) : canPay ? (
+                      <button onClick={() => setPayModal({ id: r.id, amount: Number(r.amount) || 0 })}
+                        style={{ padding: '4px 10px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <Banknote size={12} /> Оплата
+                      </button>
+                    ) : (
+                      <Toggle checked={false} disabled color="#16a34a" onChange={() => {}} />
+                    )}
                   </td>
                   {canEdit && (
                     <td style={td('center')}>
@@ -353,6 +384,18 @@ export function ShipmentRegistryScreen({ ctx }) {
           onConfirm={async (parsed) => { await addRows(parsed); setPasteOpen(false); }}
         />
       )}
+
+      {/* Модал оплаты */}
+      {payModal && (
+        <PaymentModal
+          amount={payModal.amount}
+          onClose={() => setPayModal(null)}
+          onConfirm={async (paidAmount) => {
+            await markPaid(payModal.id, paidAmount);
+            setPayModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -372,6 +415,67 @@ function FilterGroup({ label, value, onChange }) {
             {l}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Модал подтверждения оплаты ────────────────────────────── */
+function PaymentModal({ amount, onClose, onConfirm }) {
+  const [isFull, setIsFull] = useState(true);
+  const [partial, setPartial] = useState('');
+
+  const paidAmount = isFull ? amount : (parseFloat(partial) || 0);
+  const valid = isFull ? amount > 0 : paidAmount > 0;
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: 'var(--mc-surface)', borderRadius: 18, width: '100%', maxWidth: 360, padding: '20px 20px 24px' }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--mc-text)' }}>💰 Подтверждение оплаты</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)' }}><X size={20} /></button>
+        </div>
+
+        <div style={{ fontSize: 12, color: 'var(--mc-muted)', marginBottom: 14 }}>
+          Сумма по накладной: <strong style={{ color: 'var(--mc-text)' }}>{fmtMoney(amount)} ₸</strong>
+        </div>
+
+        {/* Полная оплата */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10,
+          border: `2px solid ${isFull ? '#16a34a' : 'var(--mc-border)'}`, background: isFull ? 'rgba(22,163,74,.06)' : 'transparent',
+          cursor: 'pointer', marginBottom: 8 }}>
+          <input type="radio" checked={isFull} onChange={() => setIsFull(true)}
+            style={{ accentColor: '#16a34a', width: 16, height: 16 }} />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--mc-text)' }}>Полная оплата</div>
+            <div style={{ fontSize: 11, color: 'var(--mc-muted)' }}>{fmtMoney(amount)} ₸</div>
+          </div>
+        </label>
+
+        {/* Частичная оплата */}
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 10,
+          border: `2px solid ${!isFull ? '#f59e0b' : 'var(--mc-border)'}`, background: !isFull ? 'rgba(245,158,11,.06)' : 'transparent',
+          cursor: 'pointer', marginBottom: 16 }}>
+          <input type="radio" checked={!isFull} onChange={() => setIsFull(false)}
+            style={{ accentColor: '#f59e0b', width: 16, height: 16, marginTop: 2 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--mc-text)', marginBottom: 6 }}>Частичная оплата</div>
+            {!isFull && (
+              <input type="number" autoFocus value={partial} onChange={e => setPartial(e.target.value)}
+                placeholder="Сумма оплаты"
+                style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--mc-border)', borderRadius: 8,
+                  fontSize: 14, fontWeight: 700, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', boxSizing: 'border-box' }} />
+            )}
+          </div>
+        </label>
+
+        <button onClick={() => valid && onConfirm(paidAmount)} disabled={!valid}
+          style={{ width: '100%', padding: 13, background: valid ? '#16a34a' : 'var(--mc-border)', color: '#fff',
+            border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: valid ? 'pointer' : 'not-allowed' }}>
+          ✅ Подтвердить {valid ? `(${fmtMoney(paidAmount)} ₸)` : ''}
+        </button>
       </div>
     </div>
   );

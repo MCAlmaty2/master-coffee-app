@@ -4424,6 +4424,9 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     if (isManager || role === 'director' || role === 'senior_manager') {
       sales.push({ id: 'clients', label: 'Клиенты', icon: Users });
     }
+    if (hasPermission(db, currentUser, 'shipment_view') || hasPermission(db, currentUser, 'shipment_edit')) {
+      sales.push({ id: 'shipment_registry', label: 'Реестр отгрузок', icon: Package });
+    }
     if (sales.length > 0) groups.push({ title: 'Отдел продаж', items: sales, collapsible: true });
 
     // ── БАРИСТА И ТЕХНИКИ ────────────────
