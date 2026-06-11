@@ -426,6 +426,7 @@ function GiftDetailScreen({ ctx, giftId }) {
   const [actionOpen, setActionOpen] = useState(null); // 'approve' | 'reject' | 'process' | 'prepare' | 'deliver'
   const [comment, setComment] = useState('');
   const [code, setCode] = useState('');
+  const [docNo, setDocNo] = useState('');
 
   if (!gift) {
     return (
@@ -462,7 +463,8 @@ function GiftDetailScreen({ ctx, giftId }) {
         r = ctx.rejectGift(giftId, comment.trim());
         break;
       case 'process':
-        r = ctx.processGift(giftId);
+        if (!docNo.trim()) return showToast('Укажите номер документа 1С');
+        r = ctx.processGift(giftId, docNo.trim());
         break;
       case 'prepare':
         r = ctx.prepareGift(giftId);
@@ -480,6 +482,7 @@ function GiftDetailScreen({ ctx, giftId }) {
     setActionOpen(null);
     setComment('');
     setCode('');
+    setDocNo('');
     showToast(action === 'reject' ? 'Заявка отклонена' : action === 'cancel' ? 'Заявка отменена' : 'Готово!');
   };
 
@@ -522,6 +525,7 @@ function GiftDetailScreen({ ctx, giftId }) {
               <HistoryRow label="Создал" user={author} date={gift.created_at} />
               {approver && <HistoryRow label={gift.status === 'rejected' ? 'Отклонил' : 'Одобрил'} user={approver} date={gift.approved_at} />}
               {processor && <HistoryRow label="Списал" user={processor} date={gift.processed_at} />}
+              {gift.doc_no && <div className="text-xs pl-6" style={{ color: 'var(--mc-muted)', marginTop: -4 }}>Документ 1С: <span className="font-mono font-semibold" style={{ color: 'var(--mc-text)' }}>{gift.doc_no}</span></div>}
               {preparer && <HistoryRow label="Подготовил" user={preparer} date={gift.prepared_at} />}
               {deliverer && <HistoryRow label="Выдал" user={deliverer} date={gift.delivered_at} />}
             </div>
@@ -536,7 +540,7 @@ function GiftDetailScreen({ ctx, giftId }) {
               <ActionButton color="#EB5757" label="Отклонить" onClick={() => setActionOpen('reject')} />
             </>
           )}
-          {canProcess && <ActionButton color="#8B5CF6" label="Списать" onClick={() => doAction('process')} />}
+          {canProcess && <ActionButton color="#8B5CF6" label="Списать" onClick={() => setActionOpen('process')} />}
           {canPrepare && <ActionButton color="#6366F1" label="Подготовлено" onClick={() => doAction('prepare')} />}
           {canDeliver && <ActionButton color="#22C55E" label="Выдать / доставить" onClick={() => setActionOpen('deliver')} />}
           {canCancel && <ActionButton color="#94A3B8" label="Отменить заявку" onClick={() => doAction('cancel')} />}
@@ -563,6 +567,24 @@ function GiftDetailScreen({ ctx, giftId }) {
             placeholder="Причина отклонения *"
             className="w-full px-3 py-2 rounded-lg outline-none text-sm"
             style={{ border: `1px solid ${!comment.trim() ? '#EB5757' : 'var(--mc-border)'}` }} />
+        </ActionModal>
+      )}
+      {actionOpen === 'process' && (
+        <ActionModal title="Списать подарок" onClose={() => setActionOpen(null)}
+          onConfirm={() => doAction('process')} confirmLabel="Списать" confirmColor="#8B5CF6">
+          <p className="text-sm mb-3" style={{ color: 'var(--mc-muted)' }}>
+            {gift.product_name} × {gift.quantity} для {gift.client_name}
+          </p>
+          <div className="mb-1">
+            <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>
+              Номер документа 1С *
+            </label>
+            <input value={docNo} onChange={e => setDocNo(e.target.value)}
+              placeholder="00ЦТ-012573"
+              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm font-mono"
+              style={{ border: `1px solid ${!docNo.trim() ? '#EB5757' : 'var(--mc-border)'}`, letterSpacing: '0.05em' }} />
+            <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>Формат: 00ЦТ-NNNNNN (4–7 цифр)</div>
+          </div>
         </ActionModal>
       )}
       {actionOpen === 'deliver' && (

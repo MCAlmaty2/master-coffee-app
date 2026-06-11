@@ -224,10 +224,11 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, but
     ...(link_id   != null ? { link_id }   : {}),
   };
   const tgs       = db?.telegramSettings;
-  // Личная настройка по категориям (по link_kind). По умолчанию включено.
+  // Только важные категории идут в личный TG: списания, подарки, задачи, поручения, HR, доступ
+  const TG_DM_ALLOWED = new Set(['writeoff', 'gift', 'task', 'manager_task', 'hr', 'access', 'general']);
   const category = link_kind || 'general';
   const prefs = recipient?.tg_notif_prefs || {};
-  const categoryAllowed = prefs[category] !== false;
+  const categoryAllowed = prefs[category] !== false && TG_DM_ALLOWED.has(category);
   // Отправляем личный TG: нужен telegram_id получателя и настроенный бот.
   // bot_token НЕ передаём в теле — edge function читает TELEGRAM_BOT_TOKEN из Supabase Secrets.
   if (recipient?.telegram_id && recipient.tg_notif_enabled !== false && tgs?.bot_token && categoryAllowed) {
@@ -1262,33 +1263,10 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts, db.coffeeShipments]);
 
-  // ─── Напоминания по расписанию (personal TG) ───
-  const scheduleRemindSentRef = React.useRef(false);
+  // ─── Напоминания по расписанию (personal TG) — по времени задачи ───
   useEffect(() => {
-    if (bootStatus.phase !== 'ready' || scheduleRemindSentRef.current) return;
+    if (bootStatus.phase !== 'ready') return;
     if (!session || !db.users?.length || !(db.scheduleTasks || []).length) return;
-
-    const today = todayISO();
-    const lsKey = `schedule_remind_${today}`;
-    if (localStorage.getItem(lsKey)) { scheduleRemindSentRef.current = true; return; }
-
-    scheduleRemindSentRef.current = true;
-    localStorage.setItem(lsKey, '1');
-
-    const now = new Date();
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    const dow = now.getDay() === 0 ? 7 : now.getDay();
-    const dom = now.getDate();
-
-    const todayTasks = (db.scheduleTasks || []).filter(t => {
-      if (!t.active || !t.remind_minutes) return false;
-      if (t.frequency === 'daily') return true;
-      if (t.frequency === 'weekly') return t.day_of_week === dow;
-      if (t.frequency === 'monthly') return t.day_of_month === dom;
-      return false;
-    });
-
-    if (!todayTasks.length) return;
 
     const motivations = [
       'Ты справишься — начни с малого, и всё пойдёт!',
@@ -1301,26 +1279,42 @@ function App() {
     ];
     const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-    const byRole = {};
-    for (const t of todayTasks) {
-      if (!byRole[t.target_role]) byRole[t.target_role] = [];
-      byRole[t.target_role].push(t);
-    }
+    const checkScheduleReminders = () => {
+      const today = todayISO();
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const dow = now.getDay() === 0 ? 7 : now.getDay();
+      const dom = now.getDate();
 
-    for (const [role, tasks] of Object.entries(byRole)) {
-      const users = db.users.filter(u => u.role === role && u.telegram_id);
-      if (!users.length) continue;
+      const todayTasks = (db.scheduleTasks || []).filter(t => {
+        if (!t.active || !t.time_at) return false;
+        if (t.frequency === 'daily') return true;
+        if (t.frequency === 'weekly') return t.day_of_week === dow;
+        if (t.frequency === 'monthly') return t.day_of_month === dom;
+        return false;
+      });
 
-      const taskLines = tasks
-        .sort((a, b) => (a.time_at || '').localeCompare(b.time_at || ''))
-        .map(t => `  ⏰ ${t.time_at || '—'} — ${t.title}`)
-        .join('\n');
+      for (const t of todayTasks) {
+        const [h, m] = t.time_at.split(':').map(Number);
+        const taskMin = h * 60 + m;
+        const remindAt = taskMin - (t.remind_minutes || 0);
+        if (nowMin !== remindAt) continue;
 
-      for (const u of users) {
-        const msg = `🌟 <b>Доброе утро, ${u.first_name}!</b>\n\n📋 Твои задачи на сегодня:\n${taskLines}\n\n💪 ${pick(motivations)}`;
-        sendPrivateTelegram(u, msg);
+        const lsKey = `sched_r_${today}_${t.id}`;
+        if (localStorage.getItem(lsKey)) continue;
+        localStorage.setItem(lsKey, '1');
+
+        const users = db.users.filter(u => u.role === t.target_role && u.telegram_id);
+        for (const u of users) {
+          const msg = `⏰ <b>Напоминание: ${t.title}</b>\n\n🕐 Начало в ${t.time_at}\n${t.description ? '📝 ' + t.description.slice(0, 200) : ''}\n\n💪 ${pick(motivations)}`;
+          sendPrivateTelegram(u, msg);
+        }
       }
-    }
+    };
+
+    checkScheduleReminders();
+    const iv = setInterval(checkScheduleReminders, 60_000);
+    return () => clearInterval(iv);
   }, [bootStatus.phase, db.scheduleTasks, db.users, session]);
 
   const currentUser = session ? db.users.find(u => u.id === session.user_id) : null;
@@ -2726,19 +2720,21 @@ function App() {
     return { ok: true };
   };
 
-  const processGift = (giftId) => {
+  const processGift = (giftId, docNo) => {
     if (!hasPermission(db, currentUser, 'gift_process')) return { error: 'Нет прав списывать подарки' };
     const g = (db.gifts || []).find(x => x.id === giftId);
     if (!g) return { error: 'Заявка не найдена' };
     if (g.status !== 'approved') return { error: 'Списать можно только одобренные подарки' };
+    const trimmed = (docNo || '').trim();
+    if (!isValidDocNo(trimmed)) return { error: 'Номер документа должен быть в формате 00ЦТ-NNNNNN (например 00ЦТ-012573)' };
     setDb(d => {
       const updatedList = (d.gifts || []).map(x => x.id !== giftId ? x : {
-        ...x, status: 'processed', processed_by: currentUser.id, processed_at: new Date().toISOString(),
-        log: [...x.log, { event: 'status', from: 'approved', to: 'processed', actor: currentUser.id, at: new Date().toISOString() }],
+        ...x, status: 'processed', doc_no: trimmed, processed_by: currentUser.id, processed_at: new Date().toISOString(),
+        log: [...x.log, { event: 'status', from: 'approved', to: 'processed', actor: currentUser.id, at: new Date().toISOString(), meta: { doc_no: trimmed } }],
       });
       const warehouseUsers = d.users.filter(u => u.active && u.role === 'warehouse' && u.id !== currentUser.id);
       const newNotifs = [
-        makeNotif(d, { recipient_id: g.created_by, title: 'Подарок списан', body: `${g.number}: передан на склад`, link_kind: 'gift', link_id: g.id }),
+        makeNotif(d, { recipient_id: g.created_by, title: 'Подарок списан', body: `${g.number}: ${trimmed} · передан на склад`, link_kind: 'gift', link_id: g.id }),
         ...warehouseUsers.map(wu => makeNotif(d, { recipient_id: wu.id, title: '🎁 Подарок · собрать', body: `${g.number}: ${g.product_name} × ${g.quantity} для ${g.client_name}`, link_kind: 'gift', link_id: g.id })),
       ];
       return { ...d, gifts: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };

@@ -529,18 +529,26 @@ export function FieldCalendarScreen({ ctx }) {
   const [weekStart,  setWeekStart]  = useState(() => getMonday(todayISO()));
   const [selectedDay,setSelectedDay]= useState(() => todayISO());
   const [monthISO,   setMonthISO]   = useState(() => todayISO().substring(0, 7));
-  // Бариста/техник по умолчанию видят только свои задачи
+  const isBarista    = currentUser?.role === 'barista';
+  const isTechnician = currentUser?.role === 'technician';
+  const isFieldUser  = isBarista || isTechnician;
+  // Бариста видят только отдел бариста, техники — только техников
   const [filter,     setFilter]     = useState(() =>
-    FIELD_ROLES.includes(currentUser?.role) ? currentUser.id : 'all'
+    isFieldUser ? currentUser.id : 'all'
   );
 
-  const fieldUsers = db.users.filter(u => u.active && FIELD_ROLES.includes(u.role));
+  const fieldUsers = isFieldUser
+    ? db.users.filter(u => u.active && u.role === currentUser.role)
+    : db.users.filter(u => u.active && FIELD_ROLES.includes(u.role));
 
   const filteredTasks = (() => {
-    if (filter === 'all')         return db.tasks;
-    if (filter === 'barista')     return db.tasks.filter(t => db.users.find(u => u.id === t.assignee_id)?.role === 'barista');
-    if (filter === 'technician')  return db.tasks.filter(t => db.users.find(u => u.id === t.assignee_id)?.role === 'technician');
-    return db.tasks.filter(t => t.assignee_id === filter);
+    const deptFilter = isFieldUser
+      ? db.tasks.filter(t => db.users.find(u => u.id === t.assignee_id)?.role === currentUser.role)
+      : db.tasks;
+    if (filter === 'all')         return deptFilter;
+    if (filter === 'barista')     return deptFilter.filter(t => db.users.find(u => u.id === t.assignee_id)?.role === 'barista');
+    if (filter === 'technician')  return deptFilter.filter(t => db.users.find(u => u.id === t.assignee_id)?.role === 'technician');
+    return deptFilter.filter(t => t.assignee_id === filter);
   })();
 
   const prev = () => {
@@ -589,9 +597,11 @@ export function FieldCalendarScreen({ ctx }) {
       {/* Фильтр по сотруднику — цвет чипа соответствует цвету задач исполнителя */}
       <div className="flex gap-1.5 overflow-x-auto pb-1 mb-4">
         {[
-          { id: 'all',        label: 'Все сотрудники', color: '#297b8a' },
-          { id: 'barista',    label: 'Бариста',        color: '#297b8a' },
-          { id: 'technician', label: 'Техники',        color: '#297b8a' },
+          { id: 'all',        label: isFieldUser ? (isBarista ? 'Все бариста' : 'Все техники') : 'Все сотрудники', color: '#297b8a' },
+          ...(!isFieldUser ? [
+            { id: 'barista',    label: 'Бариста',        color: '#297b8a' },
+            { id: 'technician', label: 'Техники',        color: '#297b8a' },
+          ] : []),
           ...fieldUsers.map(u => ({
             id:    u.id,
             label: `${u.first_name} ${u.last_name[0]}.`,

@@ -519,6 +519,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
   const canAdd     = isAdmin || isManager;
   // Детали заявки + смена адреса (как у админа) — менеджеры, включая B2B и Sales
   const canDetail  = isAdmin || isManager;
+  const canDeleteRegistry = isAdmin || ['director', 'warehouse'].includes(currentUser?.role);
 
   const handleDeleteRegistry = async () => {
     setDeleting(true);
@@ -701,8 +702,8 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
           </div>
         )}
 
-        {/* ── Удалить реестр (только admin) ── */}
-        {isAdmin && (
+        {/* ── Удалить реестр (admin, director, warehouse) ── */}
+        {canDeleteRegistry && (
           <div style={{ marginBottom: 10 }}>
             {!confirmDelete ? (
               <button
