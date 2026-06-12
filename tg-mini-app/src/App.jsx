@@ -1175,21 +1175,25 @@ function App() {
 
     // Остальные таблицы — через универсальный subscribe
     for (const stateKey of Object.keys(SYNC_TABLES)) {
+      const cfg = SYNC_TABLES[stateKey];
       const ch = subscribeToTable(stateKey, async () => {
         const fresh = await fetchAllOfTable(stateKey).catch(() => null);
         if (fresh) {
-          // КРИТИЧНО: сначала обновляем snapshot, потом state.
-          // Иначе syncEffect сравнит "новое состояние из БД" с "локальным с новой записью"
-          // и решит что запись была удалена → отправит DELETE и реально её удалит из БД.
-          // Здесь мы говорим: "пришедшее из реалтайма — это базовый уровень, не считай diff".
+          const pk = cfg.pk;
+          const oldSnap = syncSnapshotRef.current[stateKey];
           syncSnapshotRef.current[stateKey] = fresh;
           setDb(d => {
-            // Слияние: берём fresh, но добавляем локальные записи которых ещё нет в fresh.
-            // Это защищает от ситуации, когда realtime пришёл до того как наш upsert успел отразиться.
-            const freshIds = new Set(fresh.map(r => r.id));
-            const localOnly = (d[stateKey] || []).filter(r => !freshIds.has(r.id));
-            const merged = [...fresh, ...localOnly];
-            return { ...d, [stateKey]: merged };
+            const freshIds = new Set(fresh.map(r => r[pk]));
+            const oldIds = oldSnap ? new Set(oldSnap.map(r => r[pk])) : new Set();
+            // Сохраняем только записи, которых нет в fresh И которых не было в прошлом снимке.
+            // Если запись была в снимке, но нет в fresh — значит удалена из БД, не воскрешаем.
+            const localOnly = (d[stateKey] || []).filter(r => {
+              const id = r[pk];
+              if (freshIds.has(id)) return false;
+              if (oldIds.has(id)) return false;
+              return true;
+            });
+            return { ...d, [stateKey]: [...fresh, ...localOnly] };
           });
         }
       });
@@ -1236,18 +1240,18 @@ function App() {
           }
           upsertRow(stateKey, row).catch(e => {
             const msg = String(e?.message || e);
-            // При duplicate key — «призрак» в локальном state: убираем, чтобы не засорять error_reports
-            if (msg.includes('duplicate key value violates unique constraint')) {
+            // Призрак в локальном state — убираем без репорта
+            if (msg.includes('duplicate key value violates unique constraint')
+                || msg.includes('violates foreign key constraint')) {
               setDb(d => ({ ...d, [stateKey]: (d[stateKey] || []).filter(r => r[cfg.pk] !== id) }));
-              return; // не репортим — это ожидаемая ситуация при race condition
+              return;
             }
-            // eslint-disable-next-line no-console
-            console.error(`[sync] ${stateKey} upsert ${id}:`, e);
+            console.warn(`[sync] ${stateKey} upsert ${id}:`, msg);
             reportError({
               kind: 'sync',
               source: stateKey,
-              message: `Не удалось сохранить запись в "${stateKey}": ${e?.message || e}`,
-              details: { operation: 'upsert', rowId: id, error: String(e?.message || e), row: row },
+              message: `Не удалось сохранить запись в "${stateKey}": ${msg}`,
+              details: { operation: 'upsert', rowId: id, error: msg },
             });
           });
         }
