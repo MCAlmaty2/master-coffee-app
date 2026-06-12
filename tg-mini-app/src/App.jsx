@@ -1181,19 +1181,20 @@ function App() {
         if (fresh) {
           const pk = cfg.pk;
           const oldSnap = syncSnapshotRef.current[stateKey];
-          syncSnapshotRef.current[stateKey] = fresh;
           setDb(d => {
             const freshIds = new Set(fresh.map(r => r[pk]));
             const oldIds = oldSnap ? new Set(oldSnap.map(r => r[pk])) : new Set();
-            // Сохраняем только записи, которых нет в fresh И которых не было в прошлом снимке.
-            // Если запись была в снимке, но нет в fresh — значит удалена из БД, не воскрешаем.
             const localOnly = (d[stateKey] || []).filter(r => {
               const id = r[pk];
               if (freshIds.has(id)) return false;
               if (oldIds.has(id)) return false;
               return true;
             });
-            return { ...d, [stateKey]: [...fresh, ...localOnly] };
+            const merged = [...fresh, ...localOnly];
+            // Snapshot = merged: sync не будет re-push'ить записи, которые просто
+            // остались в local state (зомби), потому что они совпадут со snapshot.
+            syncSnapshotRef.current[stateKey] = merged;
+            return { ...d, [stateKey]: merged };
           });
         }
       });
