@@ -1291,6 +1291,7 @@ function App() {
         if (t.frequency === 'daily') return true;
         if (t.frequency === 'weekly') return t.day_of_week === dow;
         if (t.frequency === 'monthly') return t.day_of_month === dom;
+        if (t.frequency === 'once') return t.once_date === today;
         return false;
       });
 

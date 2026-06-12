@@ -18,6 +18,7 @@ const FREQ = {
   daily:   { label: 'Ежедневно',   short: 'Ежедн.' },
   weekly:  { label: 'Еженедельно', short: 'Еженед.' },
   monthly: { label: 'Ежемесячно',  short: 'Ежемес.' },
+  once:    { label: 'Разовая',     short: 'Разовая' },
 };
 const DOW_NAMES  = ['', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
 const DOW_SHORT  = ['', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ'];
@@ -56,6 +57,7 @@ function completionKey(task) {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   }
+  if (task.frequency === 'once') return task.once_date || todayISO();
   return todayISO();
 }
 function isTaskForToday(task) {
@@ -63,6 +65,7 @@ function isTaskForToday(task) {
   if (task.frequency === 'daily') return true;
   if (task.frequency === 'weekly') return task.day_of_week === currentDow();
   if (task.frequency === 'monthly') return task.day_of_month === currentDom();
+  if (task.frequency === 'once') return task.once_date === todayISO();
   return false;
 }
 
@@ -128,7 +131,7 @@ export function ScheduleScreen({ ctx }) {
     }));
     showToast('Задача удалена');
   };
-  const weeklyTasks = myTasks.filter(t => t.frequency === 'weekly' || t.frequency === 'daily');
+  const weeklyTasks = myTasks.filter(t => t.frequency === 'weekly' || t.frequency === 'daily' || t.frequency === 'once');
   const doneToday = todayTasks.filter(isCompleted).length;
   const totalToday = todayTasks.length;
   const pctToday = totalToday > 0 ? Math.round(doneToday / totalToday * 100) : 0;
@@ -390,7 +393,15 @@ function WeekView({ tasks, completions, userId, onToggle, isCompleted }) {
     const dow = i + 1;
     return { dow, dt: `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}`,
       isToday: dow === todayDow,
-      tasks: tasks.filter(t => t.frequency === 'daily' || (t.frequency === 'weekly' && t.day_of_week === dow)) };
+      tasks: tasks.filter(t => {
+        if (t.frequency === 'daily') return true;
+        if (t.frequency === 'weekly') return t.day_of_week === dow;
+        if (t.frequency === 'once') {
+          const isoDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          return t.once_date === isoDate;
+        }
+        return false;
+      }) };
   }), [tasks, todayDow]);
   const usedTypes = [...new Set(tasks.map(t => t.task_type).filter(Boolean))];
   return (
@@ -459,9 +470,11 @@ function MonthView({ tasks, completions, userId, isCompleted, onToggle }) {
       if (dn < 1 || dn > dim) return { num: dn < 1 ? pdim + dn : dn - dim, other: true };
       const date = new Date(y, m, dn), isT = date.toDateString() === today.toDateString();
       const dw = date.getDay() || 7;
-      const wd = tasks.filter(t => t.frequency === 'daily' || (t.frequency === 'weekly' && t.day_of_week === dw));
+      const isoDate = `${y}-${String(m + 1).padStart(2, '0')}-${String(dn).padStart(2, '0')}`;
+      const onceTasks = tasks.filter(t => t.frequency === 'once' && t.once_date === isoDate);
+      const wd = [...tasks.filter(t => t.frequency === 'daily' || (t.frequency === 'weekly' && t.day_of_week === dw)), ...onceTasks];
       const ml = tasks.filter(t => t.frequency === 'monthly' && t.day_of_month === dn);
-      return { num: dn, other: false, isT, wd, ml, allDone: isT && wd.length > 0 && wd.every(isCompleted), hasDl: ml.length > 0 };
+      return { num: dn, other: false, isT, wd, ml, allDone: isT && wd.length > 0 && wd.every(isCompleted), hasDl: ml.length > 0, hasOnce: onceTasks.length > 0 };
     });
   }, [tasks, y, m, isCompleted]);
   const navMonth = (delta) => setCalDate(d => new Date(d.getFullYear(), d.getMonth() + delta, 1));
@@ -527,13 +540,13 @@ function ManageView({ tasks, allTasks, role, onDelete, onEdit, isAdmin, schedule
     : tasks;
 
   const grouped = useMemo(() => {
-    const g = { daily: [], weekly: [], monthly: [] };
+    const g = { daily: [], weekly: [], monthly: [], once: [] };
     displayTasks.forEach(t => {
       if (g[t.frequency]) g[t.frequency].push(t);
     });
-    // Сортировка
     g.weekly.sort((a, b) => (a.day_of_week || 0) - (b.day_of_week || 0));
     g.monthly.sort((a, b) => (a.day_of_month || 0) - (b.day_of_month || 0));
+    g.once.sort((a, b) => (a.once_date || '').localeCompare(b.once_date || ''));
     return g;
   }, [displayTasks]);
 
@@ -561,7 +574,7 @@ function ManageView({ tasks, allTasks, role, onDelete, onEdit, isAdmin, schedule
         </div>
       )}
 
-      {['daily', 'weekly', 'monthly'].map(freq => (
+      {['daily', 'weekly', 'monthly', 'once'].map(freq => (
         <div key={freq} className="mb-5">
           <div className="text-xs font-bold uppercase mb-2" style={{ color: 'var(--mc-muted)', letterSpacing: '0.08em' }}>
             {FREQ[freq].label} ({grouped[freq].length})
@@ -581,6 +594,9 @@ function ManageView({ tasks, allTasks, role, onDelete, onEdit, isAdmin, schedule
                     )}
                     {t.frequency === 'monthly' && t.day_of_month && (
                       <span className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>до {t.day_of_month}-го</span>
+                    )}
+                    {t.frequency === 'once' && t.once_date && (
+                      <span className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>📅 {t.once_date.split('-').reverse().join('.')}</span>
                     )}
                     {t.time_at && (
                       <span className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>{t.time_at}</span>
@@ -663,6 +679,14 @@ function TaskViewModal({ task, done, onClose, onToggle }) {
                 <div className="text-sm" style={{ color: 'var(--mc-text)' }}>до {task.day_of_month}-го</div>
               </div>
             )}
+            {task.frequency === 'once' && task.once_date && (
+              <div>
+                <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Дата</div>
+                <div className="text-sm flex items-center gap-1" style={{ color: 'var(--mc-text)' }}>
+                  <Calendar size={12} /> {task.once_date.split('-').reverse().join('.')}
+                </div>
+              </div>
+            )}
             <div>
               <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Тип</div>
               <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: tt.color + '1A', color: tt.color, fontWeight: 600 }}>
@@ -714,6 +738,7 @@ function TaskFormModal({ role, isAdmin, scheduleRoles, db, onClose, onSave, curr
     frequency: editTask?.frequency || 'weekly',
     day_of_week: editTask?.day_of_week || currentDow(),
     day_of_month: editTask?.day_of_month || 5,
+    once_date: editTask?.once_date || todayISO(),
     time_at: editTask?.time_at || '09:00',
     task_type: editTask?.task_type || 'custom',
     link_url: editTask?.link_url || '',
@@ -733,6 +758,7 @@ function TaskFormModal({ role, isAdmin, scheduleRoles, db, onClose, onSave, curr
       frequency: form.frequency,
       day_of_week: form.frequency === 'weekly' ? form.day_of_week : null,
       day_of_month: form.frequency === 'monthly' ? form.day_of_month : null,
+      once_date: form.frequency === 'once' ? form.once_date : null,
       time_at: form.time_at || '09:00',
       task_type: form.task_type,
       link_url: form.link_url.trim(),
@@ -794,6 +820,11 @@ function TaskFormModal({ role, isAdmin, scheduleRoles, db, onClose, onSave, curr
               <select value={form.day_of_month} onChange={e => update({ day_of_month: +e.target.value })} className={inputCls} style={inputStyle}>
                 {[1, 3, 5, 7, 10, 12, 15, 20, 25, 28, 30].map(d => <option key={d} value={d}>{d}-го</option>)}
               </select>
+            </FormField>
+          )}
+          {form.frequency === 'once' && (
+            <FormField label="Дата">
+              <input type="date" value={form.once_date} onChange={e => update({ once_date: e.target.value })} className={inputCls} style={inputStyle} />
             </FormField>
           )}
           <FormField label="Время">
