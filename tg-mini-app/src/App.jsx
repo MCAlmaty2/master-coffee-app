@@ -13,6 +13,7 @@ import { SalesReportScreen, SalesReportHomeTile } from './screens/SalesReportScr
 import { ShipmentRegistryScreen, ShipmentRegistryHomeTile } from './screens/ShipmentRegistryScreen';
 import { DailyRevenueScreen } from './screens/DailyRevenueScreen';
 import { ManagerTasksScreen, ManagerTasksHomeTile } from './screens/ManagerTasksScreen';
+import { TastingWeeklyTile } from './screens/TastingWeeklyTile';
 import { ScheduleScreen, ScheduleHomeBanner } from './screens/ScheduleScreen';
 import { GiftsScreen, GiftsHomeBanner } from './screens/GiftsScreen';
 import { CoffeeShipmentsScreen, CoffeeShipmentsHomeTile } from './screens/CoffeeShipmentsScreen';
@@ -5285,6 +5286,7 @@ function HomeCustomizeScreen({ ctx }) {
     { key: 'w_sales',    label: '📊 Выполнение плана',         show: () => true, section: 'Блоки' },
     { key: 'w_shipment', label: '📦 Реестр отгрузок (сводка)', show: () => has('shipment_view'), section: 'Блоки' },
     { key: 'w_mtasks',   label: '📌 Вопросы / поручения',       show: () => isMgr, section: 'Блоки' },
+    { key: 'w_tastings', label: '🍵 Дегустации понедельно',     show: () => has('tasks_view_own') || has('tasks_calendar_all'), section: 'Блоки' },
     { key: 'w_quick',    label: '⚡ Быстрые действия',           show: () => isAdmin, section: 'Блоки' },
     { key: 'w_recent',   label: '🧾 Последние заявки',           show: () => has('orders_view_all') || has('orders_view_own'), section: 'Блоки' },
     { key: 'orders',     label: 'Заявки на закуп',     show: () => has('orders_view_all') || has('orders_view_own') || has('orders_create'), section: 'Плитки' },
@@ -5587,6 +5589,9 @@ function DashboardHome({ ctx, title }) {
 
       {/* ── Вопросы / поручения (руководители) ── */}
       {!hidden('w_mtasks') && <ManagerTasksHomeTile ctx={ctx} />}
+
+      {/* ── Дегустации понедельно ── */}
+      {!hidden('w_tastings') && <TastingWeeklyTile ctx={ctx} />}
 
       {/* Виджет доставок — только для курьера */}
       {has('delivery_courier') && <CourierDeliveryWidget ctx={ctx} />}
