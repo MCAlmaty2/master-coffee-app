@@ -138,7 +138,7 @@ export function ShipmentRegistryScreen({ ctx }) {
   const [pasteOpen, setPasteOpen]         = useState(false);
   const [search, setSearch]               = useState('');
   const [fInvoice, setFInvoice]           = useState('all'); // all | yes | no — накладная вернулась
-  const [fPaid, setFPaid]                 = useState('all'); // all | yes | no — оплата
+  const [fPaid, setFPaid]                 = useState('all'); // all | yes | no | partial — оплата
   const [payModal, setPayModal]           = useState(null);  // { id, amount } — модал оплаты
 
   if (!canView) {
@@ -157,7 +157,12 @@ export function ShipmentRegistryScreen({ ctx }) {
   const monthRows = rows
     .filter(r => r.month === selectedMonth)
     .filter(r => fInvoice === 'all' || (fInvoice === 'yes' ? !!r.invoice_returned : !r.invoice_returned))
-    .filter(r => fPaid === 'all' || (fPaid === 'yes' ? !!r.paid : !r.paid))
+    .filter(r => {
+      if (fPaid === 'all') return true;
+      if (fPaid === 'yes') return r.paid && (r.paid_amount == null || r.paid_amount >= (Number(r.amount) || 0));
+      if (fPaid === 'partial') return r.paid && r.paid_amount != null && r.paid_amount < (Number(r.amount) || 0);
+      return !r.paid;
+    })
     .filter(r => {
       if (!search.trim()) return true;
       const q = search.toLowerCase();
@@ -290,7 +295,7 @@ export function ShipmentRegistryScreen({ ctx }) {
       {/* Фильтры */}
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 10 }}>
         <FilterGroup label="📋 Накладная" value={fInvoice} onChange={setFInvoice} />
-        <FilterGroup label="💰 Оплата" value={fPaid} onChange={setFPaid} />
+        <PaidFilterGroup value={fPaid} onChange={setFPaid} />
       </div>
 
       {/* Поиск */}
@@ -401,6 +406,25 @@ export function ShipmentRegistryScreen({ ctx }) {
 }
 
 /* ── Группа фильтра (все / да / нет) ───────────────────────── */
+function PaidFilterGroup({ value, onChange }) {
+  const opts = [['all', 'Все'], ['yes', '100%'], ['partial', '< 100%'], ['no', 'Нет']];
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ fontSize: 11, color: 'var(--mc-muted)', fontWeight: 600 }}>💰 Оплата:</span>
+      <div style={{ display: 'flex', gap: 2, background: 'var(--mc-active-item)', borderRadius: 8, padding: 2 }}>
+        {opts.map(([v, l]) => (
+          <button key={v} onClick={() => onChange(v)}
+            style={{ padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
+              background: value === v ? '#297b8a' : 'transparent',
+              color: value === v ? '#fff' : 'var(--mc-muted)' }}>
+            {l}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FilterGroup({ label, value, onChange }) {
   const opts = [['all', 'Все'], ['yes', 'Да'], ['no', 'Нет']];
   return (

@@ -1269,21 +1269,12 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts, db.coffeeShipments]);
 
-  // ─── Напоминания по расписанию (personal TG) — по времени задачи ───
+  // ─── Напоминания по расписанию (personal TG) — за 15 мин до начала, только себе ───
   useEffect(() => {
     if (bootStatus.phase !== 'ready') return;
     if (!session || !db.users?.length || !(db.scheduleTasks || []).length) return;
-
-    const motivations = [
-      'Ты справишься — начни с малого, и всё пойдёт!',
-      'Каждая выполненная задача — шаг к успеху!',
-      'Отличный день для продуктивной работы!',
-      'Вперёд! Ты делаешь важное дело!',
-      'Не откладывай — сделай сейчас и почувствуй свободу!',
-      'Твоя команда рассчитывает на тебя — ты лучший!',
-      'Маленький шаг сегодня = большой результат завтра!',
-    ];
-    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    const me = db.users.find(u => u.id === session.user_id);
+    if (!me?.telegram_id) return;
 
     const checkScheduleReminders = () => {
       const today = todayISO();
@@ -1294,6 +1285,7 @@ function App() {
 
       const todayTasks = (db.scheduleTasks || []).filter(t => {
         if (!t.active || !t.time_at) return false;
+        if (t.target_role && t.target_role !== me.role) return false;
         if (t.frequency === 'daily') return true;
         if (t.frequency === 'weekly') return t.day_of_week === dow;
         if (t.frequency === 'monthly') return t.day_of_month === dom;
@@ -1304,18 +1296,15 @@ function App() {
       for (const t of todayTasks) {
         const [h, m] = t.time_at.split(':').map(Number);
         const taskMin = h * 60 + m;
-        const remindAt = taskMin - (t.remind_minutes || 0);
+        const remindAt = taskMin - 15;
         if (nowMin !== remindAt) continue;
 
         const lsKey = `sched_r_${today}_${t.id}`;
         if (localStorage.getItem(lsKey)) continue;
         localStorage.setItem(lsKey, '1');
 
-        const users = db.users.filter(u => u.role === t.target_role && u.telegram_id);
-        for (const u of users) {
-          const msg = `⏰ <b>Напоминание: ${t.title}</b>\n\n🕐 Начало в ${t.time_at}\n${t.description ? '📝 ' + t.description.slice(0, 200) : ''}\n\n💪 ${pick(motivations)}`;
-          sendPrivateTelegram(u, msg);
-        }
+        const msg = `⏰ <b>Напоминание: ${t.title}</b>\n\n🕐 Начало в ${t.time_at}\n${t.description ? '📝 ' + t.description.slice(0, 200) : ''}`;
+        sendPrivateTelegram(me, msg);
       }
     };
 
