@@ -145,6 +145,7 @@ export function CoffeeShipmentsScreen({ ctx }) {
   const [pasteOpen, setPasteOpen]         = useState(false);
   const [search, setSearch]               = useState('');
   const [addressFilter, setAddressFilter] = useState('all');
+  const [paidFilter, setPaidFilter]       = useState('all'); // all | paid | debt
   const [editingId, setEditingId]         = useState(null);
   const [editPayment, setEditPayment]     = useState('');
   const [editRowId, setEditRowId]         = useState(null);
@@ -171,6 +172,11 @@ export function CoffeeShipmentsScreen({ ctx }) {
   const monthRows = rows
     .filter(r => r.month === selectedMonth)
     .filter(r => addressFilter === 'all' || normalizeAddress(r.delivery_address) === addressFilter)
+    .filter(r => {
+      if (paidFilter === 'all') return true;
+      const debt = (Number(r.amount) || 0) - (Number(r.payment_amount) || 0);
+      return paidFilter === 'paid' ? debt <= 0 : debt > 0;
+    })
     .filter(r => {
       if (!search.trim()) return true;
       const q = search.toLowerCase();
@@ -394,6 +400,24 @@ export function CoffeeShipmentsScreen({ ctx }) {
           )}
         </div>
       )}
+
+      {/* Фильтр оплаты */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <span style={{ fontSize: 11, color: 'var(--mc-muted)', fontWeight: 600 }}>💰 Оплата:</span>
+        <div style={{ display: 'flex', gap: 2, background: 'var(--mc-active-item, #f1f5f9)', borderRadius: 8, padding: 2 }}>
+          {[['all', 'Все'], ['paid', 'Оплачено'], ['debt', 'С долгом']].map(([v, l]) => (
+            <button key={v} onClick={() => setPaidFilter(v)}
+              style={{
+                padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+                cursor: 'pointer', border: 'none',
+                background: paidFilter === v ? '#297b8a' : 'transparent',
+                color: paidFilter === v ? '#fff' : 'var(--mc-muted)',
+              }}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Поиск + кнопка вставки */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
