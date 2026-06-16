@@ -1565,8 +1565,10 @@ function App() {
         if (newStatus === 'shipped') {
           updated.shipped_at = meta.shipped_at;
           updated.realization_doc_no = meta.doc_no;
-          updated.status = 'archived';
-          updated.log = [...updated.log, { event: 'status', from: 'shipped', to: 'archived', actor: currentUser.id, at: new Date().toISOString(), meta: { auto: true } }];
+          if (o.delivery_method !== 'pickup') {
+            updated.status = 'archived';
+            updated.log = [...updated.log, { event: 'status', from: 'shipped', to: 'archived', actor: currentUser.id, at: new Date().toISOString(), meta: { auto: true } }];
+          }
         }
         if (newStatus === 'paid' && meta.paid_amount != null) {
           updated.paid_amount = meta.paid_amount;
