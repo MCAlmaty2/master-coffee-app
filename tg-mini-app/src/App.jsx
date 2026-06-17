@@ -1725,6 +1725,37 @@ function App() {
     return { ok: true };
   };
 
+  const changeDeliveryMethod = (orderId, newMethod) => {
+    if (!['pickup', 'delivery'].includes(newMethod)) return { error: 'Неверный способ' };
+    const order = (db.orders || []).find(o => o.id === orderId);
+    if (!order) return { error: 'Заявка не найдена' };
+    if (order.delivery_method === newMethod) return { ok: true };
+    if (['archived', 'cancelled'].includes(order.status)) return { error: 'Нельзя менять архивную/отменённую заявку' };
+    const canChange = currentUser.role === 'admin'
+      || order.created_by === currentUser.id
+      || ['b2b', 'senior_manager', 'director', 'warehouse'].includes(currentUser.role);
+    if (!canChange) return { error: 'Нет прав на изменение способа получения' };
+    const oldLabel = order.delivery_method === 'pickup' ? 'Самовывоз' : 'Доставка';
+    const newLabel = newMethod === 'pickup' ? 'Самовывоз' : 'Доставка';
+    setDb(d => ({
+      ...d,
+      orders: d.orders.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          delivery_method: newMethod,
+          log: [...o.log, {
+            event: 'edit',
+            actor: currentUser.id,
+            at: new Date().toISOString(),
+            changes: [{ label: 'Способ получения', from: oldLabel, to: newLabel }],
+          }],
+        };
+      }),
+    }));
+    return { ok: true };
+  };
+
   /**
    * Редактировать заявку до статуса «Оплачен». Все изменения логируются.
    * Доступ: автор, b2b/senior_manager/director, admin.
@@ -3583,7 +3614,7 @@ function App() {
     route, navigate, goBack, showToast, hasPermission: (perm) => hasPermission(db, currentUser, perm),
     bootStatus,
     loginViaTelegram, logout,
-    createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, cancelOrder, editOrder, revertLastAction,
+    createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, changeDeliveryMethod, cancelOrder, editOrder, revertLastAction,
     approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, updateMyTgPrefs, updateMyHomePrefs, transferAdmin,
     createTask, startTask, completeTask, rescheduleTask, deleteTask, reassignTask, editTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
@@ -6410,7 +6441,7 @@ function AdminDeleteButton({ ctx, kind, id, label, onDeleted }) {
 }
 
 function OrderDetailScreen({ ctx, orderId }) {
-  const { db, currentUser, effectiveRole, goBack, changeStatus, closePickupOrder, archiveDeliveredOrder, editOrder, revertLastAction, showToast } = ctx;
+  const { db, currentUser, effectiveRole, goBack, changeStatus, closePickupOrder, archiveDeliveredOrder, changeDeliveryMethod, editOrder, revertLastAction, showToast } = ctx;
   const [editModalOpen, setEditModalOpen] = useState(false);
   const order = db.orders.find(o => o.id === orderId);
   if (!order) return <div className="p-6">Заявка не найдена</div>;
@@ -6562,6 +6593,23 @@ function OrderDetailScreen({ ctx, orderId }) {
                 </div>
               )}
             </div>
+            {!['archived', 'cancelled'].includes(order.status)
+              && (effectiveRole === 'admin' || order.created_by === currentUser.id
+                || ['b2b', 'senior_manager', 'director', 'warehouse'].includes(effectiveRole)) && (
+              <button
+                onClick={() => {
+                  const next = order.delivery_method === 'pickup' ? 'delivery' : 'pickup';
+                  const r = changeDeliveryMethod(order.id, next);
+                  if (r?.error) return showToast(r.error);
+                  showToast(`Способ изменён → ${next === 'pickup' ? 'Самовывоз' : 'Доставка'}`);
+                }}
+                className="w-full mt-3 py-2 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+                style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}
+              >
+                <ArrowLeftRight size={14} />
+                Сменить на {order.delivery_method === 'pickup' ? 'Доставку' : 'Самовывоз'}
+              </button>
+            )}
           </Card>
 
           {order.payment_method && (
