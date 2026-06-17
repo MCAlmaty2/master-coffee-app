@@ -30,6 +30,12 @@ function currentMonthKey() {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function dateSortKey(d) {
+  if (!d) return '';
+  const p = d.split('.');
+  return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : d;
+}
+
 /* ── Нормализация адресов кофеен ──────────────────────────── */
 const COFFEE_SHOPS = [
   { match: '597',          address: 'Сейфуллина 597В/1',  name: 'MC Seifullina' },
@@ -185,7 +191,7 @@ export function CoffeeShipmentsScreen({ ctx }) {
         || (r.delivery_address || '').toLowerCase().includes(q)
         || (r.site_order_number || '').toLowerCase().includes(q);
     })
-    .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.number || '').localeCompare(a.number || ''));
+    .sort((a, b) => dateSortKey(b.date).localeCompare(dateSortKey(a.date)) || (b.number || '').localeCompare(a.number || ''));
 
   /* ── Статистика по адресам → организациям (долг) ── */
   const addressStats = useMemo(() => {
