@@ -30,6 +30,7 @@ import {
   findUserByWebToken,
   setWebTokenInDb,
   setPinHashInDb,
+  verifyPin,
 } from './supabase/users';
 import {
   fetchAllProducts,
@@ -3534,22 +3535,21 @@ function App() {
     }
   };
 
-  /** Вход по 4-значному PIN в браузере (без Telegram).
-   *  Перебирает активных пользователей с pin_hash и сравнивает хеш. */
   const loginViaPin = async (pin) => {
     if (!pin || pin.length !== 4) return { error: 'Введите 4 цифры' };
-    const candidates = (db.users || []).filter(u => u.active && u.pin_hash);
-    for (const user of candidates) {
-      const hash = await hashPin(user.id, pin);
-      if (hash === user.pin_hash) {
-        setSession({ user_id: user.id });
+    try {
+      const result = await verifyPin(pin);
+      if (result?.user) {
+        setSession({ user_id: result.user.id });
         setRoute({ name: 'home' });
         setRouteStack([]);
-        showToast(`С возвращением, ${user.first_name}`);
+        showToast(`С возвращением, ${result.user.first_name}`);
         return { ok: true };
       }
+      return { error: result?.error || 'Неверный PIN' };
+    } catch {
+      return { error: 'Неверный PIN' };
     }
-    return { error: 'Неверный PIN' };
   };
 
   /** Установить PIN для пользователя. Только admin или сам пользователь. */
@@ -3559,7 +3559,7 @@ function App() {
     try {
       const hash = await hashPin(userId, pin);
       await setPinHashInDb(userId, hash);
-      setDb(d => ({ ...d, users: d.users.map(u => u.id === userId ? { ...u, pin_hash: hash } : u) }));
+      setDb(d => ({ ...d, users: d.users.map(u => u.id === userId ? { ...u, has_pin: true } : u) }));
       return { ok: true };
     } catch (e) {
       return { error: e.message };
@@ -3571,7 +3571,7 @@ function App() {
     if (currentUser?.role !== 'admin' && currentUser?.id !== userId) return { error: 'Нет прав' };
     try {
       await setPinHashInDb(userId, null);
-      setDb(d => ({ ...d, users: d.users.map(u => u.id === userId ? { ...u, pin_hash: null } : u) }));
+      setDb(d => ({ ...d, users: d.users.map(u => u.id === userId ? { ...u, has_pin: false } : u) }));
       return { ok: true };
     } catch (e) {
       return { error: e.message };
@@ -5127,7 +5127,7 @@ function MyPinButton({ ctx }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const hasPinSet = !!currentUser?.pin_hash;
+  const hasPinSet = !!currentUser?.has_pin;
 
   const handleSave = async () => {
     if (!/^\d{4}$/.test(pin)) { setError('PIN — 4 цифры (0–9)'); return; }
@@ -8990,8 +8990,8 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgN
               <div className="flex items-center justify-between px-3 py-2">
                 <div>
                   <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>PIN для браузера</div>
-                  <div className="text-[10px]" style={{ color: user.pin_hash ? '#10B981' : '#64748B' }}>
-                    {user.pin_hash ? '✓ Установлен' : 'Не установлен'}
+                  <div className="text-[10px]" style={{ color: user.has_pin ? '#10B981' : '#64748B' }}>
+                    {user.has_pin ? '✓ Установлен' : 'Не установлен'}
                   </div>
                 </div>
                 <div className="flex gap-1.5">
@@ -9000,9 +9000,9 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgN
                     className="text-[11px] font-semibold px-2.5 py-1 rounded-lg"
                     style={{ background: '#297b8a', color: 'white' }}
                   >
-                    {user.pin_hash ? 'Сменить' : 'Установить'}
+                    {user.has_pin ? 'Сменить' : 'Установить'}
                   </button>
-                  {user.pin_hash && (
+                  {user.has_pin && (
                     <button
                       onClick={async () => {
                         setPinLoading(true);

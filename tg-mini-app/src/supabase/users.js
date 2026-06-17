@@ -1,32 +1,27 @@
 import { supabase } from './client';
 
-/** Маппинг полей: в БД snake_case, в коде осталось почти то же самое.
- * Совместимость: id, telegram_id, first_name, last_name, role, active, photo_url
- * Поля из старого кода, которых нет в БД: email, password — теперь не используются.
- */
+const SAFE_SELECT = 'id, telegram_id, tg_username, first_name, last_name, photo_url, role, active, created_at, approved_at, approved_by, tg_notif_enabled, tg_notif_prefs, home_prefs, birth_date';
 
 export async function fetchAllUsers() {
   const { data, error } = await supabase
-    .from('users')
+    .from('users_safe')
     .select('*')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data || [];
 }
 
-/** Поиск пользователя по Telegram ID */
 export async function findUserByTelegramId(telegramId) {
   const tgId = String(telegramId);
   const { data, error } = await supabase
-    .from('users')
+    .from('users_safe')
     .select('*')
     .eq('telegram_id', tgId)
     .maybeSingle();
   if (error) throw error;
-  return data; // null если не найден
+  return data;
 }
 
-/** Создать pending-юзера при первом входе через Telegram */
 export async function createPendingUserFromTelegram(tgUser) {
   const payload = {
     telegram_id: String(tgUser.id),
@@ -40,13 +35,12 @@ export async function createPendingUserFromTelegram(tgUser) {
   const { data, error } = await supabase
     .from('users')
     .insert(payload)
-    .select()
+    .select(SAFE_SELECT)
     .single();
   if (error) throw error;
   return data;
 }
 
-/** Админ подтверждает пользователя: назначает роль + active = true */
 export async function approveUser(userId, role, approverId) {
   const { data, error } = await supabase
     .from('users')
@@ -57,49 +51,45 @@ export async function approveUser(userId, role, approverId) {
       approved_by: approverId,
     })
     .eq('id', userId)
-    .select()
+    .select(SAFE_SELECT)
     .single();
   if (error) throw error;
   return data;
 }
 
-/** Сменить роль уже активному пользователю */
 export async function updateUserRoleInDb(userId, role) {
   const { data, error } = await supabase
     .from('users')
     .update({ role })
     .eq('id', userId)
-    .select()
+    .select(SAFE_SELECT)
     .single();
   if (error) throw error;
   return data;
 }
 
-/** Отключить пользователя */
 export async function deactivateUserInDb(userId) {
   const { data, error } = await supabase
     .from('users')
     .update({ active: false })
     .eq('id', userId)
-    .select()
+    .select(SAFE_SELECT)
     .single();
   if (error) throw error;
   return data;
 }
 
-/** Включить пользователя обратно */
 export async function activateUserInDb(userId) {
   const { data, error } = await supabase
     .from('users')
     .update({ active: true })
     .eq('id', userId)
-    .select()
+    .select(SAFE_SELECT)
     .single();
   if (error) throw error;
   return data;
 }
 
-/** Удалить pending-заявку (если админ отклоняет вход) */
 export async function deleteUserInDb(userId) {
   const { error } = await supabase
     .from('users')
@@ -108,38 +98,34 @@ export async function deleteUserInDb(userId) {
   if (error) throw error;
 }
 
-/** Найти активного пользователя по web_token (для входа в браузере) */
 export async function findUserByWebToken(token) {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('web_token', token)
-    .eq('active', true)
-    .maybeSingle();
+  const { data, error } = await supabase.functions.invoke('verify-web-token', {
+    body: { token },
+  });
   if (error) throw error;
-  return data; // null если не найден
+  return data?.user || null;
 }
 
-/** Сохранить web_token пользователю (генерируется на клиенте как UUID) */
+export async function verifyPin(pin) {
+  const { data, error } = await supabase.functions.invoke('verify-pin', {
+    body: { pin },
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function setWebTokenInDb(userId, token) {
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('users')
     .update({ web_token: token })
-    .eq('id', userId)
-    .select()
-    .single();
+    .eq('id', userId);
   if (error) throw error;
-  return data;
 }
 
-/** Установить или сбросить PIN-хеш пользователя (null — удаляет PIN) */
 export async function setPinHashInDb(userId, pinHash) {
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('users')
     .update({ pin_hash: pinHash })
-    .eq('id', userId)
-    .select()
-    .single();
+    .eq('id', userId);
   if (error) throw error;
-  return data;
 }
