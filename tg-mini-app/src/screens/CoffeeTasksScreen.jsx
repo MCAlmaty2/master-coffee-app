@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, Check,
   MapPin, ListTodo, Sparkles, Trash2, X,
-  Repeat, Clock,
+  Repeat, Clock, Link, ExternalLink,
 } from 'lucide-react';
 import { deleteRow } from '../supabase/sync';
 import { supabase } from '../supabase/client';
@@ -221,8 +221,18 @@ function CoffeeTasksScreen({ ctx }) {
     const items = [];
     dayTasks.forEach(t => items.push({ type: 'once', task: t, done: t.status === 'done', assigneeId: t.assignee_id }));
     coffeeScheduleTasks.forEach(t => {
-      const user = coffeeUsers.find(u => u.role === t.target_role);
-      items.push({ type: 'schedule', task: t, done: isScheduleDone(t), assigneeId: user?.id || '_schedule' });
+      if (t.target_user_id) {
+        items.push({ type: 'schedule', task: t, done: isScheduleDone(t), assigneeId: t.target_user_id });
+      } else {
+        const matchingUsers = coffeeUsers.filter(u => u.role === t.target_role);
+        if (matchingUsers.length > 0) {
+          matchingUsers.forEach(u => {
+            items.push({ type: 'schedule', task: t, done: isScheduleDone(t), assigneeId: u.id });
+          });
+        } else {
+          items.push({ type: 'schedule', task: t, done: isScheduleDone(t), assigneeId: '_schedule' });
+        }
+      }
     });
     return items;
   }, [dayTasks, coffeeScheduleTasks, scheduleCompletions, coffeeUsers]);
@@ -289,16 +299,17 @@ function CoffeeTasksScreen({ ctx }) {
     const task = {
       id: uid(),
       title: form.title.trim(),
-      description: '',
+      description: form.description?.trim() || '',
       frequency: form.frequency,
       day_of_week: form.frequency === 'weekly' ? form.day_of_week : null,
       day_of_month: form.frequency === 'monthly' ? form.day_of_month : null,
       once_date: null,
       time_at: form.time_at || null,
       task_type: 'custom',
-      link_url: '',
-      link_label: '',
+      link_url: form.link_url?.trim() || '',
+      link_label: form.link_label?.trim() || '',
       target_role: form.target_role,
+      target_user_id: form.target_user_id || null,
       remind_minutes: 0,
       active: true,
       sort_order: 0,
@@ -562,11 +573,22 @@ function TaskRow({ item, idx, onToggle, onEdit, onDelete }) {
             {task.title}
           </span>
         </div>
+        {task.description && (
+          <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>{task.description}</div>
+        )}
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {task.location && (
             <span className="flex items-center gap-0.5 text-[11px]" style={{ color: 'var(--mc-muted)' }}>
               <MapPin size={10} /> {task.location}
             </span>
+          )}
+          {task.link_url && (
+            <a href={task.link_url} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-0.5 text-[11px]"
+              style={{ color: '#0891B2' }}
+              onClick={e => e.stopPropagation()}>
+              <ExternalLink size={10} /> {task.link_label || 'Ссылка'}
+            </a>
           )}
           {type === 'schedule' && (
             <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
@@ -667,16 +689,19 @@ function AddTaskModal({ task, selectedDate, assignees, currentUser, onSave, onCl
 function ScheduleTaskModal({ coffeeUsers, onSave, onClose }) {
   const [form, setForm] = useState({
     title: '',
+    description: '',
     frequency: 'daily',
     day_of_week: 1,
     day_of_month: 1,
     time_at: '09:00',
     target_role: coffeeUsers[0]?.role || 'coffee_manager',
+    target_user_id: '',
+    link_url: '',
+    link_label: '',
   });
   const upd = (patch) => setForm(f => ({ ...f, ...patch }));
 
-  const roles = [...new Set(coffeeUsers.map(u => u.role))];
-  if (roles.length === 0) COFFEE_ROLES.forEach(r => roles.push(r));
+  const usersForRole = coffeeUsers.filter(u => u.role === form.target_role);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
@@ -694,14 +719,32 @@ function ScheduleTaskModal({ coffeeUsers, onSave, onClose }) {
               className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
               style={inputStyle} placeholder="Название задачи" />
           </Field>
+          <Field label="Описание">
+            <textarea value={form.description} onChange={e => upd({ description: e.target.value })}
+              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm resize-none"
+              style={inputStyle} placeholder="Подробности задачи (необязательно)" rows={2} />
+          </Field>
           <Field label="Для роли">
-            <select value={form.target_role} onChange={e => upd({ target_role: e.target.value })}
+            <select value={form.target_role}
+              onChange={e => upd({ target_role: e.target.value, target_user_id: '' })}
               className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle}>
               {COFFEE_ROLES.map(r => (
                 <option key={r} value={r}>{TWI_TEMPLATES[r]?.label || r}</option>
               ))}
             </select>
           </Field>
+          {usersForRole.length > 0 && (
+            <Field label="Конкретный сотрудник">
+              <select value={form.target_user_id}
+                onChange={e => upd({ target_user_id: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle}>
+                <option value="">Все с этой ролью</option>
+                {usersForRole.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </Field>
+          )}
           <div>
             <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Частота</label>
             <div className="grid grid-cols-3 gap-1">
@@ -737,6 +780,16 @@ function ScheduleTaskModal({ coffeeUsers, onSave, onClose }) {
             <input type="time" value={form.time_at} onChange={e => upd({ time_at: e.target.value })}
               className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle} />
           </Field>
+          <Field label="Ссылка (необязательно)">
+            <div className="flex gap-2">
+              <input value={form.link_url} onChange={e => upd({ link_url: e.target.value })}
+                className="flex-1 px-3 py-2.5 rounded-lg outline-none text-sm"
+                style={inputStyle} placeholder="https://..." />
+              <input value={form.link_label} onChange={e => upd({ link_label: e.target.value })}
+                className="w-24 px-3 py-2.5 rounded-lg outline-none text-sm"
+                style={inputStyle} placeholder="Текст" />
+            </div>
+          </Field>
         </div>
         <button onClick={() => form.title.trim() && onSave(form)}
           className="w-full mt-4 py-3 rounded-xl font-semibold text-white"
@@ -756,6 +809,10 @@ function ScheduleManageModal({ tasks, db, onDelete, onAdd, onClose }) {
     if (task.frequency === 'weekly') return DOW_NAMES[task.day_of_week] || '';
     if (task.frequency === 'monthly') return `${task.day_of_month}-го`;
     return '';
+  };
+  const userName = (userId) => {
+    const u = (db.users || []).find(u => u.id === userId);
+    return u ? (u.name || u.username || 'Без имени') : null;
   };
 
   return (
@@ -778,19 +835,32 @@ function ScheduleManageModal({ tasks, db, onDelete, onAdd, onClose }) {
 
         <div className="space-y-2 mb-4">
           {tasks.map(t => (
-            <div key={t.id} className="flex items-center gap-2 p-2.5 rounded-lg" style={{ background: 'var(--mc-bg)', border: '1px solid var(--mc-border)' }}>
+            <div key={t.id} className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: 'var(--mc-bg)', border: '1px solid var(--mc-border)' }}>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>{t.title}</div>
-                <div className="flex items-center gap-2 mt-0.5">
+                {t.description && (
+                  <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--mc-muted)' }}>{t.description}</div>
+                )}
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
                     style={{ background: '#0891B220', color: '#0891B2' }}>
                     {freqLabel(t.frequency)} {dayLabel(t)}
                   </span>
                   {t.time_at && <span className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>{t.time_at}</span>}
-                  <span className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>{roleLabel(t.target_role)}</span>
+                  <span className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>
+                    {t.target_user_id ? (userName(t.target_user_id) || roleLabel(t.target_role)) : roleLabel(t.target_role)}
+                  </span>
+                  {t.link_url && (
+                    <a href={t.link_url} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-0.5 text-[10px]"
+                      style={{ color: '#0891B2' }}
+                      onClick={e => e.stopPropagation()}>
+                      <ExternalLink size={9} /> {t.link_label || 'Ссылка'}
+                    </a>
+                  )}
                 </div>
               </div>
-              <button onClick={() => onDelete(t.id)} className="p-1.5 rounded" style={{ color: '#EB5757' }}>
+              <button onClick={() => onDelete(t.id)} className="p-1.5 rounded flex-shrink-0" style={{ color: '#EB5757' }}>
                 <Trash2 size={14} />
               </button>
             </div>
