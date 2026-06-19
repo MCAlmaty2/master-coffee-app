@@ -39,7 +39,7 @@ function getWeekDays(iso) {
   return days;
 }
 
-const COFFEE_ROLES = ['coffee_manager', 'chef_barista', 'chef_cook'];
+const COFFEE_ROLES = ['coffee_manager', 'deputy_coffee_manager', 'chef_barista', 'chef_cook'];
 
 const TWI_TEMPLATES = {
   coffee_manager: {
@@ -60,8 +60,24 @@ const TWI_TEMPLATES = {
       { title: 'Анализ себестоимости', category: 'finance' },
     ],
   },
+  deputy_coffee_manager: {
+    label: 'Зам. управляющего кофеен',
+    weekly: [
+      { title: 'Обход точек: контроль работы персонала', category: 'operations', day: 1 },
+      { title: 'Контроль чистоты и санитарных норм', category: 'quality', day: 2 },
+      { title: 'Сверка кассы и отчётность по точкам', category: 'finance', day: 2 },
+      { title: 'Контроль наличия расходников', category: 'supply', day: 3 },
+      { title: 'Координация ремонтных работ', category: 'equipment', day: 4 },
+      { title: 'Обратная связь от персонала', category: 'hr', day: 5 },
+    ],
+    monthly: [
+      { title: 'Инвентаризация по точкам', category: 'supply' },
+      { title: 'Отчёт управляющему по итогам месяца', category: 'reporting' },
+      { title: 'Проверка трудовой дисциплины', category: 'hr' },
+    ],
+  },
   chef_barista: {
-    label: 'Шеф-Бариста',
+    label: 'Шеф-Бариста Алматы',
     weekly: [
       { title: 'Контроль качества кофе на точках', category: 'quality', day: 1 },
       { title: 'Проверка настройки кофемашин и помола', category: 'equipment', day: 1 },

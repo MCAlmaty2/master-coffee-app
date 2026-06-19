@@ -215,7 +215,7 @@ async function sendPrivateTelegram(user, text) {
 // button_url / button_text — опционально: добавляет inline-кнопку под сообщением (web_app).
 function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, button_url, button_text }) {
   const recipient = db?.users?.find(u => u.id === recipient_id);
-  if (recipient?.role === 'coffee_manager') return null;
+  if (COFFEESHOP_ROLES.includes(recipient?.role)) return null;
   const notif = {
     id: uid(),
     recipient_id,
@@ -410,13 +410,14 @@ const ROLES = {
   barista:        { label: 'Бариста',                short: 'Бариста',      color: '#0EA5E9' },
   technician:     { label: 'Техник',                 short: 'Техник',       color: '#16A34A' },
   courier:        { label: 'Курьер',                 short: 'Курьер',       color: '#0891B2' },
-  coffee_manager: { label: 'Управляющий кофейнями', short: 'Кофейня',      color: '#92400E' },
-  chef_barista:   { label: 'Шеф-Бариста',           short: 'Шеф-Бар',     color: '#B45309' },
-  chef_cook:      { label: 'Шеф-повар',             short: 'Шеф-пов',     color: '#15803D' },
+  coffee_manager:        { label: 'Управляющий кофейнями',    short: 'Кофейня',    color: '#92400E' },
+  deputy_coffee_manager: { label: 'Зам. управляющего кофеен', short: 'Зам.кофе',   color: '#A16207' },
+  chef_barista:          { label: 'Шеф-Бариста Алматы',       short: 'Шеф-Бар',   color: '#B45309' },
+  chef_cook:             { label: 'Шеф-повар',                short: 'Шеф-пов',   color: '#15803D' },
   pending:        { label: 'Ожидает подтверждения',  short: 'Ожидает',      color: '#A8A8AE' },
 };
 
-const COFFEESHOP_ROLES = ['coffee_manager', 'chef_barista', 'chef_cook'];
+const COFFEESHOP_ROLES = ['coffee_manager', 'deputy_coffee_manager', 'chef_barista', 'chef_cook'];
 
 function getUserBase(user) {
   if (!user) return 'tk';
@@ -497,7 +498,7 @@ const PERMISSIONS = {
 };
 
 // Системные роли — пресеты. Admin их редактирует, но удалить нельзя.
-const SYSTEM_ROLES = ['admin', 'director', 'senior_manager', 'b2b', 'sales', 'warehouse', 'cashier', 'barista', 'technician', 'courier', 'coffee_manager', 'chef_barista', 'chef_cook', 'pending'];
+const SYSTEM_ROLES = ['admin', 'director', 'senior_manager', 'b2b', 'sales', 'warehouse', 'cashier', 'barista', 'technician', 'courier', 'coffee_manager', 'deputy_coffee_manager', 'chef_barista', 'chef_cook', 'pending'];
 
 function defaultPermissionsFor(roleKey) {
   switch (roleKey) {
@@ -522,6 +523,8 @@ function defaultPermissionsFor(roleKey) {
     case 'technician':
       return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create', 'gift_create'];
     case 'coffee_manager':
+      return ['coffee_shipments_view', 'coffee_shipments_pay', 'coffee_tasks_view', 'coffee_tasks_edit'];
+    case 'deputy_coffee_manager':
       return ['coffee_shipments_view', 'coffee_shipments_pay', 'coffee_tasks_view', 'coffee_tasks_edit'];
     case 'chef_barista':
       return ['coffee_tasks_view', 'coffee_tasks_edit'];
@@ -1097,6 +1100,22 @@ function App() {
           // Если roleDefinitions из БД пустые — оставляем локальные (SYSTEM_ROLES seed из loadDB)
           if (!update.roleDefinitions || update.roleDefinitions.length === 0) {
             merged.roleDefinitions = d.roleDefinitions;
+          }
+          // Дозалить новые системные роли, которых нет в Supabase
+          const existingRoleKeys = new Set(merged.roleDefinitions.map(r => r.key));
+          for (const sysKey of SYSTEM_ROLES) {
+            if (!existingRoleKeys.has(sysKey) && ROLES[sysKey]) {
+              const newSysRole = {
+                key: sysKey,
+                label: ROLES[sysKey].label,
+                short: ROLES[sysKey].short,
+                color: ROLES[sysKey].color,
+                permissions: defaultPermissionsFor(sysKey),
+                is_system: true,
+              };
+              merged.roleDefinitions = [...merged.roleDefinitions, newSysRole];
+              upsertRow('roleDefinitions', newSysRole).catch(() => {});
+            }
           }
           // Мерджим telegram_settings из Supabase поверх локального стейта.
           // bot_token: приоритет у Supabase, фоллбэк — localStorage (старое поведение).
@@ -4999,7 +5018,7 @@ function Screen({ ctx }) {
       if (effectiveRole === 'sales') return <DashboardHome ctx={ctx} title="Главная — Продажи" />;
       if (effectiveRole === 'warehouse') return <DashboardHome ctx={ctx} title="Главная — Склад" />;
       if (effectiveRole === 'barista' || effectiveRole === 'technician') return <FieldHome ctx={ctx} />;
-      if (effectiveRole === 'coffee_manager') return <DashboardHome ctx={ctx} title="Главная — Кофейня" />;
+      if (effectiveRole === 'coffee_manager' || effectiveRole === 'deputy_coffee_manager') return <DashboardHome ctx={ctx} title="Главная — Кофейня" />;
       if (effectiveRole === 'director' || effectiveRole === 'senior_manager') return <DashboardHome ctx={ctx} title="Главная — Руководство" />;
       if (effectiveRole === 'cashier') return <DashboardHome ctx={ctx} title="Главная — Касса" />;
       // Кастомная роль — permission-aware фолбэк
