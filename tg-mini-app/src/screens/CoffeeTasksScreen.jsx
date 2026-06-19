@@ -1,18 +1,28 @@
 import React, { useState, useMemo } from 'react';
 import {
-  ChevronLeft, ChevronRight, Plus, Check, CheckCircle2,
-  Clock, MapPin, Calendar, ListTodo, Sparkles, Trash2, X,
+  ChevronLeft, ChevronRight, Plus, Check,
+  MapPin, ListTodo, Sparkles, Trash2, X,
+  Repeat, Clock,
 } from 'lucide-react';
+import { deleteRow } from '../supabase/sync';
+import { supabase } from '../supabase/client';
 
 const TZ = 'Asia/Almaty';
 const todayISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
 
 const DAY_NAMES = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 const DAY_NAMES_FULL = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+const DOW_NAMES = ['', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
 const MONTH_NAMES_GEN = [
   'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
   'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
 ];
+
+const FREQ = {
+  daily:   { label: 'Ежедневно',   short: 'Ежедн.' },
+  weekly:  { label: 'Еженедельно', short: 'Еженед.' },
+  monthly: { label: 'Ежемесячно',  short: 'Ежемес.' },
+};
 
 function fmtDateRu(iso) {
   const d = new Date(iso + 'T00:00:00');
@@ -37,6 +47,31 @@ function getWeekDays(iso) {
     days.push(cur.toISOString().slice(0, 10));
   }
   return days;
+}
+
+function uid() {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, ch => {
+        const r = Math.random() * 16 | 0;
+        return (ch === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+}
+
+function isScheduleForDate(task, iso) {
+  if (!task.active) return false;
+  const d = new Date(iso + 'T12:00:00');
+  const dow = d.getDay() === 0 ? 7 : d.getDay();
+  const dom = d.getDate();
+  if (task.frequency === 'daily') return true;
+  if (task.frequency === 'weekly') return task.day_of_week === dow;
+  if (task.frequency === 'monthly') return task.day_of_month === dom;
+  return false;
+}
+
+function scheduleCompletionKey(task, iso) {
+  if (task.frequency === 'monthly') return iso.slice(0, 7);
+  return iso;
 }
 
 const COFFEE_ROLES = ['coffee_manager', 'deputy_coffee_manager', 'chef_barista', 'chef_cook'];
@@ -121,38 +156,91 @@ function CoffeeTasksScreen({ ctx }) {
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [showAdd, setShowAdd] = useState(false);
   const [showTwi, setShowTwi] = useState(false);
+  const [showScheduleAdd, setShowScheduleAdd] = useState(false);
+  const [showScheduleManage, setShowScheduleManage] = useState(false);
   const [editTask, setEditTask] = useState(null);
+
+  const isAdmin = currentUser.role === 'admin' || currentUser.role === 'director';
 
   const coffeeUsers = useMemo(() =>
     (db.users || []).filter(u => u.active && COFFEE_ROLES.includes(u.role)),
   [db.users]);
 
   const allAssignees = useMemo(() => {
-    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'director';
     if (isAdmin) return coffeeUsers;
     return coffeeUsers.filter(u => u.id === currentUser.id);
-  }, [coffeeUsers, currentUser]);
+  }, [coffeeUsers, currentUser, isAdmin]);
 
+  // --- Одноразовые задачи ---
   const dayTasks = useMemo(() =>
     (db.coffeeTasks || [])
       .filter(t => t.date === selectedDate)
       .sort((a, b) => (a.time_start || '99:99').localeCompare(b.time_start || '99:99')),
   [db.coffeeTasks, selectedDate]);
 
+  // --- Регулярные задачи (из scheduleTasks для кофейных ролей) ---
+  const coffeeScheduleTasks = useMemo(() =>
+    (db.scheduleTasks || []).filter(t =>
+      t.active && COFFEE_ROLES.includes(t.target_role) && isScheduleForDate(t, selectedDate)
+    ),
+  [db.scheduleTasks, selectedDate]);
+
+  const allCoffeeSchedule = useMemo(() =>
+    (db.scheduleTasks || []).filter(t => COFFEE_ROLES.includes(t.target_role)),
+  [db.scheduleTasks]);
+
+  const scheduleCompletions = db.scheduleCompletions || [];
+
+  const isScheduleDone = (task) => {
+    const key = scheduleCompletionKey(task, selectedDate);
+    return scheduleCompletions.some(c =>
+      c.task_id === task.id && c.completion_key === key
+    );
+  };
+
+  const toggleScheduleDone = async (task) => {
+    const key = scheduleCompletionKey(task, selectedDate);
+    const existing = scheduleCompletions.find(c =>
+      c.task_id === task.id && c.completion_key === key
+    );
+    if (existing) {
+      await supabase.from('schedule_completions').delete().eq('id', existing.id);
+      setDb(d => ({ ...d, scheduleCompletions: (d.scheduleCompletions || []).filter(c => c.id !== existing.id) }));
+    } else {
+      const row = {
+        id: uid(), task_id: task.id, completion_key: key,
+        completed_by: currentUser.id, completed_at: new Date().toISOString(),
+      };
+      await supabase.from('schedule_completions').upsert([row], { onConflict: 'id' });
+      setDb(d => ({ ...d, scheduleCompletions: [...(d.scheduleCompletions || []), row] }));
+    }
+  };
+
+  // --- Объединённый список для подсчёта ---
+  const combinedItems = useMemo(() => {
+    const items = [];
+    dayTasks.forEach(t => items.push({ type: 'once', task: t, done: t.status === 'done', assigneeId: t.assignee_id }));
+    coffeeScheduleTasks.forEach(t => {
+      const user = coffeeUsers.find(u => u.role === t.target_role);
+      items.push({ type: 'schedule', task: t, done: isScheduleDone(t), assigneeId: user?.id || '_schedule' });
+    });
+    return items;
+  }, [dayTasks, coffeeScheduleTasks, scheduleCompletions, coffeeUsers]);
+
   const grouped = useMemo(() => {
     const map = {};
-    dayTasks.forEach(t => {
-      const key = t.assignee_id || '_unassigned';
+    combinedItems.forEach(item => {
+      const key = item.assigneeId || '_unassigned';
       if (!map[key]) map[key] = [];
-      map[key].push(t);
+      map[key].push(item);
     });
     return map;
-  }, [dayTasks]);
+  }, [combinedItems]);
 
   const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
   const today = todayISO();
-  const doneCount = dayTasks.filter(t => t.status === 'done').length;
-  const totalCount = dayTasks.length;
+  const doneCount = combinedItems.filter(i => i.done).length;
+  const totalCount = combinedItems.length;
 
   const toggleDone = (taskId) => {
     setDb(d => ({
@@ -160,48 +248,68 @@ function CoffeeTasksScreen({ ctx }) {
       coffeeTasks: (d.coffeeTasks || []).map(t => {
         if (t.id !== taskId) return t;
         const isDone = t.status === 'done';
-        return {
-          ...t,
-          status: isDone ? 'pending' : 'done',
-          completed_at: isDone ? null : new Date().toISOString(),
-        };
+        return { ...t, status: isDone ? 'pending' : 'done', completed_at: isDone ? null : new Date().toISOString() };
       }),
     }));
   };
 
   const deleteTask = (taskId) => {
+    deleteRow('coffeeTasks', taskId).catch(() => {});
+    setDb(d => ({ ...d, coffeeTasks: (d.coffeeTasks || []).filter(t => t.id !== taskId) }));
+    showToast('Задача удалена');
+  };
+
+  const deleteScheduleTask = async (taskId) => {
+    await supabase.from('schedule_tasks').delete().eq('id', taskId);
     setDb(d => ({
       ...d,
-      coffeeTasks: (d.coffeeTasks || []).filter(t => t.id !== taskId),
+      scheduleTasks: (d.scheduleTasks || []).filter(t => t.id !== taskId),
+      scheduleCompletions: (d.scheduleCompletions || []).filter(c => c.task_id !== taskId),
     }));
-    showToast('Задача удалена');
+    showToast('Регулярная задача удалена');
   };
 
   const saveTask = (task) => {
     if (editTask) {
       setDb(d => ({
         ...d,
-        coffeeTasks: (d.coffeeTasks || []).map(t =>
-          t.id === editTask.id ? { ...t, ...task } : t
-        ),
+        coffeeTasks: (d.coffeeTasks || []).map(t => t.id === editTask.id ? { ...t, ...task } : t),
       }));
       showToast('Задача обновлена');
     } else {
-      const newTask = {
-        id: crypto.randomUUID(),
-        ...task,
-        status: 'pending',
-        created_by: currentUser.id,
-        created_at: new Date().toISOString(),
-      };
-      setDb(d => ({
-        ...d,
-        coffeeTasks: [...(d.coffeeTasks || []), newTask],
-      }));
+      const newTask = { id: uid(), ...task, status: 'pending', created_by: currentUser.id, created_at: new Date().toISOString() };
+      setDb(d => ({ ...d, coffeeTasks: [...(d.coffeeTasks || []), newTask] }));
       showToast('Задача добавлена');
     }
     setShowAdd(false);
     setEditTask(null);
+  };
+
+  const saveScheduleTask = async (form) => {
+    const task = {
+      id: uid(),
+      title: form.title.trim(),
+      description: '',
+      frequency: form.frequency,
+      day_of_week: form.frequency === 'weekly' ? form.day_of_week : null,
+      day_of_month: form.frequency === 'monthly' ? form.day_of_month : null,
+      once_date: null,
+      time_at: form.time_at || null,
+      task_type: 'custom',
+      link_url: '',
+      link_label: '',
+      target_role: form.target_role,
+      remind_minutes: 0,
+      active: true,
+      sort_order: 0,
+      created_by: currentUser.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    await supabase.from('schedule_tasks').upsert([task], { onConflict: 'id' });
+    setDb(d => ({ ...d, scheduleTasks: [...(d.scheduleTasks || []), task] }));
+    setShowScheduleAdd(false);
+    showToast('Регулярная задача создана');
   };
 
   const generateTwi = (roleKey, period) => {
@@ -210,41 +318,25 @@ function CoffeeTasksScreen({ ctx }) {
     const assignee = coffeeUsers.find(u => u.role === roleKey);
     const assigneeId = assignee?.id || currentUser.id;
     const tasks = [];
-
     if (period === 'weekly') {
       const week = getWeekDays(selectedDate);
       tpl.weekly.forEach(t => {
-        const date = week[t.day - 1] || selectedDate;
         tasks.push({
-          id: crypto.randomUUID(),
-          title: t.title,
-          category: t.category,
-          assignee_id: assigneeId,
-          date,
-          status: 'pending',
-          created_by: currentUser.id,
-          created_at: new Date().toISOString(),
+          id: uid(), title: t.title, category: t.category,
+          assignee_id: assigneeId, date: week[t.day - 1] || selectedDate,
+          status: 'pending', created_by: currentUser.id, created_at: new Date().toISOString(),
         });
       });
     } else {
       tpl.monthly.forEach(t => {
         tasks.push({
-          id: crypto.randomUUID(),
-          title: t.title,
-          category: t.category,
-          assignee_id: assigneeId,
-          date: selectedDate,
-          status: 'pending',
-          created_by: currentUser.id,
-          created_at: new Date().toISOString(),
+          id: uid(), title: t.title, category: t.category,
+          assignee_id: assigneeId, date: selectedDate,
+          status: 'pending', created_by: currentUser.id, created_at: new Date().toISOString(),
         });
       });
     }
-
-    setDb(d => ({
-      ...d,
-      coffeeTasks: [...(d.coffeeTasks || []), ...tasks],
-    }));
+    setDb(d => ({ ...d, coffeeTasks: [...(d.coffeeTasks || []), ...tasks] }));
     setShowTwi(false);
     showToast(`Создано ${tasks.length} задач из TWI-шаблона`);
   };
@@ -257,9 +349,11 @@ function CoffeeTasksScreen({ ctx }) {
   const userRole = (id) => {
     const u = (db.users || []).find(x => x.id === id);
     if (!u) return '';
-    const tpl = TWI_TEMPLATES[u.role];
-    return tpl?.label || u.role;
+    return TWI_TEMPLATES[u.role]?.label || u.role;
   };
+
+  const hasScheduleTasks = (day) =>
+    (db.scheduleTasks || []).some(t => COFFEE_ROLES.includes(t.target_role) && isScheduleForDate(t, day));
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--mc-bg)' }}>
@@ -285,7 +379,7 @@ function CoffeeTasksScreen({ ctx }) {
 
         {/* Date nav */}
         <div className="flex items-center gap-2 mb-2">
-          <button onClick={() => setSelectedDate(d => addDays(d, -1))} className="p-1.5 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
+          <button onClick={() => setSelectedDate(d => addDays(d, -7))} className="p-1.5 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
             <ChevronLeft size={16} />
           </button>
           <button
@@ -295,7 +389,7 @@ function CoffeeTasksScreen({ ctx }) {
           >
             Сегодня
           </button>
-          <button onClick={() => setSelectedDate(d => addDays(d, 1))} className="p-1.5 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
+          <button onClick={() => setSelectedDate(d => addDays(d, 7))} className="p-1.5 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
             <ChevronRight size={16} />
           </button>
         </div>
@@ -306,7 +400,7 @@ function CoffeeTasksScreen({ ctx }) {
             const d = new Date(day + 'T12:00:00');
             const isSelected = day === selectedDate;
             const isToday = day === today;
-            const hasTasks = (db.coffeeTasks || []).some(t => t.date === day);
+            const hasTasks = (db.coffeeTasks || []).some(t => t.date === day) || hasScheduleTasks(day);
             return (
               <button
                 key={day}
@@ -336,7 +430,7 @@ function CoffeeTasksScreen({ ctx }) {
           </div>
         )}
 
-        {Object.entries(grouped).map(([assigneeId, tasks]) => (
+        {Object.entries(grouped).map(([assigneeId, items]) => (
           <div key={assigneeId} className="rounded-xl p-3" style={{ background: 'var(--mc-card)', border: '1px solid var(--mc-border)' }}>
             <div className="flex items-center gap-2 mb-2 pb-2" style={{ borderBottom: '1px solid var(--mc-border)' }}>
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
@@ -347,64 +441,21 @@ function CoffeeTasksScreen({ ctx }) {
                 <div className="text-sm font-bold" style={{ color: 'var(--mc-text)' }}>{userName(assigneeId)}</div>
                 <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>{userRole(assigneeId)}</div>
               </div>
-              <div className="ml-auto text-xs font-semibold" style={{ color: tasks.every(t => t.status === 'done') ? '#22C55E' : 'var(--mc-muted)' }}>
-                {tasks.filter(t => t.status === 'done').length}/{tasks.length}
+              <div className="ml-auto text-xs font-semibold" style={{ color: items.every(i => i.done) ? '#22C55E' : 'var(--mc-muted)' }}>
+                {items.filter(i => i.done).length}/{items.length}
               </div>
             </div>
 
             <div className="space-y-1.5">
-              {tasks.map((task, idx) => (
-                <div key={task.id} className="flex items-start gap-2 py-1.5 group">
-                  <button
-                    onClick={() => toggleDone(task.id)}
-                    className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
-                    style={{
-                      background: task.status === 'done' ? '#22C55E' : 'transparent',
-                      border: task.status === 'done' ? 'none' : '2px solid var(--mc-border)',
-                    }}
-                  >
-                    {task.status === 'done' && <Check size={12} color="white" />}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start gap-1.5">
-                      <span
-                        className="text-sm"
-                        style={{
-                          color: task.status === 'done' ? 'var(--mc-muted)' : 'var(--mc-text)',
-                          textDecoration: task.status === 'done' ? 'line-through' : 'none',
-                        }}
-                      >
-                        <span className="font-semibold mr-1" style={{ color: 'var(--mc-muted)' }}>{idx + 1}.</span>
-                        {task.time_start && (
-                          <span className="text-xs mr-1" style={{ color: '#297b8a' }}>
-                            {task.time_start}{task.time_end ? `–${task.time_end}` : ''}
-                          </span>
-                        )}
-                        {task.title}
-                      </span>
-                    </div>
-                    {task.location && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <MapPin size={10} style={{ color: 'var(--mc-muted)' }} />
-                        <span className="text-[11px]" style={{ color: 'var(--mc-muted)' }}>{task.location}</span>
-                      </div>
-                    )}
-                    {task.category && (
-                      <span className="inline-block text-[10px] mt-0.5 px-1.5 py-0.5 rounded-full font-medium"
-                        style={{ background: (CATEGORY_COLORS[task.category] || '#64748B') + '20', color: CATEGORY_COLORS[task.category] || '#64748B' }}>
-                        {task.category}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100" style={{ transition: 'opacity 0.15s' }}>
-                    <button onClick={() => { setEditTask(task); setShowAdd(true); }} className="p-1 rounded" style={{ color: 'var(--mc-muted)' }}>
-                      <Calendar size={12} />
-                    </button>
-                    <button onClick={() => deleteTask(task.id)} className="p-1 rounded" style={{ color: '#EB5757' }}>
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                </div>
+              {items.map((item, idx) => (
+                <TaskRow
+                  key={item.task.id + (item.type === 'schedule' ? '_s' : '')}
+                  item={item}
+                  idx={idx}
+                  onToggle={item.type === 'once' ? () => toggleDone(item.task.id) : () => toggleScheduleDone(item.task)}
+                  onEdit={item.type === 'once' ? () => { setEditTask(item.task); setShowAdd(true); } : null}
+                  onDelete={item.type === 'once' ? () => deleteTask(item.task.id) : null}
+                />
               ))}
             </div>
           </div>
@@ -413,6 +464,16 @@ function CoffeeTasksScreen({ ctx }) {
 
       {/* FAB buttons */}
       <div className="fixed bottom-6 right-4 flex flex-col gap-2 z-30">
+        {isAdmin && (
+          <button
+            onClick={() => setShowScheduleManage(true)}
+            className="w-12 h-12 rounded-full flex items-center justify-center shadow-lg"
+            style={{ background: '#0891B2', color: 'white' }}
+            title="Регулярные задачи"
+          >
+            <Repeat size={18} />
+          </button>
+        )}
         <button
           onClick={() => setShowTwi(true)}
           className="w-12 h-12 rounded-full flex items-center justify-center shadow-lg"
@@ -429,7 +490,6 @@ function CoffeeTasksScreen({ ctx }) {
         </button>
       </div>
 
-      {/* Add/Edit modal */}
       {showAdd && (
         <AddTaskModal
           task={editTask}
@@ -441,36 +501,118 @@ function CoffeeTasksScreen({ ctx }) {
         />
       )}
 
-      {/* TWI modal */}
       {showTwi && (
-        <TwiModal
+        <TwiModal coffeeUsers={coffeeUsers} onGenerate={generateTwi} onClose={() => setShowTwi(false)} />
+      )}
+
+      {showScheduleAdd && (
+        <ScheduleTaskModal
           coffeeUsers={coffeeUsers}
-          onGenerate={generateTwi}
-          onClose={() => setShowTwi(false)}
+          onSave={saveScheduleTask}
+          onClose={() => setShowScheduleAdd(false)}
+        />
+      )}
+
+      {showScheduleManage && (
+        <ScheduleManageModal
+          tasks={allCoffeeSchedule}
+          db={db}
+          onDelete={deleteScheduleTask}
+          onAdd={() => { setShowScheduleManage(false); setShowScheduleAdd(true); }}
+          onClose={() => setShowScheduleManage(false)}
         />
       )}
     </div>
   );
 }
 
+/* ── Строка задачи ── */
+function TaskRow({ item, idx, onToggle, onEdit, onDelete }) {
+  const { task, done, type } = item;
+  return (
+    <div className="flex items-start gap-2 py-1.5 group">
+      <button
+        onClick={onToggle}
+        className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
+        style={{
+          background: done ? '#22C55E' : 'transparent',
+          border: done ? 'none' : '2px solid var(--mc-border)',
+        }}
+      >
+        {done && <Check size={12} color="white" />}
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-1.5">
+          <span
+            className="text-sm"
+            style={{
+              color: done ? 'var(--mc-muted)' : 'var(--mc-text)',
+              textDecoration: done ? 'line-through' : 'none',
+            }}
+          >
+            <span className="font-semibold mr-1" style={{ color: 'var(--mc-muted)' }}>{idx + 1}.</span>
+            {type === 'once' && task.time_start && (
+              <span className="text-xs mr-1" style={{ color: '#297b8a' }}>
+                {task.time_start}{task.time_end ? `–${task.time_end}` : ''}
+              </span>
+            )}
+            {type === 'schedule' && task.time_at && (
+              <span className="text-xs mr-1" style={{ color: '#0891B2' }}>{task.time_at}</span>
+            )}
+            {task.title}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          {task.location && (
+            <span className="flex items-center gap-0.5 text-[11px]" style={{ color: 'var(--mc-muted)' }}>
+              <MapPin size={10} /> {task.location}
+            </span>
+          )}
+          {type === 'schedule' && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+              style={{ background: '#0891B220', color: '#0891B2' }}>
+              <Repeat size={8} /> {FREQ[task.frequency]?.short || task.frequency}
+            </span>
+          )}
+          {task.category && (
+            <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+              style={{ background: (CATEGORY_COLORS[task.category] || '#64748B') + '20', color: CATEGORY_COLORS[task.category] || '#64748B' }}>
+              {task.category}
+            </span>
+          )}
+        </div>
+      </div>
+      {(onEdit || onDelete) && (
+        <div className="flex gap-1 flex-shrink-0">
+          {onEdit && (
+            <button onClick={onEdit} className="p-1 rounded" style={{ color: 'var(--mc-muted)' }}>
+              <Clock size={12} />
+            </button>
+          )}
+          {onDelete && (
+            <button onClick={onDelete} className="p-1 rounded" style={{ color: '#EB5757' }}>
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Модалка добавления одноразовой задачи ── */
 function AddTaskModal({ task, selectedDate, assignees, currentUser, onSave, onClose }) {
   const [form, setForm] = useState({
     title: task?.title || '',
     time_start: task?.time_start || '',
     time_end: task?.time_end || '',
     location: task?.location || '',
-    description: task?.description || '',
     category: task?.category || '',
     assignee_id: task?.assignee_id || (assignees.length === 1 ? assignees[0].id : currentUser.id),
     date: task?.date || selectedDate,
   });
 
   const upd = (patch) => setForm(f => ({ ...f, ...patch }));
-
-  const submit = () => {
-    if (!form.title.trim()) return;
-    onSave(form);
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
@@ -479,59 +621,39 @@ function AddTaskModal({ task, selectedDate, assignees, currentUser, onSave, onCl
           <h2 className="text-base font-bold" style={{ color: 'var(--mc-text)' }}>{task ? 'Редактировать' : 'Новая задача'}</h2>
           <button onClick={onClose} className="p-1"><X size={20} style={{ color: 'var(--mc-muted)' }} /></button>
         </div>
-
         <div className="space-y-3">
-          <div>
-            <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Задача *</label>
+          <Field label="Задача *">
             <input value={form.title} onChange={e => upd({ title: e.target.value })}
               className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
-              style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-bg)', color: 'var(--mc-text)' }}
-              placeholder="Что нужно сделать?" />
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Исполнитель</label>
+              style={inputStyle} placeholder="Что нужно сделать?" />
+          </Field>
+          <Field label="Исполнитель">
             <select value={form.assignee_id} onChange={e => upd({ assignee_id: e.target.value })}
-              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
-              style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-bg)', color: 'var(--mc-text)' }}>
-              {assignees.map(u => (
-                <option key={u.id} value={u.id}>{u.first_name} {u.last_name || ''}</option>
-              ))}
+              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle}>
+              {assignees.map(u => <option key={u.id} value={u.id}>{u.first_name} {u.last_name || ''}</option>)}
             </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Дата</label>
+          </Field>
+          <Field label="Дата">
             <input type="date" value={form.date} onChange={e => upd({ date: e.target.value })}
-              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
-              style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-bg)', color: 'var(--mc-text)' }} />
-          </div>
-
+              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle} />
+          </Field>
           <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>С</label>
+            <Field label="С">
               <input type="time" value={form.time_start} onChange={e => upd({ time_start: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
-                style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-bg)', color: 'var(--mc-text)' }} />
-            </div>
-            <div>
-              <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>До</label>
+                className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle} />
+            </Field>
+            <Field label="До">
               <input type="time" value={form.time_end} onChange={e => upd({ time_end: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
-                style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-bg)', color: 'var(--mc-text)' }} />
-            </div>
+                className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle} />
+            </Field>
           </div>
-
-          <div>
-            <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Локация</label>
+          <Field label="Локация">
             <input value={form.location} onChange={e => upd({ location: e.target.value })}
               className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
-              style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-bg)', color: 'var(--mc-text)' }}
-              placeholder="Точка / адрес" />
-          </div>
+              style={inputStyle} placeholder="Точка / адрес" />
+          </Field>
         </div>
-
-        <button onClick={submit}
+        <button onClick={() => form.title.trim() && onSave(form)}
           className="w-full mt-4 py-3 rounded-xl font-semibold text-white"
           style={{ background: form.title.trim() ? '#297b8a' : '#A8A8AE' }}>
           {task ? 'Сохранить' : 'Добавить задачу'}
@@ -541,13 +663,155 @@ function AddTaskModal({ task, selectedDate, assignees, currentUser, onSave, onCl
   );
 }
 
+/* ── Модалка создания регулярной задачи ── */
+function ScheduleTaskModal({ coffeeUsers, onSave, onClose }) {
+  const [form, setForm] = useState({
+    title: '',
+    frequency: 'daily',
+    day_of_week: 1,
+    day_of_month: 1,
+    time_at: '09:00',
+    target_role: coffeeUsers[0]?.role || 'coffee_manager',
+  });
+  const upd = (patch) => setForm(f => ({ ...f, ...patch }));
+
+  const roles = [...new Set(coffeeUsers.map(u => u.role))];
+  if (roles.length === 0) COFFEE_ROLES.forEach(r => roles.push(r));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
+      <div className="w-full max-w-lg rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto" style={{ background: 'var(--mc-card)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Repeat size={18} style={{ color: '#0891B2' }} />
+            <h2 className="text-base font-bold" style={{ color: 'var(--mc-text)' }}>Новая регулярная задача</h2>
+          </div>
+          <button onClick={onClose} className="p-1"><X size={20} style={{ color: 'var(--mc-muted)' }} /></button>
+        </div>
+        <div className="space-y-3">
+          <Field label="Задача *">
+            <input value={form.title} onChange={e => upd({ title: e.target.value })}
+              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
+              style={inputStyle} placeholder="Название задачи" />
+          </Field>
+          <Field label="Для роли">
+            <select value={form.target_role} onChange={e => upd({ target_role: e.target.value })}
+              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle}>
+              {COFFEE_ROLES.map(r => (
+                <option key={r} value={r}>{TWI_TEMPLATES[r]?.label || r}</option>
+              ))}
+            </select>
+          </Field>
+          <div>
+            <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Частота</label>
+            <div className="grid grid-cols-3 gap-1">
+              {Object.entries(FREQ).map(([k, v]) => (
+                <button key={k} onClick={() => upd({ frequency: k })}
+                  className="px-2 py-2 rounded-lg text-xs font-semibold"
+                  style={{
+                    background: form.frequency === k ? '#0891B2' : 'var(--mc-active-item)',
+                    color: form.frequency === k ? 'white' : 'var(--mc-text)',
+                  }}>
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {form.frequency === 'weekly' && (
+            <Field label="День недели">
+              <select value={form.day_of_week} onChange={e => upd({ day_of_week: +e.target.value })}
+                className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle}>
+                {[1, 2, 3, 4, 5, 6, 7].map(d => <option key={d} value={d}>{DOW_NAMES[d]}</option>)}
+              </select>
+            </Field>
+          )}
+          {form.frequency === 'monthly' && (
+            <Field label="Число месяца">
+              <select value={form.day_of_month} onChange={e => upd({ day_of_month: +e.target.value })}
+                className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle}>
+                {Array.from({ length: 28 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </Field>
+          )}
+          <Field label="Время">
+            <input type="time" value={form.time_at} onChange={e => upd({ time_at: e.target.value })}
+              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle} />
+          </Field>
+        </div>
+        <button onClick={() => form.title.trim() && onSave(form)}
+          className="w-full mt-4 py-3 rounded-xl font-semibold text-white"
+          style={{ background: form.title.trim() ? '#0891B2' : '#A8A8AE' }}>
+          Создать
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Управление регулярными задачами ── */
+function ScheduleManageModal({ tasks, db, onDelete, onAdd, onClose }) {
+  const roleLabel = (role) => TWI_TEMPLATES[role]?.label || role;
+  const freqLabel = (f) => FREQ[f]?.short || f;
+  const dayLabel = (task) => {
+    if (task.frequency === 'weekly') return DOW_NAMES[task.day_of_week] || '';
+    if (task.frequency === 'monthly') return `${task.day_of_month}-го`;
+    return '';
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
+      <div className="w-full max-w-lg rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto" style={{ background: 'var(--mc-card)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Repeat size={18} style={{ color: '#0891B2' }} />
+            <h2 className="text-base font-bold" style={{ color: 'var(--mc-text)' }}>Регулярные задачи</h2>
+          </div>
+          <button onClick={onClose} className="p-1"><X size={20} style={{ color: 'var(--mc-muted)' }} /></button>
+        </div>
+
+        {tasks.length === 0 && (
+          <div className="text-center py-8" style={{ color: 'var(--mc-muted)' }}>
+            <Repeat size={32} className="mx-auto mb-2 opacity-30" />
+            <div className="text-sm">Нет регулярных задач</div>
+          </div>
+        )}
+
+        <div className="space-y-2 mb-4">
+          {tasks.map(t => (
+            <div key={t.id} className="flex items-center gap-2 p-2.5 rounded-lg" style={{ background: 'var(--mc-bg)', border: '1px solid var(--mc-border)' }}>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>{t.title}</div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                    style={{ background: '#0891B220', color: '#0891B2' }}>
+                    {freqLabel(t.frequency)} {dayLabel(t)}
+                  </span>
+                  {t.time_at && <span className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>{t.time_at}</span>}
+                  <span className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>{roleLabel(t.target_role)}</span>
+                </div>
+              </div>
+              <button onClick={() => onDelete(t.id)} className="p-1.5 rounded" style={{ color: '#EB5757' }}>
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <button onClick={onAdd}
+          className="w-full py-3 rounded-xl font-semibold text-white flex items-center justify-center gap-2"
+          style={{ background: '#0891B2' }}>
+          <Plus size={16} /> Добавить регулярную задачу
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── TWI модалка ── */
 function TwiModal({ coffeeUsers, onGenerate, onClose }) {
   const [selectedRole, setSelectedRole] = useState('');
   const [period, setPeriod] = useState('weekly');
-
-  const roles = Object.entries(TWI_TEMPLATES).filter(([key]) =>
-    coffeeUsers.some(u => u.role === key) || true
-  );
+  const roles = Object.entries(TWI_TEMPLATES);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
@@ -559,7 +823,6 @@ function TwiModal({ coffeeUsers, onGenerate, onClose }) {
           </div>
           <button onClick={onClose} className="p-1"><X size={20} style={{ color: 'var(--mc-muted)' }} /></button>
         </div>
-
         <div className="space-y-3">
           <div>
             <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Роль</label>
@@ -576,7 +839,6 @@ function TwiModal({ coffeeUsers, onGenerate, onClose }) {
               ))}
             </div>
           </div>
-
           {selectedRole && (
             <div>
               <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Период</label>
@@ -601,7 +863,6 @@ function TwiModal({ coffeeUsers, onGenerate, onClose }) {
             </div>
           )}
         </div>
-
         <button
           onClick={() => selectedRole && onGenerate(selectedRole, period)}
           className="w-full mt-4 py-3 rounded-xl font-semibold text-white"
@@ -609,6 +870,18 @@ function TwiModal({ coffeeUsers, onGenerate, onClose }) {
           Сгенерировать задачи
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ── Утилиты UI ── */
+const inputStyle = { border: '1px solid var(--mc-border)', background: 'var(--mc-bg)', color: 'var(--mc-text)' };
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>{label}</label>
+      {children}
     </div>
   );
 }
