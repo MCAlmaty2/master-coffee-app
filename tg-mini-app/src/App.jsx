@@ -4526,7 +4526,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       const prodItems = [];
       prodItems.push({ id: 'admin_products', label: 'Товары / прайс',     icon: Package });
       prodItems.push({ id: 'admin_categories', label: 'Категории товаров', icon: Tag });
-      groups.push({ title: 'Товары', items: prodItems, collapsible: true, base: 'admin' });
+      groups.push({ title: 'Товары', items: prodItems, collapsible: true, base: 'tk' });
     }
 
     // ── КОФЕЙНИ ────────────────────────────
@@ -4597,7 +4597,24 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
           </div>
         </div>
 
-        
+        {userBase === 'all' && (
+          <div className="mx-3 mb-2 grid grid-cols-2 gap-1 p-1 rounded-xl" style={{ background: 'var(--mc-active-item)' }}>
+            {[
+              { v: 'tk', label: 'ТК', icon: Truck },
+              { v: 'coffeeshop', label: 'Кофейни', icon: Coffee },
+            ].map(o => {
+              const Icon = o.icon;
+              const active = viewBase === o.v;
+              return (
+                <button key={o.v} onClick={() => setViewBase(o.v)}
+                  className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold"
+                  style={{ background: active ? '#297b8a' : 'transparent', color: active ? 'white' : 'var(--mc-muted)' }}>
+                  <Icon size={13} /> {o.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <nav className="px-3 flex-1 overflow-y-auto">
           {navItems.map((group, gIdx) => {
@@ -4683,7 +4700,26 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
               </div>
               <button onClick={() => setMobileMenuOpen(false)} style={{ color: 'var(--mc-muted)', marginTop: 2 }}><X size={20} /></button>
             </div>
-            
+
+            {userBase === 'all' && (
+              <div className="mx-3 mb-2 grid grid-cols-2 gap-1 p-1 rounded-xl" style={{ background: 'var(--mc-active-item)' }}>
+                {[
+                  { v: 'tk', label: 'ТК', icon: Truck },
+                  { v: 'coffeeshop', label: 'Кофейни', icon: Coffee },
+                ].map(o => {
+                  const Icon = o.icon;
+                  const active = viewBase === o.v;
+                  return (
+                    <button key={o.v} onClick={() => setViewBase(o.v)}
+                      className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold"
+                      style={{ background: active ? '#297b8a' : 'transparent', color: active ? 'white' : 'var(--mc-muted)' }}>
+                      <Icon size={13} /> {o.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             <nav className="px-3 flex-1 overflow-y-auto">
               {navItems.map((group, gIdx) => {
                 const collapsed = group.collapsible && collapsedSections[group.title];
@@ -5608,7 +5644,7 @@ function DashboardHome({ ctx, title }) {
   // Товары / прайс — по праву products_edit
   if (has('products_edit')) {
     tiles.push({
-      key: 'products', base: 'admin', icon: Package, label: 'Товары / прайс',
+      key: 'products', base: 'tk', icon: Package, label: 'Товары / прайс',
       value: stats.totalProducts,
       hint: 'в каталоге',
       color: '#A78BFA',
@@ -5644,26 +5680,6 @@ function DashboardHome({ ctx, title }) {
     <div>
       {/* Карточка профиля пользователя — первой */}
       <UserHeroCard user={currentUser} db={db} />
-
-      {/* ── Переключатель баз для админа/директора ── */}
-      {userBase === 'all' && (
-        <div className="mx-4 mt-3 mb-1 grid grid-cols-2 gap-1 p-1 rounded-xl" style={{ background: 'var(--mc-active-item)' }}>
-          {[
-            { v: 'tk', label: 'ТК', icon: Truck },
-            { v: 'coffeeshop', label: 'Кофейни', icon: Coffee },
-          ].map(o => {
-            const Icon = o.icon;
-            const active = viewBase === o.v;
-            return (
-              <button key={o.v} onClick={() => setViewBase(o.v)}
-                className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold"
-                style={{ background: active ? '#297b8a' : 'transparent', color: active ? 'white' : 'var(--mc-muted)' }}>
-                <Icon size={14} /> {o.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       {/* ── Блоки ТК ── */}
       {(userBase !== 'all' ? userBase === 'tk' : viewBase === 'tk') && <>
