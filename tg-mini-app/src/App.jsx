@@ -5,7 +5,7 @@ import {
   ChevronRight, Trash2, Eye, Users, ArrowRight, Hash, ChevronDown,
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
-  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, Wallet,
+  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, Wallet, ListTodo,
 } from 'lucide-react';
 import { supabase } from './supabase/client';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
@@ -17,6 +17,7 @@ import { TastingWeeklyTile } from './screens/TastingWeeklyTile';
 import { ScheduleScreen, ScheduleHomeBanner } from './screens/ScheduleScreen';
 import { GiftsScreen, GiftsHomeBanner } from './screens/GiftsScreen';
 import { CoffeeShipmentsScreen, CoffeeShipmentsHomeTile } from './screens/CoffeeShipmentsScreen';
+import CoffeeTasksScreen from './screens/CoffeeTasksScreen';
 import HRCalendarScreen from './screens/HRCalendarScreen';
 import {
   fetchAllUsers,
@@ -409,9 +410,20 @@ const ROLES = {
   barista:        { label: 'Бариста',                short: 'Бариста',      color: '#0EA5E9' },
   technician:     { label: 'Техник',                 short: 'Техник',       color: '#16A34A' },
   courier:        { label: 'Курьер',                 short: 'Курьер',       color: '#0891B2' },
-  coffee_manager: { label: 'Управляющий кофейни',   short: 'Кофейня',      color: '#92400E' },
+  coffee_manager: { label: 'Управляющий кофейнями', short: 'Кофейня',      color: '#92400E' },
+  chef_barista:   { label: 'Шеф-Бариста',           short: 'Шеф-Бар',     color: '#B45309' },
+  chef_cook:      { label: 'Шеф-повар',             short: 'Шеф-пов',     color: '#15803D' },
   pending:        { label: 'Ожидает подтверждения',  short: 'Ожидает',      color: '#A8A8AE' },
 };
+
+const COFFEESHOP_ROLES = ['coffee_manager', 'chef_barista', 'chef_cook'];
+
+function getUserBase(user) {
+  if (!user) return 'tk';
+  if (user.role === 'admin' || user.role === 'director') return 'all';
+  if (COFFEESHOP_ROLES.includes(user.role)) return 'coffeeshop';
+  return 'tk';
+}
 
 const FIELD_ROLES = ['barista', 'technician']; // отделы выездных задач
 const MANAGER_ROLES = ['admin', 'b2b', 'sales']; // кто может ставить задачи Баристе/Технику
@@ -469,6 +481,8 @@ const PERMISSIONS = {
   coffee_shipments_view:{ group: 'Кофейни', label: 'Видеть реестр отгрузок кофеен' },
   coffee_shipments_edit:{ group: 'Кофейни', label: 'Вносить данные из 1С в реестр кофеен' },
   coffee_shipments_pay: { group: 'Кофейни', label: 'Вносить оплату в реестре кофеен' },
+  coffee_tasks_view:    { group: 'Кофейни', label: 'Видеть задачник кофеен' },
+  coffee_tasks_edit:    { group: 'Кофейни', label: 'Создавать и редактировать задачи кофеен' },
   // HR
   hr_calendar_view:     { group: 'HR', label: 'Видеть HR-календарь (отпуска и ДР)' },
   hr_vacation_manage:   { group: 'HR', label: 'Добавлять и редактировать отпуска' },
@@ -483,7 +497,7 @@ const PERMISSIONS = {
 };
 
 // Системные роли — пресеты. Admin их редактирует, но удалить нельзя.
-const SYSTEM_ROLES = ['admin', 'director', 'senior_manager', 'b2b', 'sales', 'warehouse', 'cashier', 'barista', 'technician', 'courier', 'coffee_manager', 'pending'];
+const SYSTEM_ROLES = ['admin', 'director', 'senior_manager', 'b2b', 'sales', 'warehouse', 'cashier', 'barista', 'technician', 'courier', 'coffee_manager', 'chef_barista', 'chef_cook', 'pending'];
 
 function defaultPermissionsFor(roleKey) {
   switch (roleKey) {
@@ -508,7 +522,11 @@ function defaultPermissionsFor(roleKey) {
     case 'technician':
       return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create', 'gift_create'];
     case 'coffee_manager':
-      return ['coffee_shipments_view', 'coffee_shipments_pay'];
+      return ['coffee_shipments_view', 'coffee_shipments_pay', 'coffee_tasks_view', 'coffee_tasks_edit'];
+    case 'chef_barista':
+      return ['coffee_tasks_view', 'coffee_tasks_edit'];
+    case 'chef_cook':
+      return ['coffee_tasks_view', 'coffee_tasks_edit'];
     default:
       return [];
   }
@@ -4419,6 +4437,9 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
   const { currentUser, effectiveRole, actAs, setActAs, route, navigate, logout, db, theme, toggleTheme } = ctx;
   const role = effectiveRole;
   const isManager = MANAGER_ROLES.includes(role);
+  const userBase = getUserBase(currentUser);
+  const [viewBase, setViewBase] = useState(userBase === 'all' ? 'tk' : userBase);
+  const activeBase = userBase === 'all' ? viewBase : userBase;
   const [collapsedSections, setCollapsedSections] = useState(() => {
     try { return JSON.parse(localStorage.getItem('mc_collapsed_sections') || '{}'); } catch { return {}; }
   });
@@ -4458,7 +4479,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     if (hasPermission(db, currentUser, 'shipment_view') || hasPermission(db, currentUser, 'shipment_edit')) {
       sales.push({ id: 'shipment_registry', label: 'Реестр отгрузок', icon: Package });
     }
-    if (sales.length > 0) groups.push({ title: 'Отдел продаж', items: sales, collapsible: true });
+    if (sales.length > 0) groups.push({ title: 'Отдел продаж', items: sales, collapsible: true, base: 'tk' });
 
     // ── БАРИСТА И ТЕХНИКИ ────────────────
     const field = [];
@@ -4469,7 +4490,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     if (FIELD_ROLES.includes(role) || isManager || hasPermission(db, currentUser, 'tasks_calendar_all')) {
       field.push({ id: 'field_calendar', label: 'Календарь команды', icon: Eye });
     }
-    if (field.length > 0) groups.push({ title: 'Бариста и техники', items: field, collapsible: true });
+    if (field.length > 0) groups.push({ title: 'Бариста и техники', items: field, collapsible: true, base: 'tk' });
 
     // ── СКЛАД И ДОСТАВКА ─────────────────
     const warehouse = [];
@@ -4488,7 +4509,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
         || role === 'warehouse') {
       warehouse.push({ id: 'gifts', label: 'Подарки', icon: Gift });
     }
-    if (warehouse.length > 0) groups.push({ title: 'Склад и доставка', items: warehouse, collapsible: true });
+    if (warehouse.length > 0) groups.push({ title: 'Склад и доставка', items: warehouse, collapsible: true, base: 'tk' });
 
     // ── АРХИВ / ЭКСПОРТ ──────────────────
     const archiveItems = [];
@@ -4498,37 +4519,40 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     if (role === 'admin' || role === 'b2b' || hasPermission(db, currentUser, 'orders_export')) {
       archiveItems.push({ id: 'export', label: 'Экспорт', icon: Download });
     }
-    if (archiveItems.length > 0) groups.push({ title: 'Архив', items: archiveItems, collapsible: true });
+    if (archiveItems.length > 0) groups.push({ title: 'Архив', items: archiveItems, collapsible: true, base: 'tk' });
 
     // ── ТОВАРЫ / ПРАЙС (по праву products_edit) ────────────────────────────
     if (hasPermission(db, currentUser, 'products_edit')) {
       const prodItems = [];
       prodItems.push({ id: 'admin_products', label: 'Товары / прайс',     icon: Package });
       prodItems.push({ id: 'admin_categories', label: 'Категории товаров', icon: Tag });
-      groups.push({ title: 'Товары', items: prodItems, collapsible: true });
+      groups.push({ title: 'Товары', items: prodItems, collapsible: true, base: 'admin' });
     }
 
-    // ── КОФЕЙНИ (реестр отгрузок кофеен) ────────────────────────────
+    // ── КОФЕЙНИ ────────────────────────────
+    const coffeeItems = [];
     if (hasPermission(db, currentUser, 'coffee_shipments_view')
         || hasPermission(db, currentUser, 'coffee_shipments_edit')
         || hasPermission(db, currentUser, 'coffee_shipments_pay')) {
-      groups.push({ title: 'Кофейни', items: [
-        { id: 'coffee_shipments', label: 'Реестр отгрузок кофеен', icon: Building2 },
-      ], collapsible: true });
+      coffeeItems.push({ id: 'coffee_shipments', label: 'Отгрузки кофеен', icon: Building2 });
     }
+    if (hasPermission(db, currentUser, 'coffee_tasks_view') || hasPermission(db, currentUser, 'coffee_tasks_edit')) {
+      coffeeItems.push({ id: 'coffee_tasks', label: 'Задачник', icon: ListTodo });
+    }
+    if (coffeeItems.length > 0) groups.push({ title: 'Кофейни', items: coffeeItems, collapsible: true, base: 'coffeeshop' });
 
     // ── HR-КАЛЕНДАРЬ (отпуска и дни рождения) ────────────────────
     if (hasPermission(db, currentUser, 'hr_calendar_view')) {
       groups.push({ title: 'HR', items: [
         { id: 'hr_calendar', label: 'Отпуска и дни рождения', icon: CalendarDays },
-      ], collapsible: true });
+      ], collapsible: true, base: 'tk' });
     }
 
     // ── РАСПИСАНИЕ (по разрешению schedule_access) ────────────────────
     if (hasPermission(db, currentUser, 'schedule_access')) {
       groups.push({ title: 'Расписание', items: [
         { id: 'schedule', label: 'Регулярные задачи', icon: Calendar },
-      ], collapsible: true });
+      ], collapsible: true, base: 'tk' });
     }
 
     // ── АДМИН ────────────────────────────
@@ -4542,7 +4566,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       admin.push({ id: 'admin_release_notes', label: 'Что нового (рассылка)', icon: Send });
       admin.push({ id: 'admin_errors',   label: 'Отчёты об ошибках',  icon: AlertTriangle });
       admin.push({ id: 'admin_service',  label: 'Сервис · очистка',   icon: Settings });
-      groups.push({ title: 'Администрирование', items: admin, collapsible: true });
+      groups.push({ title: 'Администрирование', items: admin, collapsible: true, base: 'admin' });
     }
 
     // ── ПРОЧЕЕ ────────────────────────────
@@ -4550,8 +4574,12 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     misc.push({ id: 'feedback', label: 'Обратная связь', icon: MessageSquare });
     groups.push({ title: 'Прочее', items: misc, collapsible: true });
 
-    return groups;
-  }, [role, currentUser, isManager, db]);
+    return groups.filter(g => {
+      if (!g.base) return true;
+      if (g.base === 'admin') return currentUser.role === 'admin';
+      return g.base === activeBase;
+    });
+  }, [role, currentUser, isManager, db, activeBase]);
 
   const myUnreadNotifs = db.notifications.filter(n => n.recipient_id === currentUser.id && !n.read).length;
   const pendingRequests = currentUser.role === 'admin' ? db.users.filter(u => u.role === 'pending').length : 0;
@@ -4716,7 +4744,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
             showToast={ctx.showToast}
             currentRoute={ctx.route.name}
           >
-            <Screen ctx={ctx} />
+            <Screen ctx={{ ...ctx, viewBase, setViewBase, userBase, activeBase }} />
           </ScreenErrorBoundary>
         </div>
       </main>
@@ -4990,8 +5018,9 @@ function Screen({ ctx }) {
     case 'courier_order':    return <CourierOrderDetailScreen ctx={ctx} orderId={route.orderId} />;
     // ─── Расписание / регулярные задачи ───
     case 'schedule': return <ScheduleScreen ctx={ctx} />;
-    // ─── Кофейни (реестр отгрузок) ───
+    // ─── Кофейни ───
     case 'coffee_shipments': return <CoffeeShipmentsScreen ctx={ctx} />;
+    case 'coffee_tasks': return <CoffeeTasksScreen ctx={ctx} />;
     // ─── HR-календарь (отпуска и ДР) ───
     case 'hr_calendar': return <HRCalendarScreen ctx={ctx} />;
     // ─── Подарки клиентам ───
@@ -5451,6 +5480,7 @@ function DashboardHome({ ctx, title }) {
   }, [db, currentUser]);
 
   const has = (perm) => hasPermission(db, currentUser, perm);
+  const { viewBase, setViewBase, userBase } = ctx;
 
   // Список плиток. Каждая показывается только если у роли есть смысл её видеть.
   const tiles = [];
@@ -5458,7 +5488,7 @@ function DashboardHome({ ctx, title }) {
   // Заявки на закуп
   if (has('orders_view_all') || has('orders_view_own') || has('orders_create')) {
     tiles.push({
-      key: 'orders', icon: FileText, label: 'Заявки на закуп',
+      key: 'orders', base: 'tk', icon: FileText, label: 'Заявки на закуп',
       value: stats.orders.active,
       hint: stats.orders.archived > 0 ? `+${stats.orders.archived} в архиве` : 'активных',
       color: '#3390EC',
@@ -5468,7 +5498,7 @@ function DashboardHome({ ctx, title }) {
   // Задачи (выездные)
   if (has('tasks_view_own') || has('tasks_self_assign') || has('tasks_calendar_all')) {
     tiles.push({
-      key: 'tasks', icon: ClipboardList, label: 'Задачи (выезд)',
+      key: 'tasks', base: 'tk', icon: ClipboardList, label: 'Задачи (выезд)',
       value: stats.tasks.active,
       hint: stats.tasks.today > 0 ? `${stats.tasks.today} на сегодня` : 'активных',
       color: '#F59E0B',
@@ -5478,7 +5508,7 @@ function DashboardHome({ ctx, title }) {
   // Помол кофе
   if (has('grind_view_all') || has('grind_create') || has('grind_fulfill')) {
     tiles.push({
-      key: 'grinds', icon: Coffee, label: 'Помол кофе',
+      key: 'grinds', base: 'tk', icon: Coffee, label: 'Помол кофе',
       value: stats.grinds.active,
       hint: stats.grinds.ready > 0 ? `${stats.grinds.ready} готово` : 'активных',
       color: '#8B5CF6',
@@ -5488,7 +5518,7 @@ function DashboardHome({ ctx, title }) {
   // Списания
   if (has('writeoff_view_all') || has('writeoff_create') || has('writeoff_approve') || has('writeoff_finalize')) {
     tiles.push({
-      key: 'writeoffs', icon: Banknote, label: 'Списания',
+      key: 'writeoffs', base: 'tk', icon: Banknote, label: 'Списания',
       value: stats.writeOffs.pending,
       hint: stats.writeOffs.pending > 0 ? 'ждут одобрения' : `всего: ${stats.writeOffs.total}`,
       color: '#EB5757',
@@ -5498,7 +5528,7 @@ function DashboardHome({ ctx, title }) {
   // Договоры
   if (has('contract_view_all') || has('contract_create') || has('contract_take')) {
     tiles.push({
-      key: 'contracts', icon: FileText, label: 'Договоры',
+      key: 'contracts', base: 'tk', icon: FileText, label: 'Договоры',
       value: stats.contracts.pending + stats.contracts.inProgress,
       hint: stats.contracts.pending > 0 ? `${stats.contracts.pending} новых` : `всего: ${stats.contracts.total}`,
       color: '#0EA5E9',
@@ -5509,7 +5539,7 @@ function DashboardHome({ ctx, title }) {
   if (has('delivery_manage') || has('delivery_view_all')) {
     const activeRegs = (db.deliveryRegistries || []).filter(r => r.status === 'active');
     tiles.push({
-      key: 'deliveries', icon: Truck, label: 'Доставки',
+      key: 'deliveries', base: 'tk', icon: Truck, label: 'Доставки',
       value: activeRegs.length,
       hint: activeRegs.length > 0 ? 'активных реестров' : 'нет активных',
       color: '#0891B2',
@@ -5522,7 +5552,7 @@ function DashboardHome({ ctx, title }) {
     const monthShip = (db.shipmentRegistry || []).filter(r => r.month === mk);
     const unpaidShip = monthShip.filter(r => !r.paid);
     tiles.push({
-      key: 'shipment', icon: Package, label: 'Реестр отгрузок',
+      key: 'shipment', base: 'tk', icon: Package, label: 'Реестр отгрузок',
       value: unpaidShip.length,
       hint: unpaidShip.length > 0 ? 'ждут оплаты' : `всего: ${monthShip.length}`,
       color: '#D97706',
@@ -5536,7 +5566,7 @@ function DashboardHome({ ctx, title }) {
     const allCS = (db.coffeeShipments || []).filter(r => r.month === mk);
     const totalDebt = allCS.reduce((s, r) => s + ((Number(r.amount) || 0) - (Number(r.payment_amount) || 0)), 0);
     tiles.push({
-      key: 'coffee_shipments', icon: Building2, label: 'Кофейни',
+      key: 'coffee_shipments', base: 'coffeeshop', icon: Building2, label: 'Отгрузки кофеен',
       value: totalDebt > 0 ? (totalDebt / 1000).toFixed(0) + 'K' : allCS.length,
       hint: totalDebt > 0 ? 'долг ₸' : 'отгрузок',
       color: totalDebt > 0 ? '#EB5757' : '#0891B2',
@@ -5544,10 +5574,23 @@ function DashboardHome({ ctx, title }) {
       highlight: totalDebt > 0,
     });
   }
+  // Задачник кофеен
+  if (has('coffee_tasks_view') || has('coffee_tasks_edit')) {
+    const todayTasks = (db.coffeeTasks || []).filter(t => t.date === todayISO());
+    const doneTasks = todayTasks.filter(t => t.status === 'done').length;
+    tiles.push({
+      key: 'coffee_tasks', base: 'coffeeshop', icon: ListTodo, label: 'Задачник',
+      value: todayTasks.length - doneTasks,
+      hint: todayTasks.length > 0 ? `${doneTasks}/${todayTasks.length} выполнено` : 'задач на сегодня',
+      color: '#B45309',
+      go: () => navigate({ name: 'coffee_tasks' }),
+      highlight: todayTasks.length - doneTasks > 0,
+    });
+  }
   // Только для админа
   if (stats.isAdmin) {
     tiles.push({
-      key: 'requests', icon: Bell, label: 'Запросы доступа',
+      key: 'requests', base: 'admin', icon: Bell, label: 'Запросы доступа',
       value: stats.pendingUsers,
       hint: stats.pendingUsers > 0 ? 'ждут одобрения' : 'нет',
       color: stats.pendingUsers > 0 ? '#FBBF24' : '#64748B',
@@ -5555,7 +5598,7 @@ function DashboardHome({ ctx, title }) {
       highlight: stats.pendingUsers > 0,
     });
     tiles.push({
-      key: 'users', icon: Users, label: 'Пользователи',
+      key: 'users', base: 'admin', icon: Users, label: 'Пользователи',
       value: db.users.filter(u => u.active).length,
       hint: 'активных',
       color: '#10B981',
@@ -5565,7 +5608,7 @@ function DashboardHome({ ctx, title }) {
   // Товары / прайс — по праву products_edit
   if (has('products_edit')) {
     tiles.push({
-      key: 'products', icon: Package, label: 'Товары / прайс',
+      key: 'products', base: 'admin', icon: Package, label: 'Товары / прайс',
       value: stats.totalProducts,
       hint: 'в каталоге',
       color: '#A78BFA',
@@ -5584,41 +5627,55 @@ function DashboardHome({ ctx, title }) {
     });
   }
 
+  // ── Фильтр по базе (ТК / Кофейни / Админ) ──
+  const baseTiles = tiles.filter(t => {
+    if (!t.base) return true;
+    if (t.base === 'admin') return stats.isAdmin;
+    if (userBase === 'all') return t.base === viewBase;
+    return t.base === userBase;
+  });
+
   // ── Применяем личные настройки главного экрана ──
   const homePrefs = currentUser.home_prefs || {};
   const hidden = (key) => homePrefs[key] === false;
-  const visibleTiles = tiles.filter(t => !t.key || !hidden(t.key));
+  const visibleTiles = baseTiles.filter(t => !t.key || !hidden(t.key));
 
   return (
     <div>
       {/* Карточка профиля пользователя — первой */}
       <UserHeroCard user={currentUser} db={db} />
 
-      {/* ── НЕ ЗАБУДЬ ВЫПОЛНИТЬ — баннер регулярных задач ── */}
-      {hasPermission(db, currentUser, 'schedule_access') && (
-        <ScheduleHomeBanner ctx={ctx} />
+      {/* ── Переключатель баз для админа/директора ── */}
+      {userBase === 'all' && (
+        <div className="mx-4 mt-3 mb-1 grid grid-cols-2 gap-1 p-1 rounded-xl" style={{ background: 'var(--mc-active-item)' }}>
+          {[
+            { v: 'tk', label: 'ТК', icon: Truck },
+            { v: 'coffeeshop', label: 'Кофейни', icon: Coffee },
+          ].map(o => {
+            const Icon = o.icon;
+            const active = viewBase === o.v;
+            return (
+              <button key={o.v} onClick={() => setViewBase(o.v)}
+                className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold"
+                style={{ background: active ? '#297b8a' : 'transparent', color: active ? 'white' : 'var(--mc-muted)' }}>
+                <Icon size={14} /> {o.label}
+              </button>
+            );
+          })}
+        </div>
       )}
 
-      {/* ── Подарки клиентам — баннер ── */}
-      {(hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
-        || hasPermission(db, currentUser, 'gift_process') || currentUser.role === 'warehouse') && (
-        <GiftsHomeBanner ctx={ctx} />
-      )}
-
-      {/* ── Отчёт ОП — крупный акцентный тайл ── */}
-      {!hidden('w_sales') && <SalesReportHomeTile ctx={ctx} />}
-
-      {/* ── Реестр отгрузок — оплачено / не оплачено ── */}
-      {!hidden('w_shipment') && <ShipmentRegistryHomeTile ctx={ctx} />}
-
-      {/* ── Вопросы / поручения (руководители) ── */}
-      {!hidden('w_mtasks') && <ManagerTasksHomeTile ctx={ctx} />}
-
-      {/* ── Дегустации понедельно ── */}
-      {!hidden('w_tastings') && <TastingWeeklyTile ctx={ctx} />}
-
-      {/* Виджет доставок — только для курьера */}
-      {has('delivery_courier') && <CourierDeliveryWidget ctx={ctx} />}
+      {/* ── Блоки ТК ── */}
+      {(userBase !== 'all' ? userBase === 'tk' : viewBase === 'tk') && <>
+        {hasPermission(db, currentUser, 'schedule_access') && <ScheduleHomeBanner ctx={ctx} />}
+        {(hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
+          || hasPermission(db, currentUser, 'gift_process') || currentUser.role === 'warehouse') && <GiftsHomeBanner ctx={ctx} />}
+        {!hidden('w_sales') && <SalesReportHomeTile ctx={ctx} />}
+        {!hidden('w_shipment') && <ShipmentRegistryHomeTile ctx={ctx} />}
+        {!hidden('w_mtasks') && <ManagerTasksHomeTile ctx={ctx} />}
+        {!hidden('w_tastings') && <TastingWeeklyTile ctx={ctx} />}
+        {has('delivery_courier') && <CourierDeliveryWidget ctx={ctx} />}
+      </>}
 
       {/* Кнопка открытия в браузере — только в Telegram */}
       <OpenInBrowserButton ctx={ctx} />
@@ -5675,8 +5732,8 @@ function DashboardHome({ ctx, title }) {
         </button>
       )}
 
-      {/* СКЛАД — приоритетные плитки на сборку и выдачу */}
-      {stats.isWarehouse && (stats.warehouse.toAssemble + stats.warehouse.toShip + stats.warehouse.awaitingPickup + stats.warehouse.readyPickup + stats.warehouse.writeOffsToAssemble + stats.warehouse.writeOffsToDeliver) > 0 && (
+      {/* СКЛАД — приоритетные плитки на сборку и выдачу (только ТК) */}
+      {(userBase !== 'all' ? userBase === 'tk' : viewBase === 'tk') && stats.isWarehouse && (stats.warehouse.toAssemble + stats.warehouse.toShip + stats.warehouse.awaitingPickup + stats.warehouse.readyPickup + stats.warehouse.writeOffsToAssemble + stats.warehouse.writeOffsToDeliver) > 0 && (
         <div className="mb-6">
           <div className="text-xs uppercase font-bold mb-2" style={{ color: 'var(--mc-muted)', letterSpacing: '0.08em' }}>
             🏭 Работа склада — сегодня
@@ -5775,8 +5832,8 @@ function DashboardHome({ ctx, title }) {
         })}
       </div>
 
-      {/* Быстрые действия для админа */}
-      {stats.isAdmin && !hidden('w_quick') && (
+      {/* Быстрые действия для админа (ТК) */}
+      {(userBase !== 'all' ? userBase === 'tk' : viewBase === 'tk') && stats.isAdmin && !hidden('w_quick') && (
         <div className="flex flex-wrap gap-2 mb-6">
           <ActionPill label="Создать заявку"      onClick={() => navigate({ name: 'create_order' })} icon={Plus} />
           <ActionPill label="Быстрая B2B"         onClick={() => navigate({ name: 'create_quick' })} icon={Sparkles} />
@@ -5785,8 +5842,8 @@ function DashboardHome({ ctx, title }) {
         </div>
       )}
 
-      {/* Список последних заявок, если есть */}
-      {!hidden('w_recent') && stats.orders.active > 0 && (has('orders_view_all') || has('orders_view_own')) && (
+      {/* Список последних заявок (ТК) */}
+      {(userBase !== 'all' ? userBase === 'tk' : viewBase === 'tk') && !hidden('w_recent') && stats.orders.active > 0 && (has('orders_view_all') || has('orders_view_own')) && (
         <>
           <h2 className="display-font text-xl mb-3" style={{ color: 'var(--mc-text)' }}>Последние активные заявки</h2>
           <OrdersList orders={db.orders.filter(o => o.status !== 'archived' && o.status !== 'cancelled').slice(0, 5)} ctx={ctx} />
