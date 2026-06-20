@@ -521,7 +521,7 @@ function CoffeeTasksScreen({ ctx }) {
                   onToggle={item.type === 'once' ? () => toggleDone(item.task.id) : () => toggleScheduleDone(item.task)}
                   onView={() => setDetailItem(item)}
                   onEdit={item.type === 'once' ? () => { setEditTask(item.task); setShowAdd(true); } : null}
-                  onDelete={item.type === 'once' ? () => deleteTask(item.task.id) : null}
+                  onDelete={isAdmin && item.type === 'once' ? () => deleteTask(item.task.id) : null}
                 />
               ))}
             </div>
@@ -698,7 +698,8 @@ function TaskDetailModal({ item, db, currentUser, selectedDate, onConfirm, onRej
   const userName = (u) => u ? (u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || 'Без имени') : null;
 
   const statusLabel = awaiting ? 'Ожидает подтверждения' : done ? (task.status === 'confirmed' ? 'Подтверждено' : 'Выполнено') : 'Не выполнено';
-  const statusColor = awaiting ? '#F59E0B' : done ? '#22C55E' : 'var(--mc-muted)';
+  const statusColor = awaiting ? '#F59E0B' : done ? '#22C55E' : '#64748B';
+  const assignee = task.assignee_id && (db.users || []).find(u => u.id === task.assignee_id);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
@@ -709,7 +710,7 @@ function TaskDetailModal({ item, db, currentUser, selectedDate, onConfirm, onRej
         </div>
 
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-semibold" style={{ background: statusColor + '20', color: statusColor }}>
               {awaiting ? <AlertCircle size={12} /> : done ? <CheckCircle size={12} /> : null}
               {statusLabel}
@@ -759,6 +760,21 @@ function TaskDetailModal({ item, db, currentUser, selectedDate, onConfirm, onRej
               className="flex items-center gap-2 text-sm" style={{ color: '#0891B2' }}>
               <ExternalLink size={14} /> {task.link_label || task.link_url}
             </a>
+          )}
+
+          {assignee && (
+            <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--mc-text)' }}>
+              <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: '#297b8a' }}>
+                {(userName(assignee) || '?').charAt(0)}
+              </div>
+              Исполнитель: {userName(assignee)}
+            </div>
+          )}
+
+          {task.date && (
+            <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
+              Дата: {fmtDateRu(task.date)}
+            </div>
           )}
 
           <div className="pt-2 border-t space-y-1" style={{ borderColor: 'var(--mc-border)' }}>
