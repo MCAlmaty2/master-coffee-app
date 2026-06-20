@@ -392,10 +392,10 @@ const STATUS = {
 const STATUS_ORDER = ['new', 'in_work', 'invoiced', 'paid', 'shipped'];
 
 // Поток статусов зависит от способа оплаты.
-// «При получении» (on_delivery) и «Отсрочка платежа» (deferred_payment):
+// «При получении» (on_delivery), «Отсрочка платежа» (deferred_payment), «Оплачено Каспи/Карта» (paid_kaspi_card):
 // счёт/оплата пропускаются → Новая → В работе → Отгружен.
 function statusFlow(order) {
-  if (order?.payment_method === 'on_delivery' || order?.payment_method === 'deferred_payment') return ['new', 'in_work', 'shipped'];
+  if (order?.payment_method === 'on_delivery' || order?.payment_method === 'deferred_payment' || order?.payment_method === 'paid_kaspi_card') return ['new', 'in_work', 'shipped'];
   return STATUS_ORDER;
 }
 
@@ -6709,6 +6709,7 @@ function OrderDetailScreen({ ctx, orderId }) {
               <div className="flex items-center gap-2">
                 <Banknote size={16} style={{ color: '#297b8a' }} />
                 <span className="font-semibold" style={{ color: 'var(--mc-text)' }}>
+                  {order.payment_method === 'paid_kaspi_card'   && 'Оплачено Каспи/Карта'}
                   {order.payment_method === 'on_delivery'       && 'При получении'}
                   {order.payment_method === 'kaspi_remote'      && 'Удалённый счёт Kaspi'}
                   {order.payment_method === 'prepay_invoice'    && 'Счёт на предоплату'}
@@ -6716,6 +6717,7 @@ function OrderDetailScreen({ ctx, orderId }) {
                 </span>
               </div>
               <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>
+                {order.payment_method === 'paid_kaspi_card'   && 'Уже оплачено. Счёт и оплата пропускаются — сразу отгрузка.'}
                 {order.payment_method === 'on_delivery'       && 'Оплата при выдаче. Можно сразу отгружать.'}
                 {order.payment_method === 'kaspi_remote'      && 'Клиент оплачивает по ссылке/QR. Отгружать после подтверждения оплаты.'}
                 {order.payment_method === 'prepay_invoice'    && 'Отгрузка только после поступления денег по счёту.'}
@@ -7596,6 +7598,7 @@ function CreateOrderScreen({ ctx }) {
             <Card title="Способ оплаты">
               <div className="space-y-2">
                 {[
+                  { v: 'paid_kaspi_card', label: 'Оплачено Каспи/Карта', desc: 'Уже оплачено — сразу отгрузка' },
                   { v: 'on_delivery', label: 'При получении', desc: 'Оплата при выдаче' },
                   { v: 'kaspi_remote', label: 'Kaspi счёт', desc: 'По ссылке/QR' },
                   ...(form.delivery_method === 'pickup' ? [{ v: 'deferred_payment', label: 'Отсрочка платежа', desc: 'Оплата позже (счёт и оплата пропускаются)' }] : []),
@@ -7774,6 +7777,9 @@ function CreateQuickScreen({ ctx }) {
       result.client_type = 'legal';
       det.add('payment_method');
       det.add('client_type');
+    } else if (/оплачено?\s+(каспи|kaspi|карт)/i.test(text)) {
+      result.payment_method = 'paid_kaspi_card';
+      det.add('payment_method');
     } else if (/kaspi|каспи|qr|ссылку?|удалённый\s+счёт/i.test(text)) {
       result.payment_method = 'kaspi_remote';
       det.add('payment_method');
@@ -8119,6 +8125,7 @@ function CreateQuickScreen({ ctx }) {
     }
 
     lines.push(`Получение: ${formSnapshot.delivery_method === 'pickup' ? '🏪 Самовывоз' : '🚚 Доставка'}`);
+    if (formSnapshot.payment_method === 'paid_kaspi_card') lines.push('💳 Оплачено Каспи/Карта');
     if (formSnapshot.address && formSnapshot.address !== '—') lines.push(`Адрес: ${formSnapshot.address}`);
     if (formSnapshot.phone && formSnapshot.phone !== '+70000000000') lines.push(`Тел.: ${prettyPhone(formSnapshot.phone)}`);
     if (formSnapshot.delivery_method === 'pickup' && order.pickup_code) {
@@ -8343,6 +8350,7 @@ function CreateQuickScreen({ ctx }) {
               </label>
               <div className="grid grid-cols-1 gap-1.5">
                 {[
+                  { v: 'paid_kaspi_card',  label: 'Оплачено Каспи/Карта',   hint: 'Клиент уже оплатил. Счёт и оплата пропускаются.' },
                   { v: 'on_delivery',      label: 'При получении',           hint: 'Оплата в момент выдачи (физ./юр. с отсрочкой)' },
                   { v: 'kaspi_remote',     label: 'Удалённый счёт Kaspi',    hint: 'Клиент оплачивает по ссылке/QR до доставки' },
                   { v: 'prepay_invoice',   label: 'Счёт на предоплату',      hint: 'Доставка после поступления денег' },
