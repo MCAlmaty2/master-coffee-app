@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, Check,
   MapPin, ListTodo, Sparkles, Trash2, X,
-  Repeat, Clock, Link, ExternalLink,
+  Repeat, Clock, ExternalLink, CheckCircle, AlertCircle,
+  Eye, Building2,
 } from 'lucide-react';
 import { deleteRow } from '../supabase/sync';
 import { supabase } from '../supabase/client';
@@ -75,6 +76,13 @@ function scheduleCompletionKey(task, iso) {
 }
 
 const COFFEE_ROLES = ['coffee_manager', 'deputy_coffee_manager', 'chef_barista', 'chef_cook'];
+
+const COFFEE_SHOPS = [
+  { key: 'seifullina_597', address: 'Сейфуллина 597В/1', name: 'MC Seifullina' },
+  { key: 'zhandosova_58',  address: 'Жандосова 58/1',     name: 'MC Aimanova' },
+  { key: 'seifullina_416', address: 'Сейфуллина 416',     name: 'MC Meredian' },
+  { key: 'rozybakieva',    address: 'Розыбакиева 247а',   name: 'MC Mega Rozybakieva' },
+];
 
 const TWI_TEMPLATES = {
   coffee_manager: {
@@ -159,6 +167,7 @@ function CoffeeTasksScreen({ ctx }) {
   const [showScheduleAdd, setShowScheduleAdd] = useState(false);
   const [showScheduleManage, setShowScheduleManage] = useState(false);
   const [editTask, setEditTask] = useState(null);
+  const [detailItem, setDetailItem] = useState(null);
 
   const isAdmin = currentUser.role === 'admin' || currentUser.role === 'director';
 
@@ -219,7 +228,12 @@ function CoffeeTasksScreen({ ctx }) {
   // --- Объединённый список для подсчёта ---
   const combinedItems = useMemo(() => {
     const items = [];
-    dayTasks.forEach(t => items.push({ type: 'once', task: t, done: t.status === 'done', assigneeId: t.assignee_id }));
+    dayTasks.forEach(t => items.push({
+      type: 'once', task: t,
+      done: t.status === 'done' || t.status === 'confirmed',
+      awaiting: t.status === 'awaiting_confirmation',
+      assigneeId: t.assignee_id,
+    }));
     coffeeScheduleTasks.forEach(t => {
       if (t.target_user_id) {
         items.push({ type: 'schedule', task: t, done: isScheduleDone(t), assigneeId: t.target_user_id });
@@ -257,10 +271,37 @@ function CoffeeTasksScreen({ ctx }) {
       ...d,
       coffeeTasks: (d.coffeeTasks || []).map(t => {
         if (t.id !== taskId) return t;
-        const isDone = t.status === 'done';
-        return { ...t, status: isDone ? 'pending' : 'done', completed_at: isDone ? null : new Date().toISOString() };
+        if (t.status === 'done' || t.status === 'confirmed') {
+          return { ...t, status: 'pending', completed_at: null, confirmed_by: null, confirmed_at: null };
+        }
+        if (t.requires_confirmation) {
+          return { ...t, status: 'awaiting_confirmation', completed_at: new Date().toISOString(), completed_by: currentUser.id };
+        }
+        return { ...t, status: 'done', completed_at: new Date().toISOString() };
       }),
     }));
+  };
+
+  const confirmTask = (taskId) => {
+    setDb(d => ({
+      ...d,
+      coffeeTasks: (d.coffeeTasks || []).map(t => {
+        if (t.id !== taskId) return t;
+        return { ...t, status: 'confirmed', confirmed_by: currentUser.id, confirmed_at: new Date().toISOString() };
+      }),
+    }));
+    showToast('Задача подтверждена');
+  };
+
+  const rejectConfirmation = (taskId) => {
+    setDb(d => ({
+      ...d,
+      coffeeTasks: (d.coffeeTasks || []).map(t => {
+        if (t.id !== taskId) return t;
+        return { ...t, status: 'pending', completed_at: null, completed_by: null };
+      }),
+    }));
+    showToast('Задача отклонена — не выполнено');
   };
 
   const deleteTask = (taskId) => {
@@ -279,15 +320,29 @@ function CoffeeTasksScreen({ ctx }) {
     showToast('Регулярная задача удалена');
   };
 
-  const saveTask = (task) => {
+  const saveTask = (form) => {
+    const payload = {
+      title: form.title.trim(),
+      description: form.description?.trim() || '',
+      time_start: form.time_start || null,
+      time_end: form.time_end || null,
+      location: form.location?.trim() || '',
+      coffee_location: form.coffee_location || null,
+      link_url: form.link_url?.trim() || '',
+      link_label: form.link_label?.trim() || '',
+      category: form.category || '',
+      assignee_id: form.assignee_id,
+      date: form.date,
+      requires_confirmation: !!form.requires_confirmation,
+    };
     if (editTask) {
       setDb(d => ({
         ...d,
-        coffeeTasks: (d.coffeeTasks || []).map(t => t.id === editTask.id ? { ...t, ...task } : t),
+        coffeeTasks: (d.coffeeTasks || []).map(t => t.id === editTask.id ? { ...t, ...payload } : t),
       }));
       showToast('Задача обновлена');
     } else {
-      const newTask = { id: uid(), ...task, status: 'pending', created_by: currentUser.id, created_at: new Date().toISOString() };
+      const newTask = { id: uid(), ...payload, status: 'pending', created_by: currentUser.id, created_at: new Date().toISOString() };
       setDb(d => ({ ...d, coffeeTasks: [...(d.coffeeTasks || []), newTask] }));
       showToast('Задача добавлена');
     }
@@ -464,6 +519,7 @@ function CoffeeTasksScreen({ ctx }) {
                   item={item}
                   idx={idx}
                   onToggle={item.type === 'once' ? () => toggleDone(item.task.id) : () => toggleScheduleDone(item.task)}
+                  onView={() => setDetailItem(item)}
                   onEdit={item.type === 'once' ? () => { setEditTask(item.task); setShowAdd(true); } : null}
                   onDelete={item.type === 'once' ? () => deleteTask(item.task.id) : null}
                 />
@@ -533,60 +589,68 @@ function CoffeeTasksScreen({ ctx }) {
           onClose={() => setShowScheduleManage(false)}
         />
       )}
+
+      {detailItem && (
+        <TaskDetailModal
+          item={detailItem}
+          db={db}
+          currentUser={currentUser}
+          selectedDate={selectedDate}
+          onConfirm={detailItem.type === 'once' ? () => { confirmTask(detailItem.task.id); setDetailItem(null); } : null}
+          onReject={detailItem.type === 'once' ? () => { rejectConfirmation(detailItem.task.id); setDetailItem(null); } : null}
+          onClose={() => setDetailItem(null)}
+        />
+      )}
     </div>
   );
 }
 
 /* ── Строка задачи ── */
-function TaskRow({ item, idx, onToggle, onEdit, onDelete }) {
-  const { task, done, type } = item;
+function TaskRow({ item, idx, onToggle, onView, onEdit, onDelete }) {
+  const { task, done, type, awaiting } = item;
+  const checkBg = done ? '#22C55E' : awaiting ? '#F59E0B' : 'transparent';
+  const checkBorder = done || awaiting ? 'none' : '2px solid var(--mc-border)';
+  const shopName = task.coffee_location && COFFEE_SHOPS.find(s => s.key === task.coffee_location)?.name;
   return (
-    <div className="flex items-start gap-2 py-1.5 group">
-      <button
-        onClick={onToggle}
+    <div className="flex items-start gap-2 py-1.5">
+      <button onClick={onToggle}
         className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
-        style={{
-          background: done ? '#22C55E' : 'transparent',
-          border: done ? 'none' : '2px solid var(--mc-border)',
-        }}
-      >
+        style={{ background: checkBg, border: checkBorder }}>
         {done && <Check size={12} color="white" />}
+        {awaiting && <AlertCircle size={12} color="white" />}
       </button>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start gap-1.5">
-          <span
-            className="text-sm"
-            style={{
-              color: done ? 'var(--mc-muted)' : 'var(--mc-text)',
-              textDecoration: done ? 'line-through' : 'none',
-            }}
-          >
-            <span className="font-semibold mr-1" style={{ color: 'var(--mc-muted)' }}>{idx + 1}.</span>
-            {type === 'once' && task.time_start && (
-              <span className="text-xs mr-1" style={{ color: '#297b8a' }}>
-                {task.time_start}{task.time_end ? `–${task.time_end}` : ''}
-              </span>
-            )}
-            {type === 'schedule' && task.time_at && (
-              <span className="text-xs mr-1" style={{ color: '#0891B2' }}>{task.time_at}</span>
-            )}
-            {task.title}
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={onView}>
+        <span className="text-sm" style={{
+          color: done ? 'var(--mc-muted)' : 'var(--mc-text)',
+          textDecoration: done ? 'line-through' : 'none',
+        }}>
+          <span className="font-semibold mr-1" style={{ color: 'var(--mc-muted)' }}>{idx + 1}.</span>
+          {type === 'once' && task.time_start && (
+            <span className="text-xs mr-1" style={{ color: '#297b8a' }}>
+              {task.time_start}{task.time_end ? `–${task.time_end}` : ''}
+            </span>
+          )}
+          {type === 'schedule' && task.time_at && (
+            <span className="text-xs mr-1" style={{ color: '#0891B2' }}>{task.time_at}</span>
+          )}
+          {task.title}
+        </span>
+        {awaiting && (
+          <span className="inline-flex items-center gap-0.5 text-[10px] ml-1 px-1.5 py-0.5 rounded-full font-medium"
+            style={{ background: '#F59E0B20', color: '#F59E0B' }}>
+            <AlertCircle size={8} /> Ожидает подтверждения
           </span>
-        </div>
-        {task.description && (
-          <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>{task.description}</div>
         )}
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          {task.location && (
+          {(task.location || shopName) && (
             <span className="flex items-center gap-0.5 text-[11px]" style={{ color: 'var(--mc-muted)' }}>
-              <MapPin size={10} /> {task.location}
+              <MapPin size={10} /> {shopName || task.location}
             </span>
           )}
           {task.link_url && (
             <a href={task.link_url} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-0.5 text-[11px]"
-              style={{ color: '#0891B2' }}
-              onClick={e => e.stopPropagation()}>
+              style={{ color: '#0891B2' }} onClick={e => e.stopPropagation()}>
               <ExternalLink size={10} /> {task.link_label || 'Ссылка'}
             </a>
           )}
@@ -604,34 +668,140 @@ function TaskRow({ item, idx, onToggle, onEdit, onDelete }) {
           )}
         </div>
       </div>
-      {(onEdit || onDelete) && (
-        <div className="flex gap-1 flex-shrink-0">
-          {onEdit && (
-            <button onClick={onEdit} className="p-1 rounded" style={{ color: 'var(--mc-muted)' }}>
-              <Clock size={12} />
-            </button>
-          )}
-          {onDelete && (
-            <button onClick={onDelete} className="p-1 rounded" style={{ color: '#EB5757' }}>
-              <Trash2 size={12} />
-            </button>
-          )}
-        </div>
-      )}
+      <div className="flex gap-1 flex-shrink-0">
+        <button onClick={onView} className="p-1 rounded" style={{ color: 'var(--mc-muted)' }}>
+          <Eye size={12} />
+        </button>
+        {onEdit && (
+          <button onClick={onEdit} className="p-1 rounded" style={{ color: 'var(--mc-muted)' }}>
+            <Clock size={12} />
+          </button>
+        )}
+        {onDelete && (
+          <button onClick={onDelete} className="p-1 rounded" style={{ color: '#EB5757' }}>
+            <Trash2 size={12} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 /* ── Модалка добавления одноразовой задачи ── */
+/* ── Модалка деталей задачи ── */
+function TaskDetailModal({ item, db, currentUser, selectedDate, onConfirm, onReject, onClose }) {
+  const { task, done, type, awaiting } = item;
+  const shopObj = task.coffee_location && COFFEE_SHOPS.find(s => s.key === task.coffee_location);
+  const creator = (db.users || []).find(u => u.id === task.created_by);
+  const completedBy = task.completed_by && (db.users || []).find(u => u.id === task.completed_by);
+  const confirmedBy = task.confirmed_by && (db.users || []).find(u => u.id === task.confirmed_by);
+  const userName = (u) => u ? (u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || 'Без имени') : null;
+
+  const statusLabel = awaiting ? 'Ожидает подтверждения' : done ? (task.status === 'confirmed' ? 'Подтверждено' : 'Выполнено') : 'Не выполнено';
+  const statusColor = awaiting ? '#F59E0B' : done ? '#22C55E' : 'var(--mc-muted)';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+      <div className="w-full max-w-lg rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto" style={{ background: 'var(--mc-card)' }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-bold" style={{ color: 'var(--mc-text)' }}>{task.title}</h2>
+          <button onClick={onClose} className="p-1"><X size={20} style={{ color: 'var(--mc-muted)' }} /></button>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-semibold" style={{ background: statusColor + '20', color: statusColor }}>
+              {awaiting ? <AlertCircle size={12} /> : done ? <CheckCircle size={12} /> : null}
+              {statusLabel}
+            </span>
+            {type === 'schedule' && (
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-semibold" style={{ background: '#0891B220', color: '#0891B2' }}>
+                <Repeat size={10} /> {FREQ[task.frequency]?.label || task.frequency}
+              </span>
+            )}
+            {task.category && (
+              <span className="text-xs px-2 py-1 rounded-full font-semibold"
+                style={{ background: (CATEGORY_COLORS[task.category] || '#64748B') + '20', color: CATEGORY_COLORS[task.category] || '#64748B' }}>
+                {task.category}
+              </span>
+            )}
+          </div>
+
+          {task.description && (
+            <div>
+              <div className="text-[11px] font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Описание</div>
+              <div className="text-sm" style={{ color: 'var(--mc-text)' }}>{task.description}</div>
+            </div>
+          )}
+
+          {(task.time_start || task.time_at) && (
+            <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--mc-text)' }}>
+              <Clock size={14} style={{ color: 'var(--mc-muted)' }} />
+              {type === 'once' ? `${task.time_start || ''}${task.time_end ? ` – ${task.time_end}` : ''}` : task.time_at}
+            </div>
+          )}
+
+          {shopObj && (
+            <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--mc-text)' }}>
+              <Building2 size={14} style={{ color: 'var(--mc-muted)' }} />
+              {shopObj.name} — {shopObj.address}
+            </div>
+          )}
+          {!shopObj && task.location && (
+            <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--mc-text)' }}>
+              <MapPin size={14} style={{ color: 'var(--mc-muted)' }} />
+              {task.location}
+            </div>
+          )}
+
+          {task.link_url && (
+            <a href={task.link_url} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-2 text-sm" style={{ color: '#0891B2' }}>
+              <ExternalLink size={14} /> {task.link_label || task.link_url}
+            </a>
+          )}
+
+          <div className="pt-2 border-t space-y-1" style={{ borderColor: 'var(--mc-border)' }}>
+            {creator && <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Создал: {userName(creator)}</div>}
+            {completedBy && <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Выполнил: {userName(completedBy)}{task.completed_at ? ` · ${new Date(task.completed_at).toLocaleString('ru')}` : ''}</div>}
+            {confirmedBy && <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Подтвердил: {userName(confirmedBy)}{task.confirmed_at ? ` · ${new Date(task.confirmed_at).toLocaleString('ru')}` : ''}</div>}
+          </div>
+
+          {awaiting && onConfirm && (
+            <div className="flex gap-2 pt-2">
+              <button onClick={onConfirm}
+                className="flex-1 py-2.5 rounded-xl font-semibold text-white flex items-center justify-center gap-1"
+                style={{ background: '#22C55E' }}>
+                <CheckCircle size={16} /> Подтвердить
+              </button>
+              <button onClick={onReject}
+                className="flex-1 py-2.5 rounded-xl font-semibold text-white flex items-center justify-center gap-1"
+                style={{ background: '#EB5757' }}>
+                <X size={16} /> Отклонить
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Модалка добавления / редактирования задачи ── */
 function AddTaskModal({ task, selectedDate, assignees, currentUser, onSave, onClose }) {
   const [form, setForm] = useState({
     title: task?.title || '',
+    description: task?.description || '',
     time_start: task?.time_start || '',
     time_end: task?.time_end || '',
     location: task?.location || '',
+    coffee_location: task?.coffee_location || '',
+    link_url: task?.link_url || '',
+    link_label: task?.link_label || '',
     category: task?.category || '',
     assignee_id: task?.assignee_id || (assignees.length === 1 ? assignees[0].id : currentUser.id),
     date: task?.date || selectedDate,
+    requires_confirmation: task?.requires_confirmation || false,
   });
 
   const upd = (patch) => setForm(f => ({ ...f, ...patch }));
@@ -648,6 +818,11 @@ function AddTaskModal({ task, selectedDate, assignees, currentUser, onSave, onCl
             <input value={form.title} onChange={e => upd({ title: e.target.value })}
               className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
               style={inputStyle} placeholder="Что нужно сделать?" />
+          </Field>
+          <Field label="Описание">
+            <textarea value={form.description} onChange={e => upd({ description: e.target.value })}
+              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm resize-none"
+              style={inputStyle} placeholder="Подробности (необязательно)" rows={2} />
           </Field>
           <Field label="Исполнитель">
             <select value={form.assignee_id} onChange={e => upd({ assignee_id: e.target.value })}
@@ -669,11 +844,36 @@ function AddTaskModal({ task, selectedDate, assignees, currentUser, onSave, onCl
                 className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle} />
             </Field>
           </div>
-          <Field label="Локация">
-            <input value={form.location} onChange={e => upd({ location: e.target.value })}
-              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
-              style={inputStyle} placeholder="Точка / адрес" />
+          <Field label="Точка кофейни">
+            <select value={form.coffee_location} onChange={e => upd({ coffee_location: e.target.value })}
+              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle}>
+              <option value="">— Без привязки —</option>
+              {COFFEE_SHOPS.map(s => <option key={s.key} value={s.key}>{s.name} — {s.address}</option>)}
+            </select>
           </Field>
+          {!form.coffee_location && (
+            <Field label="Или свободная локация">
+              <input value={form.location} onChange={e => upd({ location: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
+                style={inputStyle} placeholder="Адрес / место" />
+            </Field>
+          )}
+          <Field label="Ссылка (необязательно)">
+            <div className="flex gap-2">
+              <input value={form.link_url} onChange={e => upd({ link_url: e.target.value })}
+                className="flex-1 px-3 py-2.5 rounded-lg outline-none text-sm"
+                style={inputStyle} placeholder="https://..." />
+              <input value={form.link_label} onChange={e => upd({ link_label: e.target.value })}
+                className="w-24 px-3 py-2.5 rounded-lg outline-none text-sm"
+                style={inputStyle} placeholder="Текст" />
+            </div>
+          </Field>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={form.requires_confirmation}
+              onChange={e => upd({ requires_confirmation: e.target.checked })}
+              className="w-4 h-4 rounded accent-[#297b8a]" />
+            <span className="text-sm" style={{ color: 'var(--mc-text)' }}>Требует подтверждения замом</span>
+          </label>
         </div>
         <button onClick={() => form.title.trim() && onSave(form)}
           className="w-full mt-4 py-3 rounded-xl font-semibold text-white"
