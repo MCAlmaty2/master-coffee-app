@@ -1,18 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Search, Upload, RefreshCw, Settings, Loader2, X, FileSpreadsheet, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Settings, Loader2, X, FileSpreadsheet, Trash2 } from 'lucide-react';
 import { supabase } from '../supabase/client';
 import * as XLSX from 'xlsx';
 
 const BU_NAMES = ['ТОО', 'MCR', 'MC', 'MCF'];
-
-function getMonday(weeksAgo = 0) {
-  const now = new Date();
-  now.setHours(now.getHours() + 5);
-  const day = now.getDay();
-  const diff = day === 0 ? 6 : day - 1;
-  now.setDate(now.getDate() - diff - weeksAgo * 7);
-  return `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}`;
-}
 
 function fmtMoney(val) {
   const num = Number(val);
@@ -82,7 +73,6 @@ export default function DebtorScreen({ ctx }) {
   const isAdmin = currentUser.role === 'admin' || currentUser.role === 'director';
 
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [data, setData] = useState({});
   const [activeBU, setActiveBU] = useState('ТОО');
@@ -90,10 +80,7 @@ export default function DebtorScreen({ ctx }) {
   const [weekLabel, setWeekLabel] = useState('');
   const [weeks, setWeeks] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [sheetUrl, setSheetUrl] = useState(db.telegramSettings?.debtor_sheet_url || '');
   const fileRef = useRef(null);
-
-  const savedUrl = db.telegramSettings?.debtor_sheet_url;
 
   const loadData = useCallback(async (targetWeek) => {
     setLoading(true);
@@ -131,46 +118,6 @@ export default function DebtorScreen({ ctx }) {
 
   useEffect(() => { loadData(); loadWeeks(); }, [loadData, loadWeeks]);
 
-  async function syncFromGoogle() {
-    if (!savedUrl) { showToast('Сначала укажите URL таблицы'); return; }
-    setSyncing(true);
-    try {
-      let imported = 0;
-      let weekDate = '';
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const monday = getMonday(attempt);
-        const sheets = BU_NAMES.map(bu => `${bu} ${monday}`);
-        const { data: result, error: fnErr } = await supabase.functions.invoke('fetch-google-sheet', {
-          body: { url: savedUrl, sheets },
-        });
-        if (fnErr) throw new Error(fnErr.message || 'Ошибка запроса');
-        if (!result?.ok) throw new Error(result?.error || 'Неизвестная ошибка');
-
-        let hasAny = false;
-        for (let i = 0; i < BU_NAMES.length; i++) {
-          const rows = result.data[sheets[i]];
-          if (rows?.error || !Array.isArray(rows) || rows.length < 2) continue;
-          const clients = parseRows(rows);
-          if (!clients.length) continue;
-          hasAny = true;
-          weekDate = monday;
-          imported += await saveToSupabase(BU_NAMES[i], monday, clients, currentUser.id);
-        }
-        if (hasAny) break;
-      }
-      if (imported === 0) {
-        showToast('Нет данных за последние 3 недели');
-      } else {
-        showToast(`Синхронизировано: ${imported} клиентов (${weekDate})`);
-        loadData(weekDate);
-        loadWeeks();
-      }
-    } catch (err) {
-      showToast('Ошибка синхронизации: ' + err.message);
-    }
-    setSyncing(false);
-  }
-
   async function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -200,20 +147,6 @@ export default function DebtorScreen({ ctx }) {
     }
     setUploading(false);
     if (fileRef.current) fileRef.current.value = '';
-  }
-
-  function saveSettings() {
-    const url = sheetUrl.trim();
-    if (url && !url.includes('docs.google.com/spreadsheets')) {
-      showToast('Вставьте ссылку на Google таблицу');
-      return;
-    }
-    setDb(d => ({
-      ...d,
-      telegramSettings: { ...d.telegramSettings, debtor_sheet_url: url },
-    }));
-    supabase.from('telegram_settings').update({ debtor_sheet_url: url }).eq('id', 1);
-    showToast(url ? 'URL сохранён' : 'URL удалён');
   }
 
   async function deleteWeek(wd) {
@@ -246,12 +179,6 @@ export default function DebtorScreen({ ctx }) {
           <div className="font-semibold" style={{ color: 'var(--mc-text)' }}>Дебиторка</div>
           {weekLabel && <div className="text-xs" style={{ color: '#64748B' }}>Данные на {weekLabel}</div>}
         </div>
-        {isAdmin && savedUrl && (
-          <button onClick={syncFromGoogle} className="p-2 rounded-lg" style={{ color: '#297B8A' }}
-            disabled={syncing}>
-            <RefreshCw size={18} className={syncing ? 'animate-spin' : ''} />
-          </button>
-        )}
         {isAdmin && (
           <button onClick={() => setShowModal(true)} className="p-2 rounded-lg" style={{ color: '#64748B' }}>
             <Settings size={18} />
@@ -270,46 +197,27 @@ export default function DebtorScreen({ ctx }) {
               <button onClick={() => setShowModal(false)}><X size={18} style={{ color: '#64748B' }} /></button>
             </div>
 
-            {/* Google Sheets URL */}
-            <div className="mb-4">
-              <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--mc-text)' }}>Google Sheets (авто-синк)</div>
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 px-3 py-2 rounded-lg border text-sm"
-                  style={{ borderColor: 'var(--mc-border)', color: 'var(--mc-text)', background: 'var(--mc-bg)' }}
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                  value={sheetUrl}
-                  onChange={e => setSheetUrl(e.target.value)}
-                />
-                <button onClick={saveSettings}
-                  className="px-3 py-2 rounded-lg text-sm text-white"
-                  style={{ background: '#297B8A' }}>OK</button>
+            {/* Auto sync info */}
+            <div className="mb-4 rounded-lg p-3" style={{ background: 'var(--mc-bg)', border: '1px solid var(--mc-border)' }}>
+              <div className="text-xs font-medium mb-1" style={{ color: 'var(--mc-text)' }}>Авто-синхронизация (Apps Script)</div>
+              <div className="text-xs space-y-0.5" style={{ color: '#64748B' }}>
+                <p>Данные подтягиваются из Google таблицы автоматически каждые 10 минут.</p>
+                <p>Листы: <code className="px-1 rounded" style={{ background: 'var(--mc-surface)' }}>ТОО ДД.ММ</code>,{' '}
+                  <code className="px-1 rounded" style={{ background: 'var(--mc-surface)' }}>MCR ДД.ММ</code>,{' '}
+                  <code className="px-1 rounded" style={{ background: 'var(--mc-surface)' }}>MC ДД.ММ</code>,{' '}
+                  <code className="px-1 rounded" style={{ background: 'var(--mc-surface)' }}>MCF ДД.ММ</code></p>
               </div>
-              <div className="text-xs mt-1.5 space-y-0.5" style={{ color: '#64748B' }}>
-                <p>Таблица должна быть доступна по ссылке (Поделиться → Все у кого есть ссылка).</p>
-                <p>Листы: <code className="px-1 rounded" style={{ background: 'var(--mc-bg)' }}>ТОО ДД.ММ</code>,{' '}
-                  <code className="px-1 rounded" style={{ background: 'var(--mc-bg)' }}>MCR ДД.ММ</code> и т.д.</p>
-                <p>API-ключ хранится в Supabase Secrets (GOOGLE_API_KEY).</p>
-              </div>
-              {savedUrl && (
-                <button onClick={() => { setShowModal(false); syncFromGoogle(); }}
-                  className="w-full mt-2 py-2 rounded-lg text-sm text-white flex items-center justify-center gap-2"
-                  style={{ background: '#297B8A' }} disabled={syncing}>
-                  <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-                  Синхронизировать из Google
-                </button>
-              )}
             </div>
 
             {/* Divider */}
             <div className="flex items-center gap-3 mb-4">
               <div className="flex-1 border-t" style={{ borderColor: 'var(--mc-border)' }} />
-              <div className="text-xs" style={{ color: '#94A3B8' }}>или</div>
+              <div className="text-xs" style={{ color: '#94A3B8' }}>или вручную</div>
               <div className="flex-1 border-t" style={{ borderColor: 'var(--mc-border)' }} />
             </div>
 
             {/* File upload */}
-            <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--mc-text)' }}>Загрузить файл вручную</div>
+            <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--mc-text)' }}>Загрузить .xlsx файл</div>
             <label className="block rounded-xl p-5 text-center cursor-pointer border-2 border-dashed"
               style={{ borderColor: 'var(--mc-border)', color: '#64748B' }}>
               <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile}
