@@ -18,6 +18,7 @@ import { ScheduleScreen, ScheduleHomeBanner } from './screens/ScheduleScreen';
 import { GiftsScreen, GiftsHomeBanner } from './screens/GiftsScreen';
 import { CoffeeShipmentsScreen, CoffeeShipmentsHomeTile } from './screens/CoffeeShipmentsScreen';
 import CoffeeTasksScreen from './screens/CoffeeTasksScreen';
+import DebtorScreen, { DebtorHomeTile } from './screens/DebtorScreen';
 import HRCalendarScreen from './screens/HRCalendarScreen';
 import {
   fetchAllUsers,
@@ -237,10 +238,12 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, but
   if (recipient?.telegram_id && recipient.tg_notif_enabled !== false && tgs?.bot_token && categoryAllowed) {
     const tgText = `🔔 <b>${title}</b>${body ? `\n${body}` : ''}`;
     const invokeBody = { chat_id: recipient.telegram_id, text: tgText };
-    // Inline-кнопка "Открыть заявку" — только если передан button_url
-    if (button_url && button_text) {
+    if (button_url) {
       invokeBody.reply_markup = {
-        inline_keyboard: [[{ text: button_text, web_app: { url: button_url } }]],
+        inline_keyboard: [[
+          { text: '📱 Mobile', web_app: { url: button_url } },
+          { text: '🖥 Web', url: button_url },
+        ]],
       };
     }
     try {
@@ -484,6 +487,8 @@ const PERMISSIONS = {
   coffee_shipments_pay: { group: 'Кофейни', label: 'Вносить оплату в реестре кофеен' },
   coffee_tasks_view:    { group: 'Кофейни', label: 'Видеть задачник кофеен' },
   coffee_tasks_edit:    { group: 'Кофейни', label: 'Создавать и редактировать задачи кофеен' },
+  // Дебиторка
+  debtor_view:          { group: 'Финансы', label: 'Видеть дебиторскую задолженность' },
   // HR
   hr_calendar_view:     { group: 'HR', label: 'Видеть HR-календарь (отпуска и ДР)' },
   hr_vacation_manage:   { group: 'HR', label: 'Добавлять и редактировать отпуска' },
@@ -506,19 +511,19 @@ function defaultPermissionsFor(roleKey) {
       // admin всё равно имеет всё, но для согласованности — все права
       return Object.keys(PERMISSIONS);
     case 'director':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'debtor_view'];
     case 'senior_manager':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'debtor_view'];
     case 'courier':
       return ['delivery_courier'];
     case 'b2b':
-      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'gift_create'];
+      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'gift_create', 'debtor_view'];
     case 'sales':
-      return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'gift_create'];
+      return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'gift_create', 'debtor_view'];
     case 'warehouse':
       return ['orders_view_all', 'orders_change_status', 'warehouse_pickup', 'grind_fulfill', 'grind_view_all'];
     case 'cashier':
-      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay', 'gift_create'];
+      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay', 'gift_create', 'debtor_view'];
     case 'barista':
     case 'technician':
       return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create', 'gift_create'];
@@ -1130,6 +1135,7 @@ function App() {
               topics_enabled: tgRow.topics_enabled || d.telegramSettings?.topics_enabled || {},
               templates:      tgRow.templates      || d.telegramSettings?.templates      || {},
               app_url:        tgRow.app_url        || d.telegramSettings?.app_url        || 'https://master-coffee-app.vercel.app',
+              debtor_sheet_url: tgRow.debtor_sheet_url || d.telegramSettings?.debtor_sheet_url || '',
             };
           }
           return merged;
@@ -1205,6 +1211,7 @@ function App() {
               topics_enabled: data.topics_enabled || d.telegramSettings?.topics_enabled || {},
               templates:      data.templates      || d.telegramSettings?.templates      || {},
               app_url:        data.app_url        || d.telegramSettings?.app_url        || 'https://master-coffee-app.vercel.app',
+              debtor_sheet_url: data.debtor_sheet_url || d.telegramSettings?.debtor_sheet_url || '',
             },
           }));
         }
@@ -3108,6 +3115,7 @@ function App() {
       topics_enabled: merged.topics_enabled || {},
       templates:      merged.templates      || {},
       app_url:        merged.app_url        || 'https://master-coffee-app.vercel.app',
+      debtor_sheet_url: merged.debtor_sheet_url || '',
       updated_at:     new Date().toISOString(),
     })).catch(e => { throw e; });
   };
@@ -4560,6 +4568,13 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     }
     if (coffeeItems.length > 0) groups.push({ title: 'Кофейни', items: coffeeItems, collapsible: true, base: 'coffeeshop' });
 
+    // ── ДЕБИТОРКА ────────────────────────────
+    if (hasPermission(db, currentUser, 'debtor_view')) {
+      groups.push({ title: 'Финансы', items: [
+        { id: 'debtors', label: 'Дебиторка', icon: Wallet },
+      ], collapsible: true, base: 'tk' });
+    }
+
     // ── HR-КАЛЕНДАРЬ (отпуска и дни рождения) ────────────────────
     if (hasPermission(db, currentUser, 'hr_calendar_view')) {
       groups.push({ title: 'HR', items: [
@@ -5076,6 +5091,8 @@ function Screen({ ctx }) {
     // ─── Кофейни ───
     case 'coffee_shipments': return <CoffeeShipmentsScreen ctx={ctx} />;
     case 'coffee_tasks': return <CoffeeTasksScreen ctx={ctx} />;
+    // ─── Дебиторка ───
+    case 'debtors': return <DebtorScreen ctx={ctx} />;
     // ─── HR-календарь (отпуска и ДР) ───
     case 'hr_calendar': return <HRCalendarScreen ctx={ctx} />;
     // ─── Подарки клиентам ───
@@ -5392,6 +5409,7 @@ function HomeCustomizeScreen({ ctx }) {
 
   const items = [
     { key: 'w_sales',    label: '📊 Выполнение плана',         show: () => true, section: 'Блоки' },
+    { key: 'w_debtor',  label: '💳 Дебиторка',                show: () => has('debtor_view'), section: 'Блоки' },
     { key: 'w_shipment', label: '📦 Реестр отгрузок (сводка)', show: () => has('shipment_view'), section: 'Блоки' },
     { key: 'w_mtasks',   label: '📌 Вопросы / поручения',       show: () => isMgr, section: 'Блоки' },
     { key: 'w_tastings', label: '🍵 Дегустации понедельно',     show: () => has('tasks_view_own') || has('tasks_calendar_all'), section: 'Блоки' },
@@ -5642,6 +5660,16 @@ function DashboardHome({ ctx, title }) {
       highlight: todayTasks.length - doneTasks > 0,
     });
   }
+  // Дебиторка
+  if (has('debtor_view')) {
+    tiles.push({
+      key: 'debtors', base: 'tk', icon: Wallet, label: 'Дебиторка',
+      value: '₸',
+      hint: 'задолженность клиентов',
+      color: '#DC2626',
+      go: () => navigate({ name: 'debtors' }),
+    });
+  }
   // Только для админа
   if (stats.isAdmin) {
     tiles.push({
@@ -5706,6 +5734,7 @@ function DashboardHome({ ctx, title }) {
         {(hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
           || hasPermission(db, currentUser, 'gift_process') || currentUser.role === 'warehouse') && <GiftsHomeBanner ctx={ctx} />}
         {!hidden('w_sales') && <SalesReportHomeTile ctx={ctx} />}
+        {!hidden('w_debtor') && hasPermission(db, currentUser, 'debtor_view') && <DebtorHomeTile ctx={ctx} />}
         {!hidden('w_shipment') && <ShipmentRegistryHomeTile ctx={ctx} />}
         {!hidden('w_mtasks') && <ManagerTasksHomeTile ctx={ctx} />}
         {!hidden('w_tastings') && <TastingWeeklyTile ctx={ctx} />}
