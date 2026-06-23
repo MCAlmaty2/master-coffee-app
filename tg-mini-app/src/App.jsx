@@ -214,9 +214,11 @@ async function sendPrivateTelegram(user, text) {
 
 // Создать in-app уведомление + fire-and-forget личный Telegram получателю.
 // button_url / button_text — опционально: добавляет inline-кнопку под сообщением (web_app).
-function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, button_url, button_text }) {
+function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, button_url, button_text, scope }) {
   const recipient = db?.users?.find(u => u.id === recipient_id);
-  if (COFFEESHOP_ROLES.includes(recipient?.role)) return null;
+  const isCoffeeUser = COFFEESHOP_ROLES.includes(recipient?.role);
+  if (scope === 'coffeeshop' && !isCoffeeUser) return null;
+  if (scope !== 'coffeeshop' && isCoffeeUser) return null;
   const notif = {
     id: uid(),
     recipient_id,
@@ -224,12 +226,12 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, but
     body,
     at: new Date().toISOString(),
     read: false,
+    ...(scope     != null ? { scope }     : {}),
     ...(link_kind != null ? { link_kind } : {}),
     ...(link_id   != null ? { link_id }   : {}),
   };
   const tgs       = db?.telegramSettings;
-  // Только важные категории идут в личный TG: списания, подарки, задачи, поручения, HR, доступ
-  const TG_DM_ALLOWED = new Set(['writeoff', 'gift', 'task', 'manager_task', 'hr', 'access', 'general']);
+  const TG_DM_ALLOWED = new Set(['writeoff', 'gift', 'task', 'manager_task', 'hr', 'access', 'general', 'coffee_task']);
   const category = link_kind || 'general';
   const prefs = recipient?.tg_notif_prefs || {};
   const categoryAllowed = prefs[category] !== false && TG_DM_ALLOWED.has(category);
@@ -10091,10 +10093,10 @@ function TaskDetailScreen({ ctx, taskId }) {
   const task = db.tasks.find(t => t.id === taskId);
   if (!task) return <div className="p-6">Задача не найдена</div>;
 
-  // Доступ к деталям: только постановщик, исполнитель или admin
   const canView = currentUser.role === 'admin'
     || task.created_by === currentUser.id
-    || task.assignee_id === currentUser.id;
+    || task.assignee_id === currentUser.id
+    || ['director', 'manager', 'senior_manager', 'b2b'].includes(currentUser.role);
 
   if (!canView) {
     return (
@@ -14288,8 +14290,13 @@ function NotificationsScreen({ ctx }) {
   const { db, currentUser, navigate, markNotificationRead, markAllNotificationsRead, clearReadNotifications } = ctx;
   const [showRead, setShowRead] = useState(false);
 
-  const all = db.notifications.filter(n => n.recipient_id === currentUser.id)
-    .sort((a, b) => new Date(b.at) - new Date(a.at));
+  const userBase = getUserBase(currentUser);
+  const all = db.notifications.filter(n => {
+    if (n.recipient_id !== currentUser.id) return false;
+    if (userBase === 'all') return true;
+    if (userBase === 'coffeeshop') return n.scope === 'coffeeshop';
+    return n.scope !== 'coffeeshop';
+  }).sort((a, b) => new Date(b.at) - new Date(a.at));
   const unread = all.filter(n => !n.read);
   const read = all.filter(n => n.read);
   const shown = showRead ? all : unread;
@@ -14306,6 +14313,7 @@ function NotificationsScreen({ ctx }) {
         case 'contract': return navigate({ name: 'contract_detail', contractId: n.link_id });
         case 'shipment': return navigate({ name: 'shipment_registry' });
         case 'manager_task': return navigate({ name: 'manager_tasks' });
+        case 'coffee_task': return navigate({ name: 'coffee_tasks' });
         case 'access':   return navigate({ name: 'admin_requests' });
         default: return;
       }

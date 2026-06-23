@@ -3,7 +3,7 @@ import {
   ChevronLeft, ChevronRight, Plus, Check,
   MapPin, ListTodo, Sparkles, Trash2, X,
   Repeat, Clock, ExternalLink, CheckCircle, AlertCircle,
-  Eye, Building2,
+  Eye, Building2, Users,
 } from 'lucide-react';
 import { deleteRow } from '../supabase/sync';
 import { supabase } from '../supabase/client';
@@ -160,7 +160,7 @@ const CATEGORY_COLORS = {
 };
 
 function CoffeeTasksScreen({ ctx }) {
-  const { db, setDb, currentUser, goBack, showToast } = ctx;
+  const { db, setDb, currentUser, goBack, showToast, notify } = ctx;
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [showAdd, setShowAdd] = useState(false);
   const [showTwi, setShowTwi] = useState(false);
@@ -267,9 +267,10 @@ function CoffeeTasksScreen({ ctx }) {
   const totalCount = combinedItems.length;
 
   const toggleDone = (taskId) => {
-    setDb(d => ({
-      ...d,
-      coffeeTasks: (d.coffeeTasks || []).map(t => {
+    const task = (db.coffeeTasks || []).find(t => t.id === taskId);
+    setDb(d => {
+      const updated = { ...d };
+      updated.coffeeTasks = (d.coffeeTasks || []).map(t => {
         if (t.id !== taskId) return t;
         if (t.status === 'done' || t.status === 'confirmed') {
           return { ...t, status: 'pending', completed_at: null, confirmed_by: null, confirmed_at: null };
@@ -278,8 +279,17 @@ function CoffeeTasksScreen({ ctx }) {
           return { ...t, status: 'awaiting_confirmation', completed_at: new Date().toISOString(), completed_by: currentUser.id };
         }
         return { ...t, status: 'done', completed_at: new Date().toISOString() };
-      }),
-    }));
+      });
+      if (task && task.requires_confirmation && task.status === 'pending' && task.created_by !== currentUser.id) {
+        const n = notify({
+          recipient_id: task.created_by, title: '✅ Задача выполнена',
+          body: `${task.title} — ожидает подтверждения`,
+          link_kind: 'coffee_task', link_id: taskId, scope: 'coffeeshop',
+        });
+        if (n) updated.notifications = [...(d.notifications || []), n];
+      }
+      return updated;
+    });
   };
 
   const confirmTask = (taskId) => {
@@ -321,7 +331,7 @@ function CoffeeTasksScreen({ ctx }) {
   };
 
   const saveTask = (form) => {
-    const payload = {
+    const base = {
       title: form.title.trim(),
       description: form.description?.trim() || '',
       time_start: form.time_start || null,
@@ -331,20 +341,40 @@ function CoffeeTasksScreen({ ctx }) {
       link_url: form.link_url?.trim() || '',
       link_label: form.link_label?.trim() || '',
       category: form.category || '',
-      assignee_id: form.assignee_id,
       date: form.date,
       requires_confirmation: !!form.requires_confirmation,
     };
+    const ids = form.assignee_ids || [form.assignee_id];
     if (editTask) {
       setDb(d => ({
         ...d,
-        coffeeTasks: (d.coffeeTasks || []).map(t => t.id === editTask.id ? { ...t, ...payload } : t),
+        coffeeTasks: (d.coffeeTasks || []).map(t => t.id === editTask.id ? { ...t, ...base, assignee_id: ids[0] } : t),
       }));
       showToast('Задача обновлена');
     } else {
-      const newTask = { id: uid(), ...payload, status: 'pending', created_by: currentUser.id, created_at: new Date().toISOString() };
-      setDb(d => ({ ...d, coffeeTasks: [...(d.coffeeTasks || []), newTask] }));
-      showToast('Задача добавлена');
+      const newTasks = ids.map(aid => ({
+        id: uid(), ...base, assignee_id: aid,
+        status: 'pending', created_by: currentUser.id, created_at: new Date().toISOString(),
+      }));
+      const notifs = [];
+      newTasks.forEach(t => {
+        if (t.assignee_id !== currentUser.id) {
+          const n = notify({
+            recipient_id: t.assignee_id,
+            title: '📋 Новая задача',
+            body: t.title + (t.description ? `\n${t.description}` : ''),
+            link_kind: 'coffee_task', link_id: t.id,
+            scope: 'coffeeshop',
+          });
+          if (n) notifs.push(n);
+        }
+      });
+      setDb(d => ({
+        ...d,
+        coffeeTasks: [...(d.coffeeTasks || []), ...newTasks],
+        ...(notifs.length ? { notifications: [...(d.notifications || []), ...notifs] } : {}),
+      }));
+      showToast(ids.length > 1 ? `Задача назначена ${ids.length} сотрудникам` : 'Задача добавлена');
     }
     setShowAdd(false);
     setEditTask(null);
@@ -497,7 +527,7 @@ function CoffeeTasksScreen({ ctx }) {
         )}
 
         {Object.entries(grouped).map(([assigneeId, items]) => (
-          <div key={assigneeId} className="rounded-xl p-3" style={{ background: 'var(--mc-card)', border: '1px solid var(--mc-border)' }}>
+          <div key={assigneeId} className="rounded-xl p-3" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
             <div className="flex items-center gap-2 mb-2 pb-2" style={{ borderBottom: '1px solid var(--mc-border)' }}>
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
                 style={{ background: '#297b8a' }}>
@@ -563,6 +593,7 @@ function CoffeeTasksScreen({ ctx }) {
           selectedDate={selectedDate}
           assignees={allAssignees.length > 0 ? allAssignees : coffeeUsers}
           currentUser={currentUser}
+          isAdmin={isAdmin}
           onSave={saveTask}
           onClose={() => { setShowAdd(false); setEditTask(null); }}
         />
@@ -703,7 +734,7 @@ function TaskDetailModal({ item, db, currentUser, selectedDate, onConfirm, onRej
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
-      <div className="w-full max-w-lg rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto" style={{ background: 'var(--mc-card)' }} onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-lg rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto" style={{ background: 'var(--mc-surface)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-bold" style={{ color: 'var(--mc-text)' }}>{task.title}</h2>
           <button onClick={onClose} className="p-1"><X size={20} style={{ color: 'var(--mc-muted)' }} /></button>
@@ -804,7 +835,7 @@ function TaskDetailModal({ item, db, currentUser, selectedDate, onConfirm, onRej
 }
 
 /* ── Модалка добавления / редактирования задачи ── */
-function AddTaskModal({ task, selectedDate, assignees, currentUser, onSave, onClose }) {
+function AddTaskModal({ task, selectedDate, assignees, currentUser, isAdmin, onSave, onClose }) {
   const [form, setForm] = useState({
     title: task?.title || '',
     description: task?.description || '',
@@ -815,16 +846,40 @@ function AddTaskModal({ task, selectedDate, assignees, currentUser, onSave, onCl
     link_url: task?.link_url || '',
     link_label: task?.link_label || '',
     category: task?.category || '',
-    assignee_id: task?.assignee_id || (assignees.length === 1 ? assignees[0].id : currentUser.id),
+    assignee_ids: task?.assignee_id ? [task.assignee_id] : (assignees.length === 1 ? [assignees[0].id] : [currentUser.id]),
     date: task?.date || selectedDate,
     requires_confirmation: task?.requires_confirmation || false,
   });
 
   const upd = (patch) => setForm(f => ({ ...f, ...patch }));
 
+  const toggleUser = (id) => {
+    upd({ assignee_ids: form.assignee_ids.includes(id) ? form.assignee_ids.filter(x => x !== id) : [...form.assignee_ids, id] });
+  };
+  const toggleRole = (role) => {
+    const roleIds = assignees.filter(u => u.role === role).map(u => u.id);
+    const allSelected = roleIds.every(id => form.assignee_ids.includes(id));
+    if (allSelected) {
+      upd({ assignee_ids: form.assignee_ids.filter(id => !roleIds.includes(id)) });
+    } else {
+      upd({ assignee_ids: [...new Set([...form.assignee_ids, ...roleIds])] });
+    }
+  };
+
+  const roleGroups = useMemo(() => {
+    const map = {};
+    assignees.forEach(u => {
+      if (!map[u.role]) map[u.role] = [];
+      map[u.role].push(u);
+    });
+    return Object.entries(map);
+  }, [assignees]);
+
+  const canSave = form.title.trim() && form.assignee_ids.length > 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="w-full max-w-lg rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto" style={{ background: 'var(--mc-card)' }}>
+      <div className="w-full max-w-lg rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto" style={{ background: 'var(--mc-surface)' }}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-bold" style={{ color: 'var(--mc-text)' }}>{task ? 'Редактировать' : 'Новая задача'}</h2>
           <button onClick={onClose} className="p-1"><X size={20} style={{ color: 'var(--mc-muted)' }} /></button>
@@ -840,11 +895,44 @@ function AddTaskModal({ task, selectedDate, assignees, currentUser, onSave, onCl
               className="w-full px-3 py-2.5 rounded-lg outline-none text-sm resize-none"
               style={inputStyle} placeholder="Подробности (необязательно)" rows={2} />
           </Field>
-          <Field label="Исполнитель">
-            <select value={form.assignee_id} onChange={e => upd({ assignee_id: e.target.value })}
-              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle}>
-              {assignees.map(u => <option key={u.id} value={u.id}>{u.first_name} {u.last_name || ''}</option>)}
-            </select>
+          <Field label={`Исполнители (${form.assignee_ids.length})`}>
+            {isAdmin && assignees.length > 1 ? (
+              <div className="rounded-lg p-2 space-y-2" style={{ background: 'var(--mc-bg)', border: '1px solid var(--mc-border)' }}>
+                {roleGroups.map(([role, users]) => {
+                  const roleIds = users.map(u => u.id);
+                  const allChecked = roleIds.every(id => form.assignee_ids.includes(id));
+                  return (
+                    <div key={role}>
+                      <label className="flex items-center gap-2 cursor-pointer py-1">
+                        <input type="checkbox" checked={allChecked} onChange={() => toggleRole(role)}
+                          className="w-4 h-4 rounded accent-[#297b8a]" />
+                        <Users size={13} style={{ color: '#297b8a' }} />
+                        <span className="text-xs font-semibold" style={{ color: '#297b8a' }}>
+                          {TWI_TEMPLATES[role]?.label || role}
+                        </span>
+                      </label>
+                      <div className="pl-6 space-y-0.5">
+                        {users.map(u => (
+                          <label key={u.id} className="flex items-center gap-2 cursor-pointer py-0.5">
+                            <input type="checkbox" checked={form.assignee_ids.includes(u.id)}
+                              onChange={() => toggleUser(u.id)}
+                              className="w-3.5 h-3.5 rounded accent-[#297b8a]" />
+                            <span className="text-sm" style={{ color: 'var(--mc-text)' }}>
+                              {u.first_name} {u.last_name || ''}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <select value={form.assignee_ids[0] || ''} onChange={e => upd({ assignee_ids: [e.target.value] })}
+                className="w-full px-3 py-2.5 rounded-lg outline-none text-sm" style={inputStyle}>
+                {assignees.map(u => <option key={u.id} value={u.id}>{u.first_name} {u.last_name || ''}</option>)}
+              </select>
+            )}
           </Field>
           <Field label="Дата">
             <input type="date" value={form.date} onChange={e => upd({ date: e.target.value })}
@@ -891,10 +979,10 @@ function AddTaskModal({ task, selectedDate, assignees, currentUser, onSave, onCl
             <span className="text-sm" style={{ color: 'var(--mc-text)' }}>Требует подтверждения замом</span>
           </label>
         </div>
-        <button onClick={() => form.title.trim() && onSave(form)}
+        <button onClick={() => canSave && onSave(form)}
           className="w-full mt-4 py-3 rounded-xl font-semibold text-white"
-          style={{ background: form.title.trim() ? '#297b8a' : '#A8A8AE' }}>
-          {task ? 'Сохранить' : 'Добавить задачу'}
+          style={{ background: canSave ? '#297b8a' : '#A8A8AE' }}>
+          {task ? 'Сохранить' : form.assignee_ids.length > 1 ? `Добавить (${form.assignee_ids.length} чел.)` : 'Добавить задачу'}
         </button>
       </div>
     </div>
@@ -921,7 +1009,7 @@ function ScheduleTaskModal({ coffeeUsers, onSave, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="w-full max-w-lg rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto" style={{ background: 'var(--mc-card)' }}>
+      <div className="w-full max-w-lg rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto" style={{ background: 'var(--mc-surface)' }}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Repeat size={18} style={{ color: '#0891B2' }} />
@@ -1033,7 +1121,7 @@ function ScheduleManageModal({ tasks, db, onDelete, onAdd, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="w-full max-w-lg rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto" style={{ background: 'var(--mc-card)' }}>
+      <div className="w-full max-w-lg rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto" style={{ background: 'var(--mc-surface)' }}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Repeat size={18} style={{ color: '#0891B2' }} />
@@ -1101,7 +1189,7 @@ function TwiModal({ coffeeUsers, onGenerate, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="w-full max-w-lg rounded-t-2xl p-5" style={{ background: 'var(--mc-card)' }}>
+      <div className="w-full max-w-lg rounded-t-2xl p-5" style={{ background: 'var(--mc-surface)' }}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Sparkles size={18} style={{ color: '#8B5CF6' }} />
