@@ -550,8 +550,8 @@ function CoffeeTasksScreen({ ctx }) {
                   idx={idx}
                   onToggle={item.type === 'once' ? () => toggleDone(item.task.id) : () => toggleScheduleDone(item.task)}
                   onView={() => setDetailItem(item)}
-                  onEdit={item.type === 'once' ? () => { setEditTask(item.task); setShowAdd(true); } : null}
-                  onDelete={isAdmin && item.type === 'once' ? () => deleteTask(item.task.id) : null}
+                  onEdit={item.type === 'once' && (isAdmin || item.task.created_by === currentUser.id) ? () => { setEditTask(item.task); setShowAdd(true); } : null}
+                  onDelete={item.type === 'once' && (isAdmin || item.task.created_by === currentUser.id) ? () => deleteTask(item.task.id) : null}
                 />
               ))}
             </div>
