@@ -95,7 +95,7 @@ export default function DebtorScreen({ ctx }) {
         if (!latest?.length) { setLoading(false); return; }
         query = query.eq('week_date', latest[0].week_date);
       }
-      const { data: rows, error } = await query.order('balance', { ascending: false });
+      const { data: rows, error } = await query.order('actual_debt', { ascending: false });
       if (error) throw error;
       if (!rows?.length) { setData({}); setWeekLabel(''); setLoading(false); return; }
       const parsed = {};
@@ -164,7 +164,8 @@ export default function DebtorScreen({ ctx }) {
     return items.filter(r => r.client.toLowerCase().includes(q));
   }, [data, activeBU, search]);
 
-  const totalDebt = useMemo(() => filtered.reduce((s, r) => s + (Number(r.balance) || 0), 0), [filtered]);
+  const totalDebt = useMemo(() => filtered.reduce((s, r) => s + (Number(r.actual_debt) || 0), 0), [filtered]);
+  const totalSverka = useMemo(() => filtered.reduce((s, r) => s + (Number(r.reconciliation) || 0), 0), [filtered]);
   const hasData = Object.values(data).some(arr => arr.length > 0);
 
   return (
@@ -287,13 +288,20 @@ export default function DebtorScreen({ ctx }) {
           <div className="px-4 pt-3 pb-2">
             <div className="rounded-xl p-3"
               style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
-              <div className="text-xs" style={{ color: '#64748B' }}>Общий долг · {activeBU}</div>
+              <div className="text-xs" style={{ color: '#64748B' }}>Фактическая задолженность · {activeBU}</div>
               <div className="text-xl font-bold mt-1"
                 style={{ color: totalDebt > 0 ? '#DC2626' : '#16A34A' }}>
                 {fmtMoney(totalDebt)} ₸
               </div>
-              <div className="text-xs mt-1" style={{ color: '#64748B' }}>
-                {filtered.length} {filtered.length === 1 ? 'клиент' : 'клиентов'}
+              <div className="flex items-center gap-3 mt-1">
+                <span className="text-xs" style={{ color: '#64748B' }}>
+                  {filtered.length} {filtered.length === 1 ? 'клиент' : 'клиентов'}
+                </span>
+                {totalSverka !== totalDebt && (
+                  <span className="text-xs" style={{ color: '#94A3B8' }}>
+                    Сверка: {fmtMoney(totalSverka)} ₸
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -333,29 +341,33 @@ export default function DebtorScreen({ ctx }) {
               </div>
             ) : (
               <div className="space-y-1.5">
-                {filtered.map((r, i) => (
-                  <div key={r.id || i} className="rounded-lg p-3"
-                    style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="text-sm font-medium flex-1 min-w-0 truncate"
-                        style={{ color: 'var(--mc-text)' }}>{r.client}</div>
-                      <div className="text-sm font-bold whitespace-nowrap" style={{ color: '#DC2626' }}>
-                        {fmtMoney(r.balance)} ₸
+                {filtered.map((r, i) => {
+                  const debt = Number(r.actual_debt) || 0;
+                  const sverka = Number(r.reconciliation) || 0;
+                  const paid = sverka - debt;
+                  return (
+                    <div key={r.id || i} className="rounded-lg p-3"
+                      style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="text-sm font-medium flex-1 min-w-0 truncate"
+                          style={{ color: 'var(--mc-text)' }}>{r.client}</div>
+                        <div className="text-sm font-bold whitespace-nowrap"
+                          style={{ color: debt > 0 ? '#DC2626' : '#16A34A' }}>
+                          {debt > 0 ? fmtMoney(debt) + ' ₸' : 'Закрыто'}
+                        </div>
                       </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs" style={{ color: '#64748B' }}>
+                        {sverka !== debt && <span>Сверка: {fmtMoney(sverka)} ₸</span>}
+                        {paid > 0 && (
+                          <span style={{ color: '#16A34A' }}>Оплачено: {fmtMoney(paid)} ₸</span>
+                        )}
+                      </div>
+                      {r.comment && (
+                        <div className="text-xs mt-1 truncate" style={{ color: '#64748B' }}>{r.comment}</div>
+                      )}
                     </div>
-                    {Number(r.actual_debt) > 0 && Number(r.actual_debt) !== Number(r.balance) && (
-                      <div className="flex justify-between mt-1">
-                        <span className="text-xs" style={{ color: '#64748B' }}>Фактическая</span>
-                        <span className="text-xs font-medium" style={{ color: '#F59E0B' }}>
-                          {fmtMoney(r.actual_debt)} ₸
-                        </span>
-                      </div>
-                    )}
-                    {r.comment && (
-                      <div className="text-xs mt-1 truncate" style={{ color: '#64748B' }}>{r.comment}</div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -385,12 +397,12 @@ export function DebtorHomeTile({ ctx }) {
       BU_NAMES.forEach(bu => { byBU[bu] = { count: 0, total: 0 }; });
       let total = 0, clients = 0;
       rows.forEach(r => {
-        const b = Number(r.balance) || 0;
-        total += b;
+        const d = Number(r.actual_debt) || 0;
+        total += d;
         clients++;
         if (byBU[r.business_unit]) {
           byBU[r.business_unit].count++;
-          byBU[r.business_unit].total += b;
+          byBU[r.business_unit].total += d;
         }
       });
       setStats({ weekDate: wd, total, clients, byBU });
@@ -431,7 +443,7 @@ export function DebtorHomeTile({ ctx }) {
       </div>
 
       <div style={{ background: 'rgba(255,255,255,.07)', borderRadius: 13, padding: '12px 14px', border: '1px solid rgba(255,255,255,.06)', marginBottom: 10 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Общая задолженность</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Фактическая задолженность</div>
         <div style={{ fontSize: 30, fontWeight: 900, color: '#f87171', lineHeight: 1, letterSpacing: -1 }}>
           {fmt(stats.total)} ₸
         </div>
