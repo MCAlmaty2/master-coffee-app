@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight, Plus, ClipboardPaste, Trash2, Check, X, Bank
 import { supabase } from '../supabase/client';
 
 /* ── Права ─────────────────────────────────────────────────── */
-const CAN_EDIT_ROLES = ['admin', 'senior_manager', 'director', 'b2b']; // A-G
+const CAN_EDIT_ROLES = ['admin', 'senior_manager', 'director', 'b2b', 'cashier']; // A-G
 const CAN_PAY_ROLES  = ['admin', 'cashier'];                            // I
 const CAN_VIEW_ROLES = ['admin', 'senior_manager', 'director', 'b2b', 'cashier', 'observer'];
 

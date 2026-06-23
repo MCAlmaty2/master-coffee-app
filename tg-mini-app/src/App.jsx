@@ -593,6 +593,13 @@ const TRAINING_COURSES = {
     maxGroup: 3,
     slots: ['09:00-12:00', '12:00-15:00', '15:00-18:00'],
   },
+  partner: {
+    label: 'Партнерское обучение',
+    days: 2, hoursPerDay: 3,
+    price: { individual: 0, group: 0 },
+    maxGroup: 3,
+    slots: ['09:00-12:00', '12:00-15:00', '15:00-18:00'],
+  },
 };
 
 // Стадии заявок на списание
