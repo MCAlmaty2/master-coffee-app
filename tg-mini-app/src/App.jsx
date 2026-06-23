@@ -5736,7 +5736,7 @@ function DashboardHome({ ctx, title }) {
         {(hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
           || hasPermission(db, currentUser, 'gift_process') || currentUser.role === 'warehouse') && <GiftsHomeBanner ctx={ctx} />}
         {!hidden('w_sales') && <SalesReportHomeTile ctx={ctx} />}
-        {!hidden('w_debtor') && hasPermission(db, currentUser, 'debtor_view') && <DebtorHomeTile ctx={ctx} />}
+
         {!hidden('w_shipment') && <ShipmentRegistryHomeTile ctx={ctx} />}
         {!hidden('w_mtasks') && <ManagerTasksHomeTile ctx={ctx} />}
         {!hidden('w_tastings') && <TastingWeeklyTile ctx={ctx} />}
