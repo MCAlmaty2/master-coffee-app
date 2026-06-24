@@ -44,7 +44,7 @@ function disableAuto() {
 
 function doSync() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var total = 0;
+  var allRecords = [];
 
   ss.getSheets().forEach(function (sheet) {
     var name = sheet.getName().trim();
@@ -57,27 +57,43 @@ function doSync() {
     var clients = parseClients(values);
     if (!clients.length) return;
 
-    deleteWeek(parsed.bu, parsed.weekDate);
-
-    var records = clients.map(function (c) {
-      return {
-        business_unit: parsed.bu,
-        week_date: parsed.weekDate,
-        client: c.client,
-        balance: c.balance,
-        reconciliation: c.reconciliation,
-        paid_orders: c.paid_orders,
-        paid_items: c.paid_items,
-        actual_debt: c.actual_debt,
-        comment: c.comment,
-        uploaded_at: new Date().toISOString()
-      };
+    clients.forEach(function (c) {
+      allRecords.push({
+        bu: parsed.bu, weekDate: parsed.weekDate,
+        client: c.client, balance: c.balance, reconciliation: c.reconciliation,
+        paid_orders: c.paid_orders, paid_items: c.paid_items,
+        actual_debt: c.actual_debt, comment: c.comment
+      });
     });
-
-    insertBatch(records);
-    total += clients.length;
   });
 
+  var hash = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(allRecords))
+    .map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('lastHash') === hash) return 0;
+
+  var byWeek = {};
+  allRecords.forEach(function (r) {
+    var key = r.bu + '|' + r.weekDate;
+    if (!byWeek[key]) byWeek[key] = { bu: r.bu, weekDate: r.weekDate, records: [] };
+    byWeek[key].records.push({
+      business_unit: r.bu, week_date: r.weekDate,
+      client: r.client, balance: r.balance, reconciliation: r.reconciliation,
+      paid_orders: r.paid_orders, paid_items: r.paid_items,
+      actual_debt: r.actual_debt, comment: r.comment,
+      uploaded_at: new Date().toISOString()
+    });
+  });
+
+  var total = 0;
+  Object.keys(byWeek).forEach(function (key) {
+    var group = byWeek[key];
+    deleteWeek(group.bu, group.weekDate);
+    insertBatch(group.records);
+    total += group.records.length;
+  });
+
+  props.setProperty('lastHash', hash);
   return total;
 }
 

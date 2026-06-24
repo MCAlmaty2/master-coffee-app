@@ -1,46 +1,77 @@
 // ═════════════════════════════════════════════════════════════════════════
 // src/supabase/sync.js — универсальная синхронизация всех таблиц
+// Оптимизировано: фильтр по дате, загрузка по ролям, realtime без перекачки
 // ═════════════════════════════════════════════════════════════════════════
 
 import { supabase } from './client';
 
-// Конфиг всех синхронизируемых таблиц.
+function monthsAgo(n) {
+  const d = new Date();
+  d.setMonth(d.getMonth() - n);
+  return d.toISOString();
+}
+
+const CUTOFF_3M = () => monthsAgo(3);
+const CUTOFF_6M = () => monthsAgo(6);
+
 // ВАЖНО: ключи объекта должны совпадать с ключами состояния в db (camelCase),
 // а поле table — с именем таблицы в Supabase (snake_case).
+//
+// dateFilter: { column, cutoff } — ограничить загрузку по дате
+// base: 'tk' | 'coffeeshop' | null — загружать только для указанной базы
 export const SYNC_TABLES = {
-  orders:             { table: 'orders',            pk: 'id' },
-  grindRequests:      { table: 'grind_requests',    pk: 'id' },
-  tasks:              { table: 'tasks',             pk: 'id' },
-  writeOffs:          { table: 'write_offs',        pk: 'id' },
-  contractRequests:   { table: 'contract_requests', pk: 'id' },
-  notifications:      { table: 'notifications',     pk: 'id' },
-  roleDefinitions:      { table: 'role_definitions',    pk: 'key' },
-  telegramLog:          { table: 'telegram_log',        pk: 'id'  },
-  deliveryRegistries:   { table: 'delivery_registries', pk: 'id'  },
-  deliveryOrders:       { table: 'delivery_orders',     pk: 'id'  },
-  clients:              { table: 'clients',             pk: 'id'  },
-  salesReports:         { table: 'sales_reports',       pk: 'month' },
-  shipmentRegistry:     { table: 'shipment_registry',   pk: 'id' },
-  dailyRevenue:         { table: 'daily_revenue',        pk: 'date' },
-  managerTasks:         { table: 'manager_tasks',         pk: 'id' },
-  releaseNotes:         { table: 'release_notes',          pk: 'id' },
-  scheduleTasks:        { table: 'schedule_tasks',         pk: 'id' },
-  scheduleCompletions:  { table: 'schedule_completions',   pk: 'id' },
-  gifts:                { table: 'gifts',                  pk: 'id' },
-  coffeeShipments:      { table: 'coffee_shipments',       pk: 'id' },
-  coffeeTasks:          { table: 'coffee_tasks',           pk: 'id' },
-  vacations:            { table: 'vacations',              pk: 'id' },
-  // feedback_messages и error_reports пишутся напрямую через supabase.from(),
-  // поэтому их не включаем в автосинхронизацию.
+  orders:             { table: 'orders',            pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M } },
+  grindRequests:      { table: 'grind_requests',    pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M } },
+  tasks:              { table: 'tasks',             pk: 'id', base: 'tk' },
+  writeOffs:          { table: 'write_offs',        pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M }, base: 'tk' },
+  contractRequests:   { table: 'contract_requests', pk: 'id', base: 'tk' },
+  notifications:      { table: 'notifications',     pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M } },
+  roleDefinitions:    { table: 'role_definitions',  pk: 'key' },
+  telegramLog:        { table: 'telegram_log',      pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M } },
+  deliveryRegistries: { table: 'delivery_registries', pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M }, base: 'tk' },
+  deliveryOrders:     { table: 'delivery_orders',     pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M }, base: 'tk' },
+  clients:            { table: 'clients',             pk: 'id', base: 'tk' },
+  salesReports:       { table: 'sales_reports',       pk: 'month', base: 'tk' },
+  shipmentRegistry:   { table: 'shipment_registry',   pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_6M }, base: 'tk' },
+  dailyRevenue:       { table: 'daily_revenue',       pk: 'date', dateFilter: { column: 'date', cutoff: CUTOFF_6M } },
+  managerTasks:       { table: 'manager_tasks',       pk: 'id', base: 'tk' },
+  releaseNotes:       { table: 'release_notes',       pk: 'id' },
+  scheduleTasks:      { table: 'schedule_tasks',      pk: 'id', base: 'coffeeshop' },
+  scheduleCompletions: { table: 'schedule_completions', pk: 'id', dateFilter: { column: 'date', cutoff: CUTOFF_3M }, base: 'coffeeshop' },
+  gifts:              { table: 'gifts',               pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M } },
+  coffeeShipments:    { table: 'coffee_shipments',    pk: 'id', base: 'coffeeshop' },
+  coffeeTasks:        { table: 'coffee_tasks',        pk: 'id', base: 'coffeeshop' },
+  vacations:          { table: 'vacations',           pk: 'id' },
 };
 
 /**
- * Загрузить все строки таблицы из Supabase
+ * Какие таблицы грузить для роли пользователя.
+ * 'all' = admin/director — грузит всё.
+ */
+const COFFEESHOP_ROLES = ['coffee_manager', 'deputy_coffee_manager', 'chef_barista', 'chef_cook'];
+
+export function getTablesForRole(role) {
+  if (role === 'admin' || role === 'director') return Object.keys(SYNC_TABLES);
+
+  const userBase = COFFEESHOP_ROLES.includes(role) ? 'coffeeshop' : 'tk';
+  return Object.keys(SYNC_TABLES).filter(k => {
+    const cfg = SYNC_TABLES[k];
+    if (!cfg.base) return true;
+    return cfg.base === userBase;
+  });
+}
+
+/**
+ * Загрузить строки таблицы (с учётом dateFilter)
  */
 export const fetchAllOfTable = async (stateKey) => {
   const cfg = SYNC_TABLES[stateKey];
   if (!cfg) throw new Error(`Unknown table: ${stateKey}`);
-  const { data, error } = await supabase.from(cfg.table).select('*');
+  let query = supabase.from(cfg.table).select('*');
+  if (cfg.dateFilter) {
+    query = query.gte(cfg.dateFilter.column, cfg.dateFilter.cutoff());
+  }
+  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 };
@@ -71,7 +102,8 @@ export const deleteRow = async (stateKey, pkValue) => {
 };
 
 /**
- * Подписаться на realtime обновления таблицы
+ * Подписаться на realtime с инкрементальным обновлением (без перекачки).
+ * callback получает { eventType, new, old } — обновляем только затронутую строку.
  */
 export const subscribeToTable = (stateKey, callback) => {
   const cfg = SYNC_TABLES[stateKey];
@@ -81,6 +113,8 @@ export const subscribeToTable = (stateKey, callback) => {
   }
   return supabase
     .channel(`rt-${stateKey}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: cfg.table }, callback)
+    .on('postgres_changes', { event: '*', schema: 'public', table: cfg.table }, (payload) => {
+      callback(payload);
+    })
     .subscribe();
 };

@@ -47,6 +47,7 @@ import {
   upsertRow,
   deleteRow,
   subscribeToTable,
+  getTablesForRole,
 } from './supabase/sync';
 import {
   DeliveryRegistriesScreen,
@@ -1092,19 +1093,22 @@ function App() {
     (async () => {
       try {
         await seedProductsIfEmpty(PRICE_LIST);
-        // users + products у нас отдельные модули, остальное — через универсальный sync
-        const syncKeys = Object.keys(SYNC_TABLES);
-        const [users, products, tgSettingsRes, ...rest] = await Promise.all([
+        const [users, products, tgSettingsRes] = await Promise.all([
           fetchAllUsers(),
           fetchAllProducts(),
           Promise.resolve(supabase.from('telegram_settings').select('*').eq('id', 1).single())
             .catch(() => ({ data: null })),
-          ...syncKeys.map(k => fetchAllOfTable(k).catch(e => {
-            // eslint-disable-next-line no-console
+        ]);
+        if (cancelled) return;
+        const savedSession = loadSession();
+        const me = savedSession ? users.find(u => u.id === savedSession.user_id) : null;
+        const syncKeys = getTablesForRole(me?.role);
+        const rest = await Promise.all(
+          syncKeys.map(k => fetchAllOfTable(k).catch(e => {
             console.warn(`[sync] fetch ${k} failed (продолжаем без неё):`, e);
             return [];
           })),
-        ]);
+        );
         if (cancelled) return;
         const update = { users, products };
         syncKeys.forEach((k, i) => { update[k] = rest[i]; });
@@ -1228,30 +1232,32 @@ function App() {
       .subscribe();
     channels.push(tgSettingsCh);
 
-    // Остальные таблицы — через универсальный subscribe
-    for (const stateKey of Object.keys(SYNC_TABLES)) {
+    // Остальные таблицы — инкрементальный realtime (без перекачки)
+    const me = session ? db.users.find(u => u.id === session.user_id) : null;
+    const roleTables = getTablesForRole(me?.role);
+    for (const stateKey of roleTables) {
       const cfg = SYNC_TABLES[stateKey];
-      const ch = subscribeToTable(stateKey, async () => {
-        const fresh = await fetchAllOfTable(stateKey).catch(() => null);
-        if (fresh) {
-          const pk = cfg.pk;
-          const oldSnap = syncSnapshotRef.current[stateKey];
-          setDb(d => {
-            const freshIds = new Set(fresh.map(r => r[pk]));
-            const oldIds = oldSnap ? new Set(oldSnap.map(r => r[pk])) : new Set();
-            const localOnly = (d[stateKey] || []).filter(r => {
-              const id = r[pk];
-              if (freshIds.has(id)) return false;
-              if (oldIds.has(id)) return false;
-              return true;
-            });
-            const merged = [...fresh, ...localOnly];
-            // Snapshot = merged: sync не будет re-push'ить записи, которые просто
-            // остались в local state (зомби), потому что они совпадут со snapshot.
-            syncSnapshotRef.current[stateKey] = merged;
-            return { ...d, [stateKey]: merged };
-          });
-        }
+      const pk = cfg.pk;
+      const ch = subscribeToTable(stateKey, (payload) => {
+        const { eventType } = payload;
+        setDb(d => {
+          const arr = d[stateKey] || [];
+          let updated;
+          if (eventType === 'DELETE') {
+            const oldRow = payload.old;
+            updated = arr.filter(r => r[pk] !== oldRow[pk]);
+          } else if (eventType === 'INSERT') {
+            const newRow = payload.new;
+            const exists = arr.some(r => r[pk] === newRow[pk]);
+            updated = exists ? arr.map(r => r[pk] === newRow[pk] ? newRow : r) : [...arr, newRow];
+          } else {
+            const newRow = payload.new;
+            const exists = arr.some(r => r[pk] === newRow[pk]);
+            updated = exists ? arr.map(r => r[pk] === newRow[pk] ? newRow : r) : [...arr, newRow];
+          }
+          syncSnapshotRef.current[stateKey] = updated;
+          return { ...d, [stateKey]: updated };
+        });
       });
       channels.push(ch);
     }

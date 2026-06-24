@@ -51,33 +51,35 @@ function doSync() {
 
   ss.getSheets().forEach(function (sheet) {
     var values = sheet.getDataRange().getValues();
-    // строка 1 — заголовки, данные со 2-й
     for (var i = 1; i < values.length; i++) {
       var r = values[i];
-      var dateStr = toDateStr(r[0], tz);   // понимает дату, число-серийник Excel и текст
-      if (!dateStr) continue;              // строки "Cумма"/"Ср знач"/пустые — пропуск
+      var dateStr = toDateStr(r[0], tz);
+      if (!dateStr) continue;
       allRows.push({
         date:           dateStr,
-        month:          dateStr.slice(0, 7),  // месяц из самой даты
-        amount:         num(r[1]),   // Сумма
-        sales_count:    int(r[3]),   // Кол-во продаж
-        delivery_count: int(r[4]),   // Рейс
-        pickup_count:   int(r[5])    // Самовывоз
+        month:          dateStr.slice(0, 7),
+        amount:         num(r[1]),
+        sales_count:    int(r[3]),
+        delivery_count: int(r[4]),
+        pickup_count:   int(r[5])
       });
     }
   });
 
-  // Дедупликация по дате (один день может встретиться в двух листах) — иначе
-  // Postgres ругается "ON CONFLICT cannot affect row a second time". Берём последнее значение.
   var byDate = {};
   allRows.forEach(function (r) {
     var ex = byDate[r.date];
-    // при дубле даты оставляем строку с большей суммой (реальные данные важнее пустой)
     if (!ex || Math.abs(r.amount) > Math.abs(ex.amount)) byDate[r.date] = r;
   });
   var deduped = Object.keys(byDate).map(function (k) { return byDate[k]; });
 
+  var hash = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(deduped))
+    .map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('lastHash') === hash) return 0;
+
   if (deduped.length) postBatch(deduped);
+  props.setProperty('lastHash', hash);
   return deduped.length;
 }
 

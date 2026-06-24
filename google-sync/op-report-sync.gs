@@ -62,16 +62,15 @@ function disableAuto() {
 
 function doSync() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var count = 0;
+  var allMonths = [];
 
   ss.getSheets().forEach(function (sheet) {
     var monthKey = sheetToMonthKey(sheet.getName());
-    if (!monthKey) return; // пропускаем «Товары по Месяцам», «КОФЕ» и пр.
+    if (!monthKey) return;
 
     var values = sheet.getDataRange().getValues();
     if (values.length < 4) return;
 
-    // Строка заголовков с неделями — ищем строку, где в колонке A == «Товар»
     var headerRowIdx = -1;
     for (var i = 0; i < Math.min(values.length, 6); i++) {
       if (String(values[i][0]).trim().toLowerCase() === 'товар') { headerRowIdx = i; break; }
@@ -79,7 +78,6 @@ function doSync() {
     if (headerRowIdx === -1) return;
     var header = values[headerRowIdx];
 
-    // Недели: колонки после «День» (индекс 4) до «ИТОГО ФАКТ»
     var weekStart = 4;
     var weeks = [];
     for (var c = weekStart; c < header.length; c++) {
@@ -95,17 +93,23 @@ function doSync() {
       var name = String(values[r][0]).trim();
       var id = NAME_TO_ID[name];
       if (!id) continue;
-      plans[id] = num(values[r][1]); // колонка «Месяц» (план)
+      plans[id] = num(values[r][1]);
       var arr = [];
       for (var w = 0; w < weekCount; w++) arr.push(num(values[r][weekStart + w]));
       facts[id] = arr;
     }
 
-    postMonth({ month: monthKey, weeks: weeks, plans: plans, facts: facts });
-    count++;
+    allMonths.push({ month: monthKey, weeks: weeks, plans: plans, facts: facts });
   });
 
-  return count;
+  var hash = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(allMonths))
+    .map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('lastHash') === hash) return 0;
+
+  allMonths.forEach(function (m) { postMonth(m); });
+  props.setProperty('lastHash', hash);
+  return allMonths.length;
 }
 
 // ── Хелперы ───────────────────────────────────────────────────────
