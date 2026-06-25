@@ -21,14 +21,7 @@ const TYPE_META = {
   return:  { label: 'Возврат', color: '#3B82F6', icon: RotateCcw },
 };
 
-const MOCK_OPS = [
-  { id: '1', type: 'income',  bills: { 20000: 10, 10000: 5, 5000: 10, 2000: 0, 1000: 0, 500: 0, 200: 0 }, total: 300000, description: 'Пополнение кассы', category: null, person_name: null, created_by_name: 'Ангелина С.', created_at: '2026-06-25T09:00:00' },
-  { id: '2', type: 'expense', bills: { 20000: 0, 10000: 2, 5000: 4, 2000: 0, 1000: 0, 500: 0, 200: 0 }, total: 40000,  description: 'Оплата Яндекс доставки',  category: 'Бензин и транспорт', person_name: 'Алишер К.', created_by_name: 'Ангелина С.', created_at: '2026-06-25T10:30:00' },
-  { id: '3', type: 'expense', bills: { 20000: 1, 10000: 0, 5000: 0, 2000: 0, 1000: 0, 500: 0, 200: 0 }, total: 20000,  description: 'Канцелярия', category: 'Расходы офиса', person_name: 'Бек М.', created_by_name: 'Ангелина С.', created_at: '2026-06-24T14:15:00' },
-  { id: '4', type: 'return',  bills: { 20000: 0, 10000: 0, 5000: 1, 2000: 1, 1000: 2, 500: 0, 200: 0 }, total: 9000,   description: 'Сдача с канцелярии', category: 'Расходы офиса', person_name: 'Бек М.', created_by_name: 'Ангелина С.', created_at: '2026-06-24T16:00:00' },
-  { id: '5', type: 'expense', bills: { 20000: 2, 10000: 0, 5000: 0, 2000: 5, 1000: 0, 500: 0, 200: 0 }, total: 50000,  description: 'Проездные курьерам', category: 'Бензин и транспорт', person_name: 'Карим Б.', created_by_name: 'Ангелина С.', created_at: '2026-06-23T09:45:00' },
-  { id: '6', type: 'income',  bills: { 20000: 5, 10000: 10, 5000: 0, 2000: 0, 1000: 0, 500: 0, 200: 0 }, total: 200000, description: 'Пополнение кассы', category: null, person_name: null, created_by_name: 'Ангелина С.', created_at: '2026-06-20T09:00:00' },
-];
+const MOCK_OPS = [];
 
 function fmtMoney(n) {
   return n.toLocaleString('ru-RU') + ' ₸';
