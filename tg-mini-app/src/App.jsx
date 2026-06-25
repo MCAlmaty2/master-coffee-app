@@ -5,7 +5,7 @@ import {
   ChevronRight, Trash2, Eye, Users, ArrowRight, Hash, ChevronDown,
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
-  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, Wallet, ListTodo,
+  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo,
 } from 'lucide-react';
 import { supabase } from './supabase/client';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
@@ -18,8 +18,8 @@ import { ScheduleScreen, ScheduleHomeBanner } from './screens/ScheduleScreen';
 import { GiftsScreen, GiftsHomeBanner } from './screens/GiftsScreen';
 import { CoffeeShipmentsScreen, CoffeeShipmentsHomeTile } from './screens/CoffeeShipmentsScreen';
 import CoffeeTasksScreen from './screens/CoffeeTasksScreen';
-import DebtorScreen, { DebtorHomeTile } from './screens/DebtorScreen';
 import HRCalendarScreen from './screens/HRCalendarScreen';
+import CashScreen from './screens/CashScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -490,8 +490,6 @@ const PERMISSIONS = {
   coffee_shipments_pay: { group: 'Кофейни', label: 'Вносить оплату в реестре кофеен' },
   coffee_tasks_view:    { group: 'Кофейни', label: 'Видеть задачник кофеен' },
   coffee_tasks_edit:    { group: 'Кофейни', label: 'Создавать и редактировать задачи кофеен' },
-  // Дебиторка
-  debtor_view:          { group: 'Финансы', label: 'Видеть дебиторскую задолженность' },
   // HR
   hr_calendar_view:     { group: 'HR', label: 'Видеть HR-календарь (отпуска и ДР)' },
   hr_vacation_manage:   { group: 'HR', label: 'Добавлять и редактировать отпуска' },
@@ -514,19 +512,19 @@ function defaultPermissionsFor(roleKey) {
       // admin всё равно имеет всё, но для согласованности — все права
       return Object.keys(PERMISSIONS);
     case 'director':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'debtor_view'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay'];
     case 'senior_manager':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'debtor_view'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay'];
     case 'courier':
       return ['delivery_courier'];
     case 'b2b':
-      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'gift_create', 'debtor_view'];
+      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'gift_create'];
     case 'sales':
-      return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'gift_create', 'debtor_view'];
+      return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'gift_create'];
     case 'warehouse':
       return ['orders_view_all', 'orders_change_status', 'warehouse_pickup', 'grind_fulfill', 'grind_view_all'];
     case 'cashier':
-      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay', 'gift_create', 'debtor_view'];
+      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay', 'gift_create'];
     case 'barista':
     case 'technician':
       return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create', 'gift_create'];
@@ -1148,7 +1146,6 @@ function App() {
               topics_enabled: tgRow.topics_enabled || d.telegramSettings?.topics_enabled || {},
               templates:      tgRow.templates      || d.telegramSettings?.templates      || {},
               app_url:        tgRow.app_url        || d.telegramSettings?.app_url        || 'https://master-coffee-app.vercel.app',
-              debtor_sheet_url: tgRow.debtor_sheet_url || d.telegramSettings?.debtor_sheet_url || '',
             };
           }
           return merged;
@@ -1224,7 +1221,6 @@ function App() {
               topics_enabled: data.topics_enabled || d.telegramSettings?.topics_enabled || {},
               templates:      data.templates      || d.telegramSettings?.templates      || {},
               app_url:        data.app_url        || d.telegramSettings?.app_url        || 'https://master-coffee-app.vercel.app',
-              debtor_sheet_url: data.debtor_sheet_url || d.telegramSettings?.debtor_sheet_url || '',
             },
           }));
         }
@@ -3130,7 +3126,6 @@ function App() {
       topics_enabled: merged.topics_enabled || {},
       templates:      merged.templates      || {},
       app_url:        merged.app_url        || 'https://master-coffee-app.vercel.app',
-      debtor_sheet_url: merged.debtor_sheet_url || '',
       updated_at:     new Date().toISOString(),
     })).catch(e => { throw e; });
   };
@@ -4583,10 +4578,10 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     }
     if (coffeeItems.length > 0) groups.push({ title: 'Кофейни', items: coffeeItems, collapsible: true, base: 'coffeeshop' });
 
-    // ── ДЕБИТОРКА ────────────────────────────
-    if (hasPermission(db, currentUser, 'debtor_view')) {
+    // ── ФИНАНСЫ (касса / подотчёт) ────────────────────────────
+    if (['admin', 'director', 'cashier'].includes(currentUser.role)) {
       groups.push({ title: 'Финансы', items: [
-        { id: 'debtors', label: 'Дебиторка', icon: Wallet },
+        { id: 'cash', label: 'Касса / Подотчёт', icon: Banknote },
       ], collapsible: true, base: 'tk' });
     }
 
@@ -5106,8 +5101,8 @@ function Screen({ ctx }) {
     // ─── Кофейни ───
     case 'coffee_shipments': return <CoffeeShipmentsScreen ctx={ctx} />;
     case 'coffee_tasks': return <CoffeeTasksScreen ctx={ctx} />;
-    // ─── Дебиторка ───
-    case 'debtors': return <DebtorScreen ctx={ctx} />;
+    // ─── Финансы (касса) ───
+    case 'cash': return <CashScreen ctx={ctx} />;
     // ─── HR-календарь (отпуска и ДР) ───
     case 'hr_calendar': return <HRCalendarScreen ctx={ctx} />;
     // ─── Подарки клиентам ───
@@ -5424,7 +5419,6 @@ function HomeCustomizeScreen({ ctx }) {
 
   const items = [
     { key: 'w_sales',    label: '📊 Выполнение плана',         show: () => true, section: 'Блоки' },
-    { key: 'w_debtor',  label: '💳 Дебиторка',                show: () => has('debtor_view'), section: 'Блоки' },
     { key: 'w_shipment', label: '📦 Реестр отгрузок (сводка)', show: () => has('shipment_view'), section: 'Блоки' },
     { key: 'w_mtasks',   label: '📌 Вопросы / поручения',       show: () => isMgr, section: 'Блоки' },
     { key: 'w_tastings', label: '🍵 Дегустации понедельно',     show: () => has('tasks_view_own') || has('tasks_calendar_all'), section: 'Блоки' },
@@ -5673,16 +5667,6 @@ function DashboardHome({ ctx, title }) {
       color: '#B45309',
       go: () => navigate({ name: 'coffee_tasks' }),
       highlight: todayTasks.length - doneTasks > 0,
-    });
-  }
-  // Дебиторка
-  if (has('debtor_view')) {
-    tiles.push({
-      key: 'debtors', base: 'tk', icon: Wallet, label: 'Дебиторка',
-      value: '₸',
-      hint: 'задолженность клиентов',
-      color: '#DC2626',
-      go: () => navigate({ name: 'debtors' }),
     });
   }
   // Только для админа
@@ -13501,19 +13485,106 @@ function CreateGrindScreen({ ctx }) {
   const [rawText, setRawText]   = useState('');
   const [form, setForm]         = useState(emptyForm());
   const [detected, setDetected] = useState(new Set());
+  const [parsedItems, setParsedItems] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const update = patch => setForm(f => ({ ...f, ...patch }));
+
+  const matchProduct = (text) => {
+    const lower = text.toLowerCase();
+    let best = null, bestScore = 0;
+    for (const p of coffeeProducts) {
+      const words = p.name.toLowerCase().split(/[\s,/]+/).filter(w => w.length > 2);
+      const score = words.filter(w => lower.includes(w)).length;
+      if (score > bestScore) { bestScore = score; best = p; }
+    }
+    return bestScore >= 1 ? best : null;
+  };
+
+  const detectGrind = (text) => {
+    if (/не\s*молоть|в\s*зерн/i.test(text)) return { grind_type: null, label: 'В зёрнах' };
+    if (/турк/i.test(text))                  return { grind_type: 'turka',    label: 'Турка' };
+    if (/v.?60/i.test(text))                 return { grind_type: 'v60',      label: 'V60' };
+    if (/фильтр|filter|пуров/i.test(text))   return { grind_type: 'filter',   label: 'Фильтр' };
+    if (/френч|french|press/i.test(text))    return { grind_type: 'french',   label: 'Френч-пресс' };
+    if (/эспрессо|espresso|рожков/i.test(text)) return { grind_type: 'espresso', label: 'Эспрессо' };
+    const m = text.match(/помол[:\s]+([^\n|]+)/i);
+    if (m) return { grind_type: 'custom', label: m[1].trim(), grind_custom: m[1].trim() };
+    return null;
+  };
+
+  const parseSiteOrder = (text) => {
+    const clientM = text.match(/Клиент:\s*([^+\n]+?)(?:\s*\+7|\s*,\s*[А-Я])/i);
+    const clientName = clientM ? clientM[1].trim() : '';
+    const siteOrderM = text.match(/№\s*заказа\s+(?:на\s+сайте\s+)?(\d+)/i);
+    const siteOrder = siteOrderM ? `САЙТ-${siteOrderM[1]}` : '';
+    const m1c = text.match(/[РрPp][ЗзHhНн]-\d+/i);
+    const order1c = m1c ? m1c[0].toUpperCase() : siteOrder;
+
+    const orderPart = text.split(/Инф\.?\s*заказ\s*:/i)[1] || '';
+    const rawItems = orderPart.split('|').map(s => s.trim()).filter(Boolean);
+
+    const items = [];
+    for (const raw of rawItems) {
+      if (/^\s*\\?\s*$/.test(raw)) continue;
+      if (/^№\s*заказа/i.test(raw) || /^\\\s*№/i.test(raw)) continue;
+      const cleanRaw = raw.replace(/^\\\s*/, '');
+
+      const nameM = cleanRaw.match(/^([^:,]+?)(?:\s*,\s*(?:для|:)|(?:\s*:\s*кол))/i)
+        || cleanRaw.match(/^(.+?)(?:\s*:\s*кол)/i)
+        || cleanRaw.match(/^([^,]+)/);
+      const itemName = nameM ? nameM[1].trim() : cleanRaw.trim();
+
+      const qtyM = cleanRaw.match(/кол[- ]?во\s*:\s*(\d+)/i);
+      const quantity = qtyM ? qtyM[1] : '1';
+
+      const fasM = cleanRaw.match(/Фасовка\s*:\s*(\d+)\s*(г|кг)/i);
+      const weight = fasM ? fasM[1] : null;
+      const weightUnit = fasM ? (fasM[2] === 'кг' ? 'кг' : 'г') : null;
+
+      const volM = !fasM && cleanRaw.match(/(\d+)\s*(л\.|литр)/i);
+      const grindInfo = detectGrind(cleanRaw);
+      const product = matchProduct(itemName);
+      const isCoffee = !!product || /кофе|blend|espresso|supremo|prestige|decaf|декаф|можиан|руанда|эфиопия|колумб|бразил|гондурас|кения|сидамо|classico|basic|milk|qazaq|milano/i.test(itemName);
+      const isNonCoffee = /сироп|чай|молоко|сахар|стакан|крышк|трубочк/i.test(itemName);
+
+      items.push({
+        raw: cleanRaw,
+        name: itemName,
+        quantity,
+        weight: weight || (volM ? volM[1] : null),
+        weightUnit: weightUnit || (volM ? 'л' : null),
+        grind_type: grindInfo?.grind_type || null,
+        grind_label: grindInfo?.label || null,
+        grind_custom: grindInfo?.grind_custom || '',
+        product_id: product?.id || null,
+        product_name: product?.name || itemName,
+        isCoffee: isCoffee && !isNonCoffee,
+        needsGrind: !!grindInfo?.grind_type,
+        checked: !!grindInfo?.grind_type,
+      });
+    }
+
+    setForm(f => ({ ...f, client_name: clientName, order_1c: order1c }));
+    setDetected(new Set(['client_name', ...(order1c ? ['order_1c'] : [])]));
+    setParsedItems(items.length ? items : null);
+  };
 
   // ── Парсер текста из чата ──────────────────────────────────────────────
   const parseText = (text) => {
-    if (!text.trim()) { setForm(emptyForm()); setDetected(new Set()); return; }
+    if (!text.trim()) { setForm(emptyForm()); setDetected(new Set()); setParsedItems(null); return; }
+
+    if (/Инф\.?\s*заказ\s*:/i.test(text) && text.includes('|')) {
+      parseSiteOrder(text);
+      return;
+    }
+
+    setParsedItems(null);
     const det = new Set();
     const upd = {};
 
-    // Номер заказа 1С: РЗ-XXXXX / РН-XXXXX
     const m1c = text.match(/[РрPp][ЗзHhНн]-\d+/i);
     if (m1c) { upd.order_1c = m1c[0].toUpperCase(); det.add('order_1c'); }
 
-    // Количество + единица
     const mQty = text.match(/(\d+[.,]?\d*)\s*(кг|г\b|kg\b|g\b)/i);
     if (mQty) {
       upd.quantity = mQty[1].replace(',', '.');
@@ -13521,22 +13592,13 @@ function CreateGrindScreen({ ctx }) {
       det.add('quantity');
     }
 
-    // Степень помола
-    if      (/турк/i.test(text))                           { upd.grind_type = 'turka';    det.add('grind_type'); }
-    else if (/v.?60/i.test(text))                          { upd.grind_type = 'v60';      det.add('grind_type'); }
-    else if (/фильтр|filter|пуров/i.test(text))            { upd.grind_type = 'filter';   det.add('grind_type'); }
-    else if (/френч|french|press/i.test(text))             { upd.grind_type = 'french';   det.add('grind_type'); }
-    else if (/эспрессо|espresso|рожков\w*/i.test(text))    { upd.grind_type = 'espresso'; det.add('grind_type'); }
-    else {
-      const pomolM = text.match(/помол[:\s]+([^\n]+)/i);
-      if (pomolM) {
-        upd.grind_type = 'custom';
-        upd.grind_custom = pomolM[1].trim();
-        det.add('grind_type');
-      }
+    const grindInfo = detectGrind(text);
+    if (grindInfo && grindInfo.grind_type) {
+      upd.grind_type = grindInfo.grind_type;
+      if (grindInfo.grind_custom) upd.grind_custom = grindInfo.grind_custom;
+      det.add('grind_type');
     }
 
-    // Контрагент: строка с ТОО/ИП/АО, или метка "Клиент:"
     const mClient = text.match(/(?:Клиент|Контрагент|Организация)\s*:\s*([^\n,]+)/i)
       || text.match(/(?:^|\n)([^\n]*(?:ТОО|ИП|АО|ООО)[^\n,]*)/i);
     if (mClient) {
@@ -13544,7 +13606,6 @@ function CreateGrindScreen({ ctx }) {
       det.add('client_name');
     }
 
-    // Физ. лицо: первая строка вида «Фамилия Имя» без цифр и без ключей компании
     if (!upd.client_name) {
       const firstLine = text.split('\n').find(l => l.trim());
       if (firstLine) {
@@ -13556,15 +13617,8 @@ function CreateGrindScreen({ ctx }) {
       }
     }
 
-    // Кофе: fuzzy-match по каталогу
-    const lower = text.toLowerCase();
-    let best = null, bestScore = 0;
-    for (const p of coffeeProducts) {
-      const words = p.name.toLowerCase().split(/[\s,/]+/).filter(w => w.length > 3);
-      const score = words.filter(w => lower.includes(w)).length;
-      if (score > bestScore) { bestScore = score; best = p; }
-    }
-    if (best && bestScore >= 1) {
+    const best = matchProduct(text);
+    if (best) {
       upd.product_id   = best.id;
       upd.product_mode = 'from_list';
       det.add('product');
@@ -13577,6 +13631,10 @@ function CreateGrindScreen({ ctx }) {
   const handleTextChange = (text) => {
     setRawText(text);
     parseText(text);
+  };
+
+  const toggleItem = (idx) => {
+    setParsedItems(prev => prev.map((it, i) => i === idx ? { ...it, checked: !it.checked } : it));
   };
 
   const handleSubmit = async () => {
@@ -13598,6 +13656,33 @@ function CreateGrindScreen({ ctx }) {
     });
     if (result.error) return showToast(result.error);
     showToast(`☕ ${result.grind.number} отправлена складу`);
+    goBack();
+  };
+
+  const handleBatchSubmit = async () => {
+    const selected = (parsedItems || []).filter(it => it.checked && it.needsGrind);
+    if (!selected.length) return showToast('Выберите хотя бы одну позицию для помола');
+    setSubmitting(true);
+    const created = [];
+    for (const it of selected) {
+      const qty = it.weight || it.quantity;
+      const unit = it.weightUnit || 'г';
+      const result = await createGrindRequest({
+        client_name: form.client_name,
+        product_id: it.product_id,
+        product_name: it.product_name,
+        quantity: qty,
+        unit,
+        grind_type: it.grind_type,
+        grind_custom: it.grind_custom || '',
+        order_1c: form.order_1c,
+        comment: '',
+      });
+      if (result.error) { showToast(`Ошибка: ${result.error}`); setSubmitting(false); return; }
+      created.push(result.grind.number);
+    }
+    setSubmitting(false);
+    showToast(`☕ Создано ${created.length} заявок: ${created.join(', ')}`);
     goBack();
   };
 
@@ -13625,7 +13710,7 @@ function CreateGrindScreen({ ctx }) {
               autoFocus
             />
             {rawText && (
-              <button onClick={() => { setRawText(''); setForm(emptyForm()); setDetected(new Set()); }}
+              <button onClick={() => { setRawText(''); setForm(emptyForm()); setDetected(new Set()); setParsedItems(null); }}
                 className="absolute top-2 right-2 text-xs px-2 py-1 rounded"
                 style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>× Очистить</button>
             )}
@@ -13645,94 +13730,155 @@ function CreateGrindScreen({ ctx }) {
             style={fieldStyle('client_name')} />
         </Card>
 
-        {/* Кофе */}
-        <Card title="Вид кофе">
-          <div className="flex gap-2 mb-2">
-            {['from_list','manual'].map(m => (
-              <button key={m} onClick={() => update({ product_mode: m, product_id: '', product_name: '' })}
-                className="flex-1 py-1.5 rounded-lg text-sm font-semibold"
-                style={{ background: form.product_mode === m ? '#297b8a' : 'var(--mc-active-item)', color: form.product_mode === m ? 'white' : '#64748B' }}>
-                {m === 'from_list' ? 'Из прайса' : 'Вручную'}
-              </button>
-            ))}
-          </div>
-          {form.product_mode === 'from_list' ? (
-            <select value={form.product_id} onChange={e => { update({ product_id: e.target.value }); setDetected(d => { const n = new Set(d); n.add('product'); return n; }); }}
-              className="w-full px-3 py-2.5 rounded-lg outline-none bg-white"
-              style={fieldStyle('product')}>
-              <option value="">— выберите кофе —</option>
-              {coffeeProducts.map(p => <option key={p.id} value={p.id}>{p.id} · {p.name}</option>)}
-            </select>
-          ) : (
-            <input type="text" placeholder="Название кофе"
-              value={form.product_name} onChange={e => update({ product_name: e.target.value })}
-              className="w-full px-3 py-2.5 rounded-lg outline-none"
-              style={{ border: '1px solid var(--mc-border)' }} />
-          )}
-        </Card>
+        {parsedItems ? (
+          <>
+            {/* Мульти-позиции из заказа с сайта */}
+            <Card title={`Позиции заказа (${parsedItems.length})`}>
+              <div className="space-y-2">
+                {parsedItems.map((it, idx) => {
+                  const canGrind = it.isCoffee && it.needsGrind;
+                  const statusColor = canGrind ? '#22C55E' : it.isCoffee ? '#3B82F6' : '#94A3B8';
+                  const statusLabel = canGrind ? it.grind_label : it.isCoffee ? 'В зёрнах' : 'Не кофе';
+                  return (
+                    <div key={idx} onClick={() => canGrind && toggleItem(idx)}
+                      className="rounded-lg p-3 flex items-start gap-3"
+                      style={{
+                        border: `1.5px solid ${it.checked ? '#297b8a' : 'var(--mc-border)'}`,
+                        background: it.checked ? '#F0F9FB' : 'var(--mc-surface)',
+                        opacity: canGrind ? 1 : 0.6,
+                        cursor: canGrind ? 'pointer' : 'default',
+                      }}>
+                      <div className="pt-0.5">
+                        {canGrind ? (
+                          <div className="w-5 h-5 rounded border-2 flex items-center justify-center"
+                            style={{ borderColor: it.checked ? '#297b8a' : '#CBD5E1', background: it.checked ? '#297b8a' : 'white' }}>
+                            {it.checked && <Check size={14} color="white" />}
+                          </div>
+                        ) : (
+                          <div className="w-5 h-5 rounded flex items-center justify-center"
+                            style={{ background: statusColor + '20' }}>
+                            <span style={{ color: statusColor, fontSize: 11 }}>{it.isCoffee ? '●' : '–'}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>
+                          {it.product_id ? it.product_name : it.name}
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                          {it.weight && <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>{it.weight} {it.weightUnit || 'г'}</span>}
+                          <span className="text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
+                          {it.product_id && <span className="text-xs" style={{ color: '#297b8a' }}>✓ из прайса</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
 
-        {/* Количество */}
-        <Card title="Количество / вес">
-          <div className="flex gap-2">
-            <input type="number" inputMode="decimal" placeholder="Сколько"
-              value={form.quantity} onChange={e => update({ quantity: e.target.value })}
-              className="flex-1 px-3 py-2.5 rounded-lg outline-none"
-              style={fieldStyle('quantity')} />
-            <select value={form.unit} onChange={e => update({ unit: e.target.value })}
-              className="px-3 py-2.5 rounded-lg outline-none bg-white"
-              style={{ border: '1px solid var(--mc-border)' }}>
-              <option value="кг">кг</option>
-              <option value="г">г</option>
-              <option value="шт">шт</option>
-              <option value="упак">упак</option>
-            </select>
-          </div>
-        </Card>
+            {/* Номер заказа */}
+            <Card title="Номер заказа">
+              <input type="text" placeholder="РЗ-00045 / САЙТ-50819"
+                value={form.order_1c} onChange={e => update({ order_1c: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-lg outline-none mono-font"
+                style={fieldStyle('order_1c')} />
+            </Card>
 
-        {/* Степень помола */}
-        <Card title="Вид помола">
-          <div className="grid grid-cols-3 gap-1.5">
-            {Object.entries(GRIND_TYPES).map(([key, val]) => (
-              <button key={key} onClick={() => update({ grind_type: key })}
-                className="py-2 px-1 rounded-lg text-xs font-semibold text-center"
-                style={{
-                  background: form.grind_type === key ? (det('grind_type') ? '#297b8a' : '#297b8a') : 'var(--mc-active-item)',
-                  color:      form.grind_type === key ? 'white' : 'var(--mc-text)',
-                  border:     form.grind_type === key ? '1px solid #297b8a' : '1px solid var(--mc-border)',
-                }}>
-                {val.label}
-              </button>
-            ))}
-          </div>
-          {form.grind_type === 'custom' && (
-            <input type="text" placeholder="Опишите свой вариант"
-              value={form.grind_custom} onChange={e => update({ grind_custom: e.target.value })}
-              className="w-full mt-2 px-3 py-2.5 rounded-lg outline-none"
-              style={{ border: '1px solid var(--mc-border)' }} />
-          )}
-        </Card>
+            <button onClick={handleBatchSubmit} disabled={submitting || !(parsedItems || []).some(it => it.checked)}
+              className="w-full py-3 rounded-lg font-semibold text-white"
+              style={{ background: (parsedItems || []).some(it => it.checked) ? '#297b8a' : '#94A3B8' }}>
+              {submitting ? 'Создаём...' : `☕ Создать ${(parsedItems || []).filter(it => it.checked).length} заявок на помол`}
+            </button>
+          </>
+        ) : (
+          <>
+            {/* Одиночная заявка — классический режим */}
+            <Card title="Вид кофе">
+              <div className="flex gap-2 mb-2">
+                {['from_list','manual'].map(m => (
+                  <button key={m} onClick={() => update({ product_mode: m, product_id: '', product_name: '' })}
+                    className="flex-1 py-1.5 rounded-lg text-sm font-semibold"
+                    style={{ background: form.product_mode === m ? '#297b8a' : 'var(--mc-active-item)', color: form.product_mode === m ? 'white' : '#64748B' }}>
+                    {m === 'from_list' ? 'Из прайса' : 'Вручную'}
+                  </button>
+                ))}
+              </div>
+              {form.product_mode === 'from_list' ? (
+                <select value={form.product_id} onChange={e => { update({ product_id: e.target.value }); setDetected(d => { const n = new Set(d); n.add('product'); return n; }); }}
+                  className="w-full px-3 py-2.5 rounded-lg outline-none bg-white"
+                  style={fieldStyle('product')}>
+                  <option value="">— выберите кофе —</option>
+                  {coffeeProducts.map(p => <option key={p.id} value={p.id}>{p.id} · {p.name}</option>)}
+                </select>
+              ) : (
+                <input type="text" placeholder="Название кофе"
+                  value={form.product_name} onChange={e => update({ product_name: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-lg outline-none"
+                  style={{ border: '1px solid var(--mc-border)' }} />
+              )}
+            </Card>
 
-        {/* Номер 1С */}
-        <Card title="Номер заказа в 1С (необязательно)">
-          <input type="text" placeholder="РЗ-00045"
-            value={form.order_1c} onChange={e => update({ order_1c: e.target.value })}
-            className="w-full px-3 py-2.5 rounded-lg outline-none mono-font"
-            style={fieldStyle('order_1c')} />
-        </Card>
+            <Card title="Количество / вес">
+              <div className="flex gap-2">
+                <input type="number" inputMode="decimal" placeholder="Сколько"
+                  value={form.quantity} onChange={e => update({ quantity: e.target.value })}
+                  className="flex-1 px-3 py-2.5 rounded-lg outline-none"
+                  style={fieldStyle('quantity')} />
+                <select value={form.unit} onChange={e => update({ unit: e.target.value })}
+                  className="px-3 py-2.5 rounded-lg outline-none bg-white"
+                  style={{ border: '1px solid var(--mc-border)' }}>
+                  <option value="кг">кг</option>
+                  <option value="г">г</option>
+                  <option value="шт">шт</option>
+                  <option value="упак">упак</option>
+                </select>
+              </div>
+            </Card>
 
-        {/* Комментарий */}
-        <Card title="Комментарий (необязательно)">
-          <textarea rows={2} placeholder="Особые пожелания, срочность..."
-            value={form.comment} onChange={e => update({ comment: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg outline-none text-sm resize-none"
-            style={{ border: '1px solid var(--mc-border)' }} />
-        </Card>
+            <Card title="Вид помола">
+              <div className="grid grid-cols-3 gap-1.5">
+                {Object.entries(GRIND_TYPES).map(([key, val]) => (
+                  <button key={key} onClick={() => update({ grind_type: key })}
+                    className="py-2 px-1 rounded-lg text-xs font-semibold text-center"
+                    style={{
+                      background: form.grind_type === key ? '#297b8a' : 'var(--mc-active-item)',
+                      color:      form.grind_type === key ? 'white' : 'var(--mc-text)',
+                      border:     form.grind_type === key ? '1px solid #297b8a' : '1px solid var(--mc-border)',
+                    }}>
+                    {val.label}
+                  </button>
+                ))}
+              </div>
+              {form.grind_type === 'custom' && (
+                <input type="text" placeholder="Опишите свой вариант"
+                  value={form.grind_custom} onChange={e => update({ grind_custom: e.target.value })}
+                  className="w-full mt-2 px-3 py-2.5 rounded-lg outline-none"
+                  style={{ border: '1px solid var(--mc-border)' }} />
+              )}
+            </Card>
 
-        <button onClick={handleSubmit}
-          className="w-full py-3 rounded-lg font-semibold text-white"
-          style={{ background: '#297b8a' }}>
-          ☕ Отправить складу
-        </button>
+            <Card title="Номер заказа в 1С (необязательно)">
+              <input type="text" placeholder="РЗ-00045"
+                value={form.order_1c} onChange={e => update({ order_1c: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-lg outline-none mono-font"
+                style={fieldStyle('order_1c')} />
+            </Card>
+
+            <Card title="Комментарий (необязательно)">
+              <textarea rows={2} placeholder="Особые пожелания, срочность..."
+                value={form.comment} onChange={e => update({ comment: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg outline-none text-sm resize-none"
+                style={{ border: '1px solid var(--mc-border)' }} />
+            </Card>
+
+            <button onClick={handleSubmit}
+              className="w-full py-3 rounded-lg font-semibold text-white"
+              style={{ background: '#297b8a' }}>
+              ☕ Отправить складу
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -13885,12 +14031,14 @@ function AdminProductsScreen({ ctx }) {
       if (!data.cat?.trim()) return showToast('Укажите категорию');
       if (!data.unit?.trim()) return showToast('Укажите единицу');
       if (price <= 0 && data.cat?.trim() !== 'Запчасти') return showToast('Цена должна быть больше нуля');
-      await updateProduct(productId, {
+      const patch = {
         name: data.name.trim(),
         cat: data.cat.trim(),
         unit: data.unit.trim(),
         price,
-      });
+      };
+      if (data.cat?.trim() === 'Кофе зерно') patch.ntin = (data.ntin || '').trim();
+      await updateProduct(productId, patch);
       showToast('Товар обновлён');
     } else {
       // создание
@@ -13995,6 +14143,7 @@ function AdminProductsScreen({ ctx }) {
                   <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                     {p.cat === 'Запчасти' && !p.price ? '—' : `${fmtNum(p.price)} ₸`} / {p.unit}
                   </span>
+                  {p.ntin && <span className="text-[10px] rounded-full px-2 py-0.5 font-medium" style={{ background: '#EFF6FF', color: '#3B82F6' }}>НКТ</span>}
                 </div>
               </div>
               {/* Действия */}
@@ -14175,6 +14324,7 @@ function ProductEditModal({ product, existingCats, onSave, onClose }) {
     cat: product?.cat || '',
     unit: product?.unit || 'шт',
     price: product?.price ? String(product.price) : '',
+    ntin: product?.ntin || '',
   });
   const update = (patch) => setForm(f => ({ ...f, ...patch }));
 
@@ -14273,6 +14423,20 @@ function ProductEditModal({ product, existingCats, onSave, onClose }) {
             )}
           </div>
         </div>
+
+        {form.cat === 'Кофе зерно' && (
+          <div>
+            <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Код НКТ / NTIN</label>
+            <input
+              type="text"
+              value={form.ntin}
+              onChange={e => update({ ntin: e.target.value })}
+              placeholder="Например: 04870204..."
+              className="w-full px-3 py-2.5 rounded-lg outline-none mono-font"
+              style={{ border: '1px solid var(--mc-border)' }}
+            />
+          </div>
+        )}
 
         <div className="flex gap-2 pt-2">
           <button

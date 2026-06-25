@@ -3,7 +3,7 @@ import {
   ChevronLeft, ChevronRight, Plus, Check,
   MapPin, ListTodo, Sparkles, Trash2, X,
   Repeat, Clock, ExternalLink, CheckCircle, AlertCircle,
-  Eye, Building2, Users,
+  Eye, Building2, Users, History,
 } from 'lucide-react';
 import { deleteRow } from '../supabase/sync';
 import { supabase } from '../supabase/client';
@@ -627,6 +627,7 @@ function CoffeeTasksScreen({ ctx }) {
           db={db}
           currentUser={currentUser}
           selectedDate={selectedDate}
+          scheduleCompletions={scheduleCompletions}
           onConfirm={detailItem.type === 'once' ? () => { confirmTask(detailItem.task.id); setDetailItem(null); } : null}
           onReject={detailItem.type === 'once' ? () => { rejectConfirmation(detailItem.task.id); setDetailItem(null); } : null}
           onClose={() => setDetailItem(null)}
@@ -720,17 +721,44 @@ function TaskRow({ item, idx, onToggle, onView, onEdit, onDelete }) {
 
 /* ── Модалка добавления одноразовой задачи ── */
 /* ── Модалка деталей задачи ── */
-function TaskDetailModal({ item, db, currentUser, selectedDate, onConfirm, onReject, onClose }) {
+function fmtDateTime(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  return d.toLocaleString('ru', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function TaskDetailModal({ item, db, currentUser, selectedDate, scheduleCompletions, onConfirm, onReject, onClose }) {
   const { task, done, type, awaiting } = item;
   const shopObj = task.coffee_location && COFFEE_SHOPS.find(s => s.key === task.coffee_location);
-  const creator = (db.users || []).find(u => u.id === task.created_by);
-  const completedBy = task.completed_by && (db.users || []).find(u => u.id === task.completed_by);
-  const confirmedBy = task.confirmed_by && (db.users || []).find(u => u.id === task.confirmed_by);
   const userName = (u) => u ? (u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || 'Без имени') : null;
+  const findUser = (id) => id && (db.users || []).find(u => u.id === id);
 
   const statusLabel = awaiting ? 'Ожидает подтверждения' : done ? (task.status === 'confirmed' ? 'Подтверждено' : 'Выполнено') : 'Не выполнено';
   const statusColor = awaiting ? '#F59E0B' : done ? '#22C55E' : '#64748B';
-  const assignee = task.assignee_id && (db.users || []).find(u => u.id === task.assignee_id);
+  const assignee = task.assignee_id && findUser(task.assignee_id);
+
+  const historyEvents = useMemo(() => {
+    const events = [];
+    if (task.created_at) {
+      events.push({ time: task.created_at, label: 'Задача создана', user: findUser(task.created_by), color: '#3B82F6' });
+    }
+    if (type === 'once') {
+      if (task.completed_at) {
+        events.push({ time: task.completed_at, label: 'Выполнено', user: findUser(task.completed_by), color: '#22C55E' });
+      }
+      if (task.confirmed_at) {
+        events.push({ time: task.confirmed_at, label: 'Подтверждено', user: findUser(task.confirmed_by), color: '#0891B2' });
+      }
+    } else {
+      const key = scheduleCompletionKey(task, selectedDate);
+      const comp = (scheduleCompletions || []).find(c => c.task_id === task.id && c.completion_key === key);
+      if (comp) {
+        events.push({ time: comp.completed_at, label: 'Выполнено', user: findUser(comp.completed_by), color: '#22C55E' });
+      }
+    }
+    events.sort((a, b) => new Date(a.time) - new Date(b.time));
+    return events;
+  }, [task, type, selectedDate, scheduleCompletions, db.users]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
@@ -808,11 +836,27 @@ function TaskDetailModal({ item, db, currentUser, selectedDate, onConfirm, onRej
             </div>
           )}
 
-          <div className="pt-2 border-t space-y-1" style={{ borderColor: 'var(--mc-border)' }}>
-            {creator && <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Создал: {userName(creator)}</div>}
-            {completedBy && <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Выполнил: {userName(completedBy)}{task.completed_at ? ` · ${new Date(task.completed_at).toLocaleString('ru')}` : ''}</div>}
-            {confirmedBy && <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Подтвердил: {userName(confirmedBy)}{task.confirmed_at ? ` · ${new Date(task.confirmed_at).toLocaleString('ru')}` : ''}</div>}
-          </div>
+          {historyEvents.length > 0 && (
+            <div className="pt-2 border-t" style={{ borderColor: 'var(--mc-border)' }}>
+              <div className="flex items-center gap-1.5 mb-2">
+                <History size={13} style={{ color: 'var(--mc-muted)' }} />
+                <span className="text-[11px] font-semibold" style={{ color: 'var(--mc-muted)' }}>История изменений</span>
+              </div>
+              <div className="relative pl-4">
+                <div className="absolute left-[5px] top-1 bottom-1 w-px" style={{ background: 'var(--mc-border)' }} />
+                {historyEvents.map((ev, i) => (
+                  <div key={i} className="relative pb-3 last:pb-0">
+                    <div className="absolute -left-4 top-[3px] w-2.5 h-2.5 rounded-full border-2" style={{ borderColor: ev.color, background: 'var(--mc-surface)' }} />
+                    <div className="text-xs font-semibold" style={{ color: ev.color }}>{ev.label}</div>
+                    <div className="text-[11px]" style={{ color: 'var(--mc-muted)' }}>
+                      {fmtDateTime(ev.time)}
+                      {ev.user && <> — {userName(ev.user)}</>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {awaiting && onConfirm && (
             <div className="flex gap-2 pt-2">

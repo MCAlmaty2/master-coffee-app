@@ -20,6 +20,7 @@ export async function createProductInDb(product) {
       unit: product.unit,
       price: product.price,
       active: product.active ?? true,
+      ...(product.ntin ? { ntin: product.ntin } : {}),
     })
     .select()
     .single();
