@@ -49,12 +49,24 @@ function calcSafeBalance(ops) {
 }
 
 export default function CashScreen({ ctx }) {
-  const { navigate } = ctx;
+  const { navigate, currentUser } = ctx;
   const [showAdd, setShowAdd] = useState(false);
   const [expandedOp, setExpandedOp] = useState(null);
   const [filterType, setFilterType] = useState(null);
+  const [ops, setOps] = useState(MOCK_OPS);
 
-  const ops = MOCK_OPS;
+  const handleAddOp = (op) => {
+    const userName = currentUser ? `${(currentUser.first_name || '')} ${(currentUser.last_name || '').charAt(0)}.`.trim() : '';
+    const newOp = {
+      ...op,
+      id: String(Date.now()),
+      created_by_name: userName || 'Пользователь',
+      created_at: new Date().toISOString(),
+    };
+    setOps(prev => [newOp, ...prev]);
+    setShowAdd(false);
+  };
+
   const filtered = filterType ? ops.filter(o => o.type === filterType) : ops;
   const safeBalance = useMemo(() => calcSafeBalance(ops), [ops]);
   const safeTotal = DENOMINATIONS.reduce((s, d) => s + d * safeBalance[d], 0);
@@ -201,12 +213,12 @@ export default function CashScreen({ ctx }) {
       </div>
 
       {/* Add Operation Modal */}
-      {showAdd && <AddOperationModal onClose={() => setShowAdd(false)} />}
+      {showAdd && <AddOperationModal onClose={() => setShowAdd(false)} onAdd={handleAddOp} />}
     </div>
   );
 }
 
-function AddOperationModal({ onClose }) {
+function AddOperationModal({ onClose, onAdd }) {
   const [type, setType] = useState('expense');
   const [bills, setBills] = useState(() => {
     const b = {};
@@ -327,8 +339,13 @@ function AddOperationModal({ onClose }) {
 
         {/* Submit */}
         <button
+          disabled={total <= 0}
+          onClick={() => {
+            if (total <= 0) return;
+            onAdd({ type, bills: { ...bills }, total, description, category, person_name: person });
+          }}
           className="w-full py-3 rounded-xl font-semibold text-white text-sm"
-          style={{ background: total > 0 ? meta.color : 'var(--mc-muted)' }}>
+          style={{ background: total > 0 ? meta.color : 'var(--mc-muted)', opacity: total > 0 ? 1 : 0.5 }}>
           {meta.label}: {fmtMoney(total)}
         </button>
       </div>
