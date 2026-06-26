@@ -13469,7 +13469,7 @@ function GrindListScreen({ ctx }) {
 
 function CreateGrindScreen({ ctx }) {
   const { db, goBack, createGrindRequest, showToast } = ctx;
-  const coffeeProducts = (db.products || []).filter(p => p.active && p.cat === 'Кофе зерно');
+  const coffeeProducts = (db.products || []).filter(p => p.active && (p.cat === 'Кофе зерно' || p.cat === 'Кофе для фильра' || p.cat === 'Дрип-кофе'));
 
   const emptyForm = () => ({
     client_name: '',
