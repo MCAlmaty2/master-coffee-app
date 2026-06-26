@@ -42,6 +42,7 @@ export const SYNC_TABLES = {
   coffeeShipments:    { table: 'coffee_shipments',    pk: 'id', base: 'coffeeshop' },
   coffeeTasks:        { table: 'coffee_tasks',        pk: 'id', base: 'coffeeshop' },
   vacations:          { table: 'vacations',           pk: 'id' },
+  cashOperations:     { table: 'cash_operations',     pk: 'id' },
 };
 
 /**

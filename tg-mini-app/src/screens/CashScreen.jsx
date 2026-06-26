@@ -1,11 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft, Plus, X, ArrowDownCircle, ArrowUpCircle,
-  RotateCcw, Filter, ChevronDown, ChevronUp, Banknote,
+  RotateCcw, ChevronDown, ChevronUp, Banknote,
 } from 'lucide-react';
-
 const TZ = 'Asia/Almaty';
-const todayISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
 
 const DENOMINATIONS = [20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 2, 1];
 
@@ -20,8 +18,6 @@ const TYPE_META = {
   expense: { label: 'Расход',  color: '#EF4444', icon: ArrowUpCircle },
   return:  { label: 'Возврат', color: '#3B82F6', icon: RotateCcw },
 };
-
-const MOCK_OPS = [];
 
 function fmtMoney(n) {
   return n.toLocaleString('ru-RU') + ' ₸';
@@ -49,21 +45,26 @@ function calcSafeBalance(ops) {
 }
 
 export default function CashScreen({ ctx }) {
-  const { navigate, currentUser } = ctx;
+  const { navigate, currentUser, db, setDb } = ctx;
   const [showAdd, setShowAdd] = useState(false);
   const [expandedOp, setExpandedOp] = useState(null);
   const [filterType, setFilterType] = useState(null);
-  const [ops, setOps] = useState(MOCK_OPS);
 
-  const handleAddOp = (op) => {
+  const ops = useMemo(() =>
+    [...(db.cashOperations || [])].sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    [db.cashOperations],
+  );
+
+  const handleAddOp = async (op) => {
     const userName = currentUser ? `${(currentUser.first_name || '')} ${(currentUser.last_name || '').charAt(0)}.`.trim() : '';
     const newOp = {
       ...op,
-      id: String(Date.now()),
+      id: crypto.randomUUID(),
+      created_by: currentUser?.id || null,
       created_by_name: userName || 'Пользователь',
       created_at: new Date().toISOString(),
     };
-    setOps(prev => [newOp, ...prev]);
+    setDb(d => ({ ...d, cashOperations: [newOp, ...(d.cashOperations || [])] }));
     setShowAdd(false);
   };
 
@@ -354,7 +355,8 @@ function AddOperationModal({ onClose, onAdd }) {
 }
 
 export function CashHomeTile({ db, currentUser, navigate }) {
-  const safeTotal = 499000;
+  const safeBalance = useMemo(() => calcSafeBalance(db.cashOperations || []), [db.cashOperations]);
+  const safeTotal = DENOMINATIONS.reduce((s, d) => s + d * safeBalance[d], 0);
   return (
     <div onClick={() => navigate({ name: 'cash' })}
       className="rounded-xl p-3 cursor-pointer active:scale-[0.98] transition-transform"
