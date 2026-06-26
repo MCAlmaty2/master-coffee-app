@@ -37,7 +37,7 @@ export const SYNC_TABLES = {
   managerTasks:       { table: 'manager_tasks',       pk: 'id', base: 'tk' },
   releaseNotes:       { table: 'release_notes',       pk: 'id' },
   scheduleTasks:      { table: 'schedule_tasks',      pk: 'id', base: 'coffeeshop' },
-  scheduleCompletions: { table: 'schedule_completions', pk: 'id', dateFilter: { column: 'date', cutoff: CUTOFF_3M }, base: 'coffeeshop' },
+  scheduleCompletions: { table: 'schedule_completions', pk: 'id', dateFilter: { column: 'completed_at', cutoff: CUTOFF_3M }, base: 'coffeeshop' },
   gifts:              { table: 'gifts',               pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M } },
   coffeeShipments:    { table: 'coffee_shipments',    pk: 'id', base: 'coffeeshop' },
   coffeeTasks:        { table: 'coffee_tasks',        pk: 'id', base: 'coffeeshop' },
