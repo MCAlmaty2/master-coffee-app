@@ -13490,12 +13490,24 @@ function CreateGrindScreen({ ctx }) {
   const [submitting, setSubmitting] = useState(false);
   const update = patch => setForm(f => ({ ...f, ...patch }));
 
-  const matchProduct = (text) => {
+  const matchProduct = (text, weightGrams = null) => {
     const lower = text.toLowerCase();
     let best = null, bestScore = 0;
     for (const p of coffeeProducts) {
-      const words = p.name.toLowerCase().split(/[\s,/]+/).filter(w => w.length > 2);
-      const score = words.filter(w => lower.includes(w)).length;
+      const pLower = p.name.toLowerCase();
+      const words = pLower.split(/[\s,/]+/).filter(w => w.length > 2);
+      let score = words.filter(w => lower.includes(w)).length;
+      if (score < 1) continue;
+      if (weightGrams) {
+        const isSht = pLower.startsWith('шт ');
+        if (weightGrams >= 1000) {
+          if (!isSht) score += 3;
+          else score -= 1;
+        } else {
+          if (isSht && pLower.includes(String(weightGrams))) score += 4;
+          else if (isSht) score += 1;
+        }
+      }
       if (score > bestScore) { bestScore = score; best = p; }
     }
     return bestScore >= 1 ? best : null;
@@ -13543,8 +13555,9 @@ function CreateGrindScreen({ ctx }) {
       const weightUnit = fasM ? (fasM[2] === 'кг' ? 'кг' : 'г') : null;
 
       const volM = !fasM && cleanRaw.match(/(\d+)\s*(л\.|литр)/i);
+      const weightGrams = fasM ? (fasM[2].toLowerCase() === 'кг' ? Number(fasM[1]) * 1000 : Number(fasM[1])) : null;
       const grindInfo = detectGrind(cleanRaw);
-      const product = matchProduct(itemName);
+      const product = matchProduct(itemName, weightGrams);
       const isCoffee = !!product || /кофе|blend|espresso|supremo|prestige|decaf|декаф|можиан|руанда|эфиопия|колумб|бразил|гондурас|кения|сидамо|classico|basic|milk|qazaq|milano/i.test(itemName);
       const isNonCoffee = /сироп|чай|молоко|сахар|стакан|крышк|трубочк/i.test(itemName);
 
