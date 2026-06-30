@@ -11775,6 +11775,7 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
   const [editing, setEditing] = useState(false);
   const [editItems, setEditItems] = useState([]);
   const [editReason, setEditReason] = useState('');
+  const [editTotalOpen, setEditTotalOpen] = useState(false);
 
   if (!wo) return <div className="p-6">Заявка не найдена</div>;
 
@@ -11936,6 +11937,11 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
                 <div className="flex items-center gap-3 mt-2">
                   <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--mc-muted)' }}>Сумма</div>
                   <div className="text-lg font-bold" style={{ color: 'var(--mc-text)' }}>{fmtNum(wo.doc_total)} ₸</div>
+                  {(currentUser.role === 'admin' || hasPermission(db, currentUser, 'writeoff_finalize')) && (
+                    <button onClick={() => setEditTotalOpen(true)} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: 'var(--mc-active-item)' }}>
+                      <Edit3 size={12} style={{ color: 'var(--mc-muted)' }} />
+                    </button>
+                  )}
                 </div>
               )}
               {wo.invoiced_at && <div className="text-xs mt-2" style={{ color: 'var(--mc-muted)' }}>Списано: {fmtDateTime(wo.invoiced_at)}</div>}
@@ -12061,6 +12067,22 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
           if (r.error) return showToast(r.error);
           setCompleteOpen(false);
           showToast(`${wo.number} списана в 1С (${docNo}, ${fmtNum(docTotal)} ₸)`);
+        }} />
+      )}
+      {editTotalOpen && (
+        <EditDocTotalModal currentTotal={wo.doc_total} onClose={() => setEditTotalOpen(false)} onSave={(newTotal) => {
+          const val = Number(newTotal);
+          if (!val || val <= 0) return showToast('Укажите корректную сумму');
+          setDb(d => ({
+            ...d,
+            writeOffs: d.writeOffs.map(w => w.id !== wo.id ? w : {
+              ...w,
+              doc_total: val,
+              log: [...w.log, { event: 'edit_total', actor: currentUser.id, at: new Date().toISOString(), meta: { from: w.doc_total, to: val } }],
+            }),
+          }));
+          setEditTotalOpen(false);
+          showToast(`Сумма обновлена: ${fmtNum(val)} ₸`);
         }} />
       )}
       {prepareOpen && (
@@ -12289,6 +12311,39 @@ function CompleteWriteOffModal({ onClose, onComplete }) {
           <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button onClick={() => onComplete(docNo, docTotal)} disabled={!valid} className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50" style={{ background: '#22C55E' }}>
             Списать и закрыть
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function EditDocTotalModal({ currentTotal, onClose, onSave }) {
+  const [amount, setAmount] = useState(String(currentTotal || ''));
+  const valid = Number(amount) > 0;
+  return (
+    <Modal onClose={onClose} title="Изменить сумму из 1С">
+      <div className="space-y-3">
+        <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
+          Текущая сумма: <strong style={{ color: 'var(--mc-text)' }}>{fmtNum(currentTotal)} ₸</strong>
+        </div>
+        <div>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Новая сумма (₸)</label>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            autoFocus
+            placeholder="0"
+            className="w-full px-3 py-2.5 rounded-lg outline-none text-lg font-bold"
+            style={{ border: `1px solid ${valid || !amount ? 'var(--mc-border)' : '#EB5757'}`, color: 'var(--mc-text)' }}
+          />
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
+          <button onClick={() => onSave(amount)} disabled={!valid} className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50" style={{ background: '#22C55E' }}>
+            Сохранить
           </button>
         </div>
       </div>
