@@ -233,7 +233,7 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, but
     ...(link_id   != null ? { link_id }   : {}),
   };
   const tgs       = db?.telegramSettings;
-  const TG_DM_ALLOWED = new Set(['writeoff', 'gift', 'task', 'manager_task', 'hr', 'access', 'general', 'coffee_task']);
+  const TG_DM_ALLOWED = new Set(['writeoff', 'gift', 'task', 'manager_task', 'hr', 'access', 'general', 'coffee_task', 'expense']);
   const category = link_kind || 'general';
   const prefs = recipient?.tg_notif_prefs || {};
   const categoryAllowed = prefs[category] !== false && TG_DM_ALLOWED.has(category);
@@ -793,6 +793,15 @@ const DEFAULT_TG_TEMPLATES = {
   grind_ready:
     '✅ Помол {{gr_number}} готов → архив\n{{product}} · {{quantity}} {{unit}}\nМенеджер: {{manager}}',
 
+  expense_new:
+    '🧾 Заявка на расход {{req_number}}\nОт: {{requester}}\nСумма: {{amount}} ₸\nКатегория: {{category}}\n{{description}}',
+
+  expense_approved:
+    '✅ Расход одобрен {{req_number}}\nОдобрил: {{approver}}\nСумма: {{amount}} ₸\n{{description}}',
+
+  expense_paid:
+    '💰 Расход выдан {{req_number}}\nКассир: {{cashier}}\nСумма: {{amount}} ₸\nПолучатель: {{requester}}',
+
   error_report:
     '🚨 Ошибка в приложении\nПользователь: {{reporter}}\nМаршрут: {{route}}\n{{message}}',
 };
@@ -815,6 +824,9 @@ const TG_TEMPLATE_VARS = {
   contract_signed:        ['cr_number', 'contract_number', 'client', 'contract_type'],
   grind_new:              ['gr_number', 'client', 'product', 'quantity', 'unit', 'grind_type', 'order_1c', 'manager'],
   grind_ready:            ['gr_number', 'product', 'quantity', 'unit', 'manager'],
+  expense_new:            ['req_number', 'requester', 'amount', 'category', 'description'],
+  expense_approved:       ['req_number', 'approver', 'amount', 'description'],
+  expense_paid:           ['req_number', 'cashier', 'amount', 'requester'],
   error_report:           ['reporter', 'route', 'message'],
 };
 
@@ -865,6 +877,7 @@ function loadDB() {
         'contract_new', 'contract_signed',
         'task_done', 'access_request',
         'grind_new', 'grind_ready',
+        'expense_new', 'expense_approved', 'expense_paid',
         'error_report',
       ];
       db.telegramSettings.topics = db.telegramSettings.topics || {};
@@ -1185,6 +1198,7 @@ function App() {
     if (type === 'writeoff') navigate({ name: 'writeoff_detail', writeOffId: id });
     else if (type === 'gift') navigate({ name: 'gift_detail', giftId: id });
     else if (type === 'contract') navigate({ name: 'contract_detail', contractId: id });
+    else if (type === 'expense') navigate({ name: 'expense_detail', expenseId: id });
   }, [bootStatus.phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Realtime: подписываемся на изменения всех таблиц ───
@@ -2727,6 +2741,155 @@ function App() {
     return { ok: true };
   };
 
+  /* ═══════════ Чеки расходов ═══════════ */
+
+  const createExpenseRequest = (data) => {
+    if (!hasPermission(db, currentUser, 'expense_create')) return { error: 'Нет прав на создание заявки на расход' };
+    if (!data.amount || Number(data.amount) <= 0) return { error: 'Укажите сумму' };
+    if (!data.category) return { error: 'Выберите категорию' };
+    if (!data.description?.trim()) return { error: 'Укажите описание' };
+
+    const year = new Date().getFullYear();
+    const prefix = `ЧР-${year}-`;
+    let max = 0;
+    for (const r of (db.expenseRequests || [])) {
+      if (r.request_number?.startsWith(prefix)) {
+        const n = parseInt(r.request_number.slice(prefix.length), 10);
+        if (n > max) max = n;
+      }
+    }
+    const reqNumber = prefix + String(max + 1).padStart(3, '0');
+
+    const newReq = {
+      id: crypto.randomUUID(),
+      request_number: reqNumber,
+      requester_id: currentUser.id,
+      requester_name: currentUser.name || 'Пользователь',
+      amount: Number(data.amount),
+      description: data.description.trim(),
+      category: data.category,
+      receipt_urls: data.receipt_urls || [],
+      status: 'pending',
+      approved_by: null, approved_by_name: null, approved_at: null,
+      reject_reason: null,
+      paid_by: null, paid_by_name: null, paid_at: null,
+      cash_operation_id: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    setDb(d => {
+      const appUrl = d.telegramSettings?.app_url || 'https://master-coffee-app.vercel.app';
+      const approvers = d.users.filter(u => u.active && ['admin', 'director', 'senior_manager'].includes(u.role) && u.id !== currentUser.id);
+      const newNotifs = approvers.map(a => makeNotif(d, {
+        recipient_id: a.id,
+        title: '🧾 Заявка на расход',
+        body: `${reqNumber}: ${fmtNum(newReq.amount)} ₸ — ${newReq.category}\n${newReq.description.slice(0, 60)}`,
+        link_kind: 'expense', link_id: newReq.id,
+        button_url: `${appUrl}?startapp=expense_${newReq.id}`,
+        button_text: '📋 Открыть заявку',
+      }));
+      const tgEntry = makeTgLogEntry(d, 'expense_new', {
+        req_number: reqNumber,
+        requester: getUserName(d, currentUser.id),
+        amount: String(newReq.amount),
+        category: newReq.category,
+        description: newReq.description.slice(0, 80),
+      });
+      return { ...d, expenseRequests: [newReq, ...(d.expenseRequests || [])], notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
+    });
+    return { ok: true, request: newReq };
+  };
+
+  const approveExpense = (expenseId) => {
+    if (!hasPermission(db, currentUser, 'expense_approve')) return { error: 'Нет прав одобрять заявки на расход' };
+    const req = (db.expenseRequests || []).find(r => r.id === expenseId);
+    if (!req) return { error: 'Заявка не найдена' };
+    if (req.status !== 'pending') return { error: 'Можно одобрить только ожидающие заявки' };
+    setDb(d => {
+      const updatedList = (d.expenseRequests || []).map(r => {
+        if (r.id !== expenseId) return r;
+        return { ...r, status: 'approved', approved_by: currentUser.id, approved_by_name: currentUser.name, approved_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      });
+      const newNotifs = [makeNotif(d, {
+        recipient_id: req.requester_id,
+        title: 'Расход одобрен',
+        body: `${req.request_number}: ${fmtNum(req.amount)} ₸ одобрена ${getUserName(d, currentUser.id)}`,
+        link_kind: 'expense', link_id: req.id,
+      })];
+      const tgEntry = makeTgLogEntry(d, 'expense_approved', {
+        req_number: req.request_number,
+        approver: getUserName(d, currentUser.id),
+        amount: String(req.amount),
+        description: req.description.slice(0, 80),
+      });
+      return { ...d, expenseRequests: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
+    });
+    return { ok: true };
+  };
+
+  const rejectExpense = (expenseId, reason) => {
+    if (!hasPermission(db, currentUser, 'expense_approve')) return { error: 'Нет прав отклонять заявки на расход' };
+    if (!reason?.trim()) return { error: 'Укажите причину отклонения' };
+    const req = (db.expenseRequests || []).find(r => r.id === expenseId);
+    if (!req) return { error: 'Заявка не найдена' };
+    if (req.status !== 'pending') return { error: 'Отклонить можно только ожидающие заявки' };
+    setDb(d => {
+      const updatedList = (d.expenseRequests || []).map(r => {
+        if (r.id !== expenseId) return r;
+        return { ...r, status: 'rejected', approved_by: currentUser.id, approved_by_name: currentUser.name, approved_at: new Date().toISOString(), reject_reason: reason.trim(), updated_at: new Date().toISOString() };
+      });
+      const newNotifs = [makeNotif(d, {
+        recipient_id: req.requester_id,
+        title: 'Расход отклонён',
+        body: `${req.request_number}: причина — ${reason.trim().slice(0, 80)}`,
+        link_kind: 'expense', link_id: req.id,
+      })];
+      return { ...d, expenseRequests: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
+    });
+    return { ok: true };
+  };
+
+  const payExpense = (expenseId) => {
+    if (!hasPermission(db, currentUser, 'expense_pay')) return { error: 'Нет прав на выдачу денег' };
+    const req = (db.expenseRequests || []).find(r => r.id === expenseId);
+    if (!req) return { error: 'Заявка не найдена' };
+    if (req.status !== 'approved') return { error: 'Выдать можно только одобренные заявки' };
+    const cashOpId = crypto.randomUUID();
+    const cashOp = {
+      id: cashOpId,
+      type: 'expense',
+      total: req.amount,
+      person_name: req.requester_name,
+      category: req.category,
+      description: `Чек ${req.request_number}: ${req.description}`,
+      bills: {},
+      created_by: currentUser.id,
+      created_by_name: currentUser.name,
+      created_at: new Date().toISOString(),
+    };
+    setDb(d => {
+      const updatedList = (d.expenseRequests || []).map(r => {
+        if (r.id !== expenseId) return r;
+        return { ...r, status: 'paid', paid_by: currentUser.id, paid_by_name: currentUser.name, paid_at: new Date().toISOString(), cash_operation_id: cashOpId, updated_at: new Date().toISOString() };
+      });
+      const newNotifs = [makeNotif(d, {
+        recipient_id: req.requester_id,
+        title: 'Деньги выданы',
+        body: `${req.request_number}: ${fmtNum(req.amount)} ₸ выдано кассиром ${getUserName(d, currentUser.id)}`,
+        link_kind: 'expense', link_id: req.id,
+      })];
+      const tgEntry = makeTgLogEntry(d, 'expense_paid', {
+        req_number: req.request_number,
+        cashier: getUserName(d, currentUser.id),
+        amount: String(req.amount),
+        requester: req.requester_name,
+      });
+      return { ...d, expenseRequests: updatedList, cashOperations: [cashOp, ...(d.cashOperations || [])], notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
+    });
+    return { ok: true };
+  };
+
   /* ═══════════ Подарки клиентам ═══════════ */
 
   const createGift = async (data) => {
@@ -3684,6 +3847,7 @@ function App() {
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createGift, approveGift, rejectGift, processGift, prepareGift, deliverGift, cancelGift,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
+    createExpenseRequest, approveExpense, rejectExpense, payExpense,
     createGrindRequest, takeGrindRequest, markGrindReady, cancelGrindRequest,
     createCustomRole, updateRolePermissions, updateRoleMeta, deleteCustomRole,
     createProduct, updateProduct, toggleProductActive, deleteProduct, importProducts, renameCategory, createCategory,
@@ -13107,6 +13271,15 @@ function AdminTelegramScreen({ ctx }) {
       ],
     },
     {
+      title: 'Чеки расходов',
+      hint: 'Жизненный цикл заявок на расход',
+      items: [
+        { key: 'expense_new',      label: 'Новая заявка на расход' },
+        { key: 'expense_approved', label: 'Расход одобрен' },
+        { key: 'expense_paid',     label: 'Деньги выданы' },
+      ],
+    },
+    {
       title: 'Договоры',
       hint: 'Жизненный цикл договоров',
       items: [
@@ -14518,6 +14691,7 @@ function NotificationsScreen({ ctx }) {
         case 'writeoff': return navigate({ name: 'writeoff_detail', writeOffId: n.link_id });
         case 'gift':     return navigate({ name: 'gift_detail',     giftId:     n.link_id });
         case 'contract': return navigate({ name: 'contract_detail', contractId: n.link_id });
+        case 'expense':  return navigate({ name: 'expense_detail',  expenseId:  n.link_id });
         case 'shipment': return navigate({ name: 'shipment_registry' });
         case 'manager_task': return navigate({ name: 'manager_tasks' });
         case 'coffee_task': return navigate({ name: 'coffee_tasks' });

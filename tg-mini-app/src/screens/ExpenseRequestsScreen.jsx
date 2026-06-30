@@ -24,19 +24,6 @@ function fmtDateTime(iso) {
 }
 function fmtMoney(n) { return (Number(n) || 0).toLocaleString('ru-RU') + ' ₸'; }
 
-function nextRequestNumber(existing) {
-  const year = new Date().getFullYear();
-  const prefix = `ЧР-${year}-`;
-  let max = 0;
-  for (const r of existing) {
-    if (r.request_number?.startsWith(prefix)) {
-      const n = parseInt(r.request_number.slice(prefix.length), 10);
-      if (n > max) max = n;
-    }
-  }
-  return prefix + String(max + 1).padStart(3, '0');
-}
-
 function matchesSearch(text, query) {
   if (!query) return true;
   const t = (text || '').toLowerCase();
@@ -157,7 +144,7 @@ function ExpenseListScreen({ ctx }) {
 }
 
 function CreateExpenseScreen({ ctx }) {
-  const { db, setDb, currentUser, navigate, showToast } = ctx;
+  const { db, navigate, showToast } = ctx;
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -202,30 +189,8 @@ function CreateExpenseScreen({ ctx }) {
   };
 
   const handleSubmit = () => {
-    const num = Number(amount);
-    if (!num || num <= 0) { showToast('Укажите сумму', 'error'); return; }
-    if (!category) { showToast('Выберите категорию', 'error'); return; }
-    if (!description.trim()) { showToast('Укажите описание', 'error'); return; }
-
-    const newReq = {
-      id: crypto.randomUUID(),
-      request_number: nextRequestNumber(db.expenseRequests || []),
-      requester_id: currentUser.id,
-      requester_name: currentUser.name || 'Пользователь',
-      amount: num,
-      description: description.trim(),
-      category,
-      receipt_urls: receiptUrls,
-      status: 'pending',
-      approved_by: null, approved_by_name: null, approved_at: null,
-      reject_reason: null,
-      paid_by: null, paid_by_name: null, paid_at: null,
-      cash_operation_id: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    setDb(d => ({ ...d, expenseRequests: [newReq, ...(d.expenseRequests || [])] }));
+    const result = ctx.createExpenseRequest({ amount, category, description: description.trim(), receipt_urls: receiptUrls });
+    if (result.error) { showToast(result.error, 'error'); return; }
     showToast('Заявка создана');
     navigate({ name: 'expenses' });
   };
@@ -301,7 +266,7 @@ function CreateExpenseScreen({ ctx }) {
 }
 
 function ExpenseDetailScreen({ ctx, expenseId }) {
-  const { db, setDb, currentUser, navigate, showToast } = ctx;
+  const { db, navigate, showToast } = ctx;
   const hasPerm = (p) => ctx.hasPermission?.(p);
   const [rejectReason, setRejectReason] = useState('');
   const [showReject, setShowReject] = useState(false);
@@ -319,56 +284,23 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
   const canApprove = hasPerm('expense_approve') && req.status === 'pending';
   const canPay = hasPerm('expense_pay') && req.status === 'approved';
 
-  const updateRequest = (patch) => {
-    const updated = { ...req, ...patch, updated_at: new Date().toISOString() };
-    setDb(d => ({ ...d, expenseRequests: (d.expenseRequests || []).map(r => r.id === expenseId ? updated : r) }));
-  };
-
   const handleApprove = () => {
-    updateRequest({
-      status: 'approved',
-      approved_by: currentUser.id,
-      approved_by_name: currentUser.name,
-      approved_at: new Date().toISOString(),
-    });
+    const result = ctx.approveExpense(expenseId);
+    if (result.error) { showToast(result.error, 'error'); return; }
     showToast('Заявка одобрена');
   };
 
   const handleReject = () => {
     if (!rejectReason.trim()) { showToast('Укажите причину отклонения', 'error'); return; }
-    updateRequest({
-      status: 'rejected',
-      approved_by: currentUser.id,
-      approved_by_name: currentUser.name,
-      approved_at: new Date().toISOString(),
-      reject_reason: rejectReason.trim(),
-    });
+    const result = ctx.rejectExpense(expenseId, rejectReason.trim());
+    if (result.error) { showToast(result.error, 'error'); return; }
     setShowReject(false);
     showToast('Заявка отклонена');
   };
 
   const handlePay = () => {
-    const cashOpId = crypto.randomUUID();
-    const cashOp = {
-      id: cashOpId,
-      type: 'expense',
-      total: req.amount,
-      person_name: req.requester_name,
-      category: req.category,
-      description: `Чек ${req.request_number}: ${req.description}`,
-      bills: {},
-      created_by: currentUser.id,
-      created_by_name: currentUser.name,
-      created_at: new Date().toISOString(),
-    };
-    updateRequest({
-      status: 'paid',
-      paid_by: currentUser.id,
-      paid_by_name: currentUser.name,
-      paid_at: new Date().toISOString(),
-      cash_operation_id: cashOpId,
-    });
-    setDb(d => ({ ...d, cashOperations: [cashOp, ...(d.cashOperations || [])] }));
+    const result = ctx.payExpense(expenseId);
+    if (result.error) { showToast(result.error, 'error'); return; }
     showToast('Деньги выданы, расход записан в подотчёт');
   };
 
