@@ -44,6 +44,7 @@ export const SYNC_TABLES = {
   vacations:          { table: 'vacations',           pk: 'id' },
   cashOperations:     { table: 'cash_operations',     pk: 'id' },
   expenseCategories:  { table: 'expense_categories',  pk: 'id' },
+  budgetEntries:      { table: 'budget_entries',      pk: 'id' },
   expenseRequests:    { table: 'expense_requests',    pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_6M } },
 };
 

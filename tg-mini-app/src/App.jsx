@@ -5,7 +5,7 @@ import {
   ChevronRight, Trash2, Eye, Users, ArrowRight, Hash, ChevronDown,
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
-  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt,
+  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt, Wallet,
 } from 'lucide-react';
 import { supabase } from './supabase/client';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
@@ -21,6 +21,7 @@ import CoffeeTasksScreen from './screens/CoffeeTasksScreen';
 import HRCalendarScreen from './screens/HRCalendarScreen';
 import CashScreen from './screens/CashScreen';
 import ExpenseRequestsScreen from './screens/ExpenseRequestsScreen';
+import BudgetScreen from './screens/BudgetScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -500,6 +501,8 @@ const PERMISSIONS = {
   expense_approve:      { group: 'Расходы', label: 'Одобрять / отклонять заявки на расход' },
   expense_pay:          { group: 'Расходы', label: 'Выдавать деньги по заявке (кассир)' },
   expense_view_all:     { group: 'Расходы', label: 'Видеть все заявки на расход' },
+  // Бюджет
+  budget_view:          { group: 'Финансы', label: 'Просматривать бюджет (план / факт)' },
   // Расписание
   schedule_access:      { group: 'Расписание', label: 'Доступ к регулярным задачам (расписание)' },
   // Админ
@@ -518,7 +521,7 @@ function defaultPermissionsFor(roleKey) {
       // admin всё равно имеет всё, но для согласованности — все права
       return Object.keys(PERMISSIONS);
     case 'director':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_approve', 'expense_view_all'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_approve', 'expense_view_all', 'budget_view'];
     case 'senior_manager':
       return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_view_all'];
     case 'courier':
@@ -953,6 +956,7 @@ function seedDB() {
     vacations: [],
     cashOperations: [],
     expenseCategories: [],
+    budgetEntries: [],
     expenseRequests: [],
     roleDefinitions: SYSTEM_ROLES.map(key => ({
       key,
@@ -2608,23 +2612,26 @@ function App() {
    * Кассир провёл документ через 1С. Теперь заявка идёт на склад.
    * Старое имя сохранено для совместимости — но статус теперь 'invoiced', не 'completed'.
    */
-  const completeWriteOff = (writeOffId, docNo) => {
+  const completeWriteOff = (writeOffId, docNo, docTotal) => {
     if (!hasPermission(db, currentUser, 'writeoff_finalize')) return { error: 'Закрывать списания может только кассир' };
     const wo = db.writeOffs.find(w => w.id === writeOffId);
     if (!wo) return { error: 'Заявка не найдена' };
     if (wo.status !== 'approved') return { error: 'Провести через 1С можно только одобренные заявки' };
     const trimmed = (docNo || '').trim();
     if (!isValidDocNo(trimmed)) return { error: 'Номер документа должен быть в формате 00ЦТ-NNNNNN (например 00ЦТ-012573)' };
+    const total = Number(docTotal);
+    if (!total || total <= 0) return { error: 'Укажите сумму списания из 1С' };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => {
         if (w.id !== writeOffId) return w;
         return {
           ...w,
-          status: 'invoiced',  // НОВОЕ: было 'completed', теперь идёт на склад
+          status: 'invoiced',
           doc_no: trimmed,
+          doc_total: total,
           invoiced_by: currentUser.id,
           invoiced_at: new Date().toISOString(),
-          log: [...w.log, { event: 'status', from: 'approved', to: 'invoiced', actor: currentUser.id, at: new Date().toISOString(), meta: { doc_no: trimmed } }],
+          log: [...w.log, { event: 'status', from: 'approved', to: 'invoiced', actor: currentUser.id, at: new Date().toISOString(), meta: { doc_no: trimmed, doc_total: total } }],
         };
       });
       // Уведомления: автору + всем складским
@@ -4760,6 +4767,9 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       if (hasPermission(db, currentUser, 'expense_create') || hasPermission(db, currentUser, 'expense_approve') || hasPermission(db, currentUser, 'expense_pay') || hasPermission(db, currentUser, 'expense_view_all')) {
         finItems.push({ id: 'expenses', label: 'Чеки расходов', icon: Receipt });
       }
+      if (hasPermission(db, currentUser, 'budget_view')) {
+        finItems.push({ id: 'budget', label: 'Бюджет', icon: Wallet });
+      }
       if (finItems.length > 0) groups.push({ title: 'Финансы', items: finItems, collapsible: true, base: 'tk' });
     }
 
@@ -5284,6 +5294,7 @@ function Screen({ ctx }) {
     case 'expenses':       return <ExpenseRequestsScreen ctx={ctx} />;
     case 'create_expense': return <ExpenseRequestsScreen ctx={ctx} />;
     case 'expense_detail': return <ExpenseRequestsScreen ctx={ctx} />;
+    case 'budget':         return <BudgetScreen ctx={ctx} />;
     // ─── HR-календарь (отпуска и ДР) ───
     case 'hr_calendar': return <HRCalendarScreen ctx={ctx} />;
     // ─── Подарки клиентам ───
@@ -11921,7 +11932,13 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
                 <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--mc-muted)' }}>Номер</div>
                 <div className="mono-font text-xl font-bold" style={{ color: '#22C55E' }}>{wo.doc_no}</div>
               </div>
-              {wo.completed_at && <div className="text-xs mt-2" style={{ color: 'var(--mc-muted)' }}>Списано: {fmtDateTime(wo.completed_at)}</div>}
+              {wo.doc_total > 0 && (
+                <div className="flex items-center gap-3 mt-2">
+                  <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--mc-muted)' }}>Сумма</div>
+                  <div className="text-lg font-bold" style={{ color: 'var(--mc-text)' }}>{fmtNum(wo.doc_total)} ₸</div>
+                </div>
+              )}
+              {wo.invoiced_at && <div className="text-xs mt-2" style={{ color: 'var(--mc-muted)' }}>Списано: {fmtDateTime(wo.invoiced_at)}</div>}
             </Card>
           )}
 
@@ -12039,11 +12056,11 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
         }} />
       )}
       {completeOpen && (
-        <CompleteWriteOffModal onClose={() => setCompleteOpen(false)} onComplete={(docNo) => {
-          const r = completeWriteOff(wo.id, docNo);
+        <CompleteWriteOffModal onClose={() => setCompleteOpen(false)} onComplete={(docNo, docTotal) => {
+          const r = completeWriteOff(wo.id, docNo, docTotal);
           if (r.error) return showToast(r.error);
           setCompleteOpen(false);
-          showToast(`${wo.number} списана в 1С (${docNo})`);
+          showToast(`${wo.number} списана в 1С (${docNo}, ${fmtNum(docTotal)} ₸)`);
         }} />
       )}
       {prepareOpen && (
@@ -12229,12 +12246,15 @@ function RejectWriteOffModal({ onClose, onReject }) {
 
 function CompleteWriteOffModal({ onClose, onComplete }) {
   const [docNo, setDocNo] = useState('00ЦТ-');
-  const valid = isValidDocNo(docNo);
+  const [docTotal, setDocTotal] = useState('');
+  const validNo = isValidDocNo(docNo);
+  const validTotal = Number(docTotal) > 0;
+  const valid = validNo && validTotal;
   return (
     <Modal onClose={onClose} title="Провести через 1С">
       <div className="space-y-3">
         <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
-          Введите номер документа списания из 1С. После этого заявка уйдёт на склад для сборки и выдачи.
+          Введите номер документа и сумму списания из 1С. После этого заявка уйдёт на склад для сборки и выдачи.
         </div>
         <div>
           <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Номер документа</label>
@@ -12244,15 +12264,30 @@ function CompleteWriteOffModal({ onClose, onComplete }) {
             autoFocus
             placeholder="00ЦТ-012573"
             className="w-full px-3 py-2.5 rounded-lg outline-none mono-font text-lg font-bold tracking-wider"
-            style={{ border: `1px solid ${valid || docNo === '00ЦТ-' ? 'var(--mc-border)' : '#EB5757'}`, color: 'var(--mc-text)' }}
+            style={{ border: `1px solid ${validNo || docNo === '00ЦТ-' ? 'var(--mc-border)' : '#EB5757'}`, color: 'var(--mc-text)' }}
           />
-          <div className="text-[11px] mt-1" style={{ color: valid ? '#22C55E' : '#64748B' }}>
+          <div className="text-[11px] mt-1" style={{ color: validNo ? '#22C55E' : '#64748B' }}>
             Формат: 00ЦТ-NNNNNN (от 4 до 7 цифр)
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Сумма из 1С (₸)</label>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={docTotal}
+            onChange={e => setDocTotal(e.target.value)}
+            placeholder="0.00"
+            className="w-full px-3 py-2.5 rounded-lg outline-none text-lg font-bold"
+            style={{ border: `1px solid ${validTotal || !docTotal ? 'var(--mc-border)' : '#EB5757'}`, color: 'var(--mc-text)' }}
+          />
+          <div className="text-[11px] mt-1" style={{ color: '#64748B' }}>
+            Итоговая сумма документа списания из 1С
           </div>
         </div>
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
-          <button onClick={() => onComplete(docNo)} disabled={!valid} className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50" style={{ background: '#22C55E' }}>
+          <button onClick={() => onComplete(docNo, docTotal)} disabled={!valid} className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50" style={{ background: '#22C55E' }}>
             Списать и закрыть
           </button>
         </div>
