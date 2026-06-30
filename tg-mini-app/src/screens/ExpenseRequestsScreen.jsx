@@ -1,0 +1,483 @@
+import React, { useState, useMemo, useRef } from 'react';
+import {
+  Receipt, Plus, Search, ChevronRight, ChevronLeft, Check, X,
+  CircleDot, CheckCircle2, XCircle, Banknote, Upload, Image, Trash2, Eye,
+} from 'lucide-react';
+
+const TZ = 'Asia/Almaty';
+const STATUS_META = {
+  pending:  { label: 'На одобрении', short: 'Ожидает',   color: '#F59E0B', bg: '#FEF3C7', icon: CircleDot },
+  approved: { label: 'Одобрена',     short: 'Одобрена',   color: '#3B82F6', bg: '#DBEAFE', icon: CheckCircle2 },
+  rejected: { label: 'Отклонена',    short: 'Отклонена',  color: '#EF4444', bg: '#FEE2E2', icon: XCircle },
+  paid:     { label: 'Выдано',       short: 'Выдано',     color: '#22C55E', bg: '#DCFCE7', icon: Banknote },
+};
+
+function todayISO() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: TZ })).toISOString().slice(0, 10);
+}
+
+function fmtDate(iso) {
+  return new Date(iso).toLocaleString('ru-KZ', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: TZ });
+}
+function fmtDateTime(iso) {
+  return new Date(iso).toLocaleString('ru-KZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: TZ });
+}
+function fmtMoney(n) { return (Number(n) || 0).toLocaleString('ru-RU') + ' ₸'; }
+
+function nextRequestNumber(existing) {
+  const year = new Date().getFullYear();
+  const prefix = `ЧР-${year}-`;
+  let max = 0;
+  for (const r of existing) {
+    if (r.request_number?.startsWith(prefix)) {
+      const n = parseInt(r.request_number.slice(prefix.length), 10);
+      if (n > max) max = n;
+    }
+  }
+  return prefix + String(max + 1).padStart(3, '0');
+}
+
+function matchesSearch(text, query) {
+  if (!query) return true;
+  const t = (text || '').toLowerCase();
+  return query.toLowerCase().split(/\s+/).every(w => t.includes(w));
+}
+
+export default function ExpenseRequestsScreen({ ctx }) {
+  const { route } = ctx;
+  if (route.name === 'create_expense') return <CreateExpenseScreen ctx={ctx} />;
+  if (route.name === 'expense_detail') return <ExpenseDetailScreen ctx={ctx} expenseId={route.expenseId} />;
+  return <ExpenseListScreen ctx={ctx} />;
+}
+
+function ExpenseListScreen({ ctx }) {
+  const { db, currentUser, navigate } = ctx;
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const hasPerm = (p) => ctx.hasPermission?.(p);
+
+  const all = db.expenseRequests || [];
+  const canSeeAll = hasPerm('expense_view_all') || hasPerm('expense_approve') || hasPerm('expense_pay');
+
+  const visible = useMemo(() => {
+    let list = canSeeAll ? all : all.filter(r => r.requester_id === currentUser.id);
+    if (filter !== 'all') list = list.filter(r => r.status === filter);
+    if (search) list = list.filter(r => matchesSearch(`${r.request_number} ${r.requester_name} ${r.description} ${r.category}`, search));
+    return list.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }, [all, filter, search, canSeeAll, currentUser.id]);
+
+  const counts = useMemo(() => {
+    const src = canSeeAll ? all : all.filter(r => r.requester_id === currentUser.id);
+    const c = { all: src.length, pending: 0, approved: 0, rejected: 0, paid: 0 };
+    src.forEach(r => c[r.status]++);
+    return c;
+  }, [all, canSeeAll, currentUser.id]);
+
+  const filters = [
+    { key: 'all', label: 'Все', count: counts.all },
+    { key: 'pending', label: 'Ожидают', count: counts.pending },
+    { key: 'approved', label: 'Одобрены', count: counts.approved },
+    { key: 'paid', label: 'Выданы', count: counts.paid },
+  ];
+
+  return (
+    <div className="min-h-screen" style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)' }}>
+      <div className="sticky top-0 z-20 px-4 pt-3 pb-2" style={{ background: 'var(--mc-bg)' }}>
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => navigate({ name: 'home' })} className="flex items-center gap-1 text-sm" style={{ color: '#3390EC' }}>
+            <ChevronLeft size={18} /> Назад
+          </button>
+          <h1 className="text-lg font-bold">Чеки расходов</h1>
+          <div style={{ width: 60 }} />
+        </div>
+
+        <div className="flex items-center gap-2 mb-3">
+          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
+            <Search size={16} style={{ color: 'var(--mc-muted)' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск…"
+              className="flex-1 bg-transparent outline-none text-sm" style={{ color: 'var(--mc-text)' }} />
+          </div>
+          {hasPerm('expense_create') && (
+            <button onClick={() => navigate({ name: 'create_expense' })}
+              className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#3390EC', color: '#fff' }}>
+              <Plus size={20} />
+            </button>
+          )}
+        </div>
+
+        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          {filters.map(f => (
+            <button key={f.key} onClick={() => setFilter(f.key)}
+              className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition"
+              style={filter === f.key
+                ? { background: '#3390EC', color: '#fff' }
+                : { background: 'var(--mc-surface)', color: 'var(--mc-muted)', border: '1px solid var(--mc-border)' }}>
+              {f.label}{f.count > 0 ? ` (${f.count})` : ''}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-4 pb-6 space-y-2">
+        {visible.length === 0 && (
+          <div className="text-center py-12 text-sm" style={{ color: 'var(--mc-muted)' }}>
+            {search ? 'Ничего не найдено' : 'Нет заявок'}
+          </div>
+        )}
+        {visible.map(r => {
+          const s = STATUS_META[r.status] || STATUS_META.pending;
+          const Icon = s.icon;
+          return (
+            <button key={r.id} onClick={() => navigate({ name: 'expense_detail', expenseId: r.id })}
+              className="w-full text-left rounded-2xl p-4 transition hover:shadow-sm"
+              style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: s.bg }}>
+                  <Icon size={20} style={{ color: s.color }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm">{r.request_number}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: s.bg, color: s.color }}>{s.short}</span>
+                  </div>
+                  <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--mc-muted)' }}>{r.category} · {r.requester_name}</div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="font-bold text-sm" style={{ color: '#3390EC' }}>{fmtMoney(r.amount)}</span>
+                    <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>{fmtDate(r.created_at)}</span>
+                  </div>
+                </div>
+                <ChevronRight size={16} className="flex-shrink-0" style={{ color: 'var(--mc-muted)' }} />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CreateExpenseScreen({ ctx }) {
+  const { db, setDb, currentUser, navigate, showToast } = ctx;
+  const [amount, setAmount] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [receiptUrls, setReceiptUrls] = useState([]);
+  const fileRef = useRef(null);
+
+  const categories = useMemo(() => {
+    const cats = (db.expenseCategories || []).filter(c => c.active).sort((a, b) => a.sort_order - b.sort_order);
+    return cats.map(c => c.name);
+  }, [db.expenseCategories]);
+
+  const handleUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const urls = [];
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      for (const file of files) {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('requestNumber', 'draft');
+        const res = await fetch(`${supabaseUrl}/functions/v1/upload-receipt`, {
+          method: 'POST', body: form,
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Upload failed');
+        urls.push(result.url);
+      }
+      setReceiptUrls(prev => [...prev, ...urls]);
+    } catch (err) {
+      showToast('Ошибка загрузки: ' + err.message, 'error');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const removeReceipt = (idx) => {
+    setReceiptUrls(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSubmit = () => {
+    const num = Number(amount);
+    if (!num || num <= 0) { showToast('Укажите сумму', 'error'); return; }
+    if (!category) { showToast('Выберите категорию', 'error'); return; }
+    if (!description.trim()) { showToast('Укажите описание', 'error'); return; }
+
+    const newReq = {
+      id: crypto.randomUUID(),
+      request_number: nextRequestNumber(db.expenseRequests || []),
+      requester_id: currentUser.id,
+      requester_name: currentUser.name || 'Пользователь',
+      amount: num,
+      description: description.trim(),
+      category,
+      receipt_urls: receiptUrls,
+      status: 'pending',
+      approved_by: null, approved_by_name: null, approved_at: null,
+      reject_reason: null,
+      paid_by: null, paid_by_name: null, paid_at: null,
+      cash_operation_id: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    setDb(d => ({ ...d, expenseRequests: [newReq, ...(d.expenseRequests || [])] }));
+    showToast('Заявка создана');
+    navigate({ name: 'expenses' });
+  };
+
+  return (
+    <div className="min-h-screen" style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)' }}>
+      <div className="sticky top-0 z-20 px-4 pt-3 pb-2 flex items-center gap-3" style={{ background: 'var(--mc-bg)' }}>
+        <button onClick={() => navigate({ name: 'expenses' })} className="flex items-center gap-1 text-sm" style={{ color: '#3390EC' }}>
+          <ChevronLeft size={18} /> Назад
+        </button>
+        <h1 className="text-lg font-bold flex-1 text-center">Новая заявка</h1>
+        <div style={{ width: 60 }} />
+      </div>
+
+      <div className="px-4 pb-6 space-y-4 mt-2">
+        <div>
+          <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Сумма (₸) *</div>
+          <input type="number" inputMode="numeric" value={amount} onChange={e => setAmount(e.target.value)}
+            placeholder="0" className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
+            style={{ background: 'var(--mc-surface)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }} />
+        </div>
+
+        <div>
+          <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Категория *</div>
+          <select value={category} onChange={e => setCategory(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
+            style={{ background: 'var(--mc-surface)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}>
+            <option value="">Выберите категорию</option>
+            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Описание *</div>
+          <textarea value={description} onChange={e => setDescription(e.target.value)}
+            placeholder="На что расход…" rows={3}
+            className="w-full px-3 py-2.5 rounded-lg outline-none text-sm resize-none"
+            style={{ background: 'var(--mc-surface)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }} />
+        </div>
+
+        <div>
+          <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Чеки / фото</div>
+          <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleUpload} className="hidden" />
+          <button onClick={() => fileRef.current?.click()} disabled={uploading}
+            className="w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2"
+            style={{ background: 'var(--mc-surface)', color: '#3390EC', border: '1px dashed var(--mc-border)' }}>
+            {uploading ? 'Загрузка…' : <><Upload size={16} /> Прикрепить фото чека</>}
+          </button>
+          {receiptUrls.length > 0 && (
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {receiptUrls.map((url, i) => (
+                <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden" style={{ border: '1px solid var(--mc-border)' }}>
+                  <img src={url} alt="" className="w-full h-full object-cover" />
+                  <button onClick={() => removeReceipt(i)}
+                    className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full flex items-center justify-center"
+                    style={{ background: 'rgba(0,0,0,0.6)' }}>
+                    <X size={12} color="#fff" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button onClick={handleSubmit}
+          className="w-full py-3 rounded-xl text-sm font-bold"
+          style={{ background: '#3390EC', color: '#fff' }}>
+          Отправить заявку
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ExpenseDetailScreen({ ctx, expenseId }) {
+  const { db, setDb, currentUser, navigate, showToast } = ctx;
+  const hasPerm = (p) => ctx.hasPermission?.(p);
+  const [rejectReason, setRejectReason] = useState('');
+  const [showReject, setShowReject] = useState(false);
+  const [showImage, setShowImage] = useState(null);
+
+  const req = (db.expenseRequests || []).find(r => r.id === expenseId);
+  if (!req) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--mc-bg)', color: 'var(--mc-muted)' }}>
+      Заявка не найдена
+    </div>
+  );
+
+  const s = STATUS_META[req.status] || STATUS_META.pending;
+  const Icon = s.icon;
+  const canApprove = hasPerm('expense_approve') && req.status === 'pending';
+  const canPay = hasPerm('expense_pay') && req.status === 'approved';
+
+  const updateRequest = (patch) => {
+    const updated = { ...req, ...patch, updated_at: new Date().toISOString() };
+    setDb(d => ({ ...d, expenseRequests: (d.expenseRequests || []).map(r => r.id === expenseId ? updated : r) }));
+  };
+
+  const handleApprove = () => {
+    updateRequest({
+      status: 'approved',
+      approved_by: currentUser.id,
+      approved_by_name: currentUser.name,
+      approved_at: new Date().toISOString(),
+    });
+    showToast('Заявка одобрена');
+  };
+
+  const handleReject = () => {
+    if (!rejectReason.trim()) { showToast('Укажите причину отклонения', 'error'); return; }
+    updateRequest({
+      status: 'rejected',
+      approved_by: currentUser.id,
+      approved_by_name: currentUser.name,
+      approved_at: new Date().toISOString(),
+      reject_reason: rejectReason.trim(),
+    });
+    setShowReject(false);
+    showToast('Заявка отклонена');
+  };
+
+  const handlePay = () => {
+    const cashOpId = crypto.randomUUID();
+    const cashOp = {
+      id: cashOpId,
+      type: 'expense',
+      total: req.amount,
+      person_name: req.requester_name,
+      category: req.category,
+      description: `Чек ${req.request_number}: ${req.description}`,
+      bills: {},
+      created_by: currentUser.id,
+      created_by_name: currentUser.name,
+      created_at: new Date().toISOString(),
+    };
+    updateRequest({
+      status: 'paid',
+      paid_by: currentUser.id,
+      paid_by_name: currentUser.name,
+      paid_at: new Date().toISOString(),
+      cash_operation_id: cashOpId,
+    });
+    setDb(d => ({ ...d, cashOperations: [cashOp, ...(d.cashOperations || [])] }));
+    showToast('Деньги выданы, расход записан в подотчёт');
+  };
+
+  return (
+    <div className="min-h-screen" style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)' }}>
+      <div className="sticky top-0 z-20 px-4 pt-3 pb-2 flex items-center gap-3" style={{ background: 'var(--mc-bg)' }}>
+        <button onClick={() => navigate({ name: 'expenses' })} className="flex items-center gap-1 text-sm" style={{ color: '#3390EC' }}>
+          <ChevronLeft size={18} /> Назад
+        </button>
+        <h1 className="text-lg font-bold flex-1 text-center">{req.request_number}</h1>
+        <div style={{ width: 60 }} />
+      </div>
+
+      <div className="px-4 pb-6 space-y-4 mt-2">
+        <div className="rounded-2xl p-4" style={{ background: s.bg }}>
+          <div className="flex items-center gap-3">
+            <Icon size={24} style={{ color: s.color }} />
+            <div>
+              <div className="font-bold" style={{ color: s.color }}>{s.label}</div>
+              <div className="text-xs mt-0.5" style={{ color: s.color + 'cc' }}>{fmtDateTime(req.created_at)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
+          <Row label="Сумма" value={fmtMoney(req.amount)} bold />
+          <Row label="Категория" value={req.category} />
+          <Row label="Описание" value={req.description} />
+          <Row label="Подал(а)" value={req.requester_name} />
+          <Row label="Дата" value={fmtDateTime(req.created_at)} />
+          {req.approved_by_name && <Row label={req.status === 'rejected' ? 'Отклонил(а)' : 'Одобрил(а)'} value={`${req.approved_by_name} · ${fmtDateTime(req.approved_at)}`} />}
+          {req.reject_reason && <Row label="Причина" value={req.reject_reason} />}
+          {req.paid_by_name && <Row label="Выдал(а)" value={`${req.paid_by_name} · ${fmtDateTime(req.paid_at)}`} />}
+        </div>
+
+        {(req.receipt_urls || []).length > 0 && (
+          <div className="rounded-2xl p-4" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
+            <div className="text-xs font-semibold mb-2" style={{ color: 'var(--mc-muted)' }}>Чеки ({req.receipt_urls.length})</div>
+            <div className="flex gap-2 flex-wrap">
+              {req.receipt_urls.map((url, i) => (
+                <button key={i} onClick={() => setShowImage(url)} className="w-20 h-20 rounded-lg overflow-hidden" style={{ border: '1px solid var(--mc-border)' }}>
+                  <img src={url} alt="" className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {canApprove && (
+          <div className="space-y-2">
+            <button onClick={handleApprove}
+              className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+              style={{ background: '#22C55E', color: '#fff' }}>
+              <Check size={18} /> Одобрить
+            </button>
+            <button onClick={() => setShowReject(true)}
+              className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+              style={{ background: '#EF4444', color: '#fff' }}>
+              <XCircle size={18} /> Отклонить
+            </button>
+          </div>
+        )}
+
+        {canPay && (
+          <button onClick={handlePay}
+            className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+            style={{ background: '#3390EC', color: '#fff' }}>
+            <Banknote size={18} /> Выдать деньги из подотчёта
+          </button>
+        )}
+      </div>
+
+      {showReject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="w-full max-w-sm rounded-2xl p-5" style={{ background: 'var(--mc-surface)' }}>
+            <div className="font-bold text-base mb-3">Причина отклонения</div>
+            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+              placeholder="Укажите причину…" rows={3}
+              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm resize-none mb-3"
+              style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }} />
+            <div className="flex gap-2">
+              <button onClick={() => setShowReject(false)} className="flex-1 py-2.5 rounded-lg text-sm font-semibold"
+                style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}>Отмена</button>
+              <button onClick={handleReject} className="flex-1 py-2.5 rounded-lg text-sm font-bold"
+                style={{ background: '#EF4444', color: '#fff' }}>Отклонить</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.85)' }}
+          onClick={() => setShowImage(null)}>
+          <img src={showImage} alt="" className="max-w-full max-h-[80vh] rounded-xl" />
+          <button className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.2)' }}>
+            <X size={24} color="#fff" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Row({ label, value, bold }) {
+  return (
+    <div className="flex justify-between items-start gap-3">
+      <span className="text-xs flex-shrink-0" style={{ color: 'var(--mc-muted)' }}>{label}</span>
+      <span className={`text-sm text-right ${bold ? 'font-bold' : ''}`} style={{ color: 'var(--mc-text)' }}>{value}</span>
+    </div>
+  );
+}

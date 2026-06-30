@@ -5,7 +5,7 @@ import {
   ChevronRight, Trash2, Eye, Users, ArrowRight, Hash, ChevronDown,
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
-  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo,
+  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt,
 } from 'lucide-react';
 import { supabase } from './supabase/client';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
@@ -20,6 +20,7 @@ import { CoffeeShipmentsScreen, CoffeeShipmentsHomeTile } from './screens/Coffee
 import CoffeeTasksScreen from './screens/CoffeeTasksScreen';
 import HRCalendarScreen from './screens/HRCalendarScreen';
 import CashScreen from './screens/CashScreen';
+import ExpenseRequestsScreen from './screens/ExpenseRequestsScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -494,6 +495,11 @@ const PERMISSIONS = {
   hr_calendar_view:     { group: 'HR', label: 'Видеть HR-календарь (отпуска и ДР)' },
   hr_vacation_manage:   { group: 'HR', label: 'Добавлять и редактировать отпуска' },
   hr_birthday_manage:   { group: 'HR', label: 'Редактировать даты рождения сотрудников' },
+  // Расходы
+  expense_create:       { group: 'Расходы', label: 'Подавать заявки на расход' },
+  expense_approve:      { group: 'Расходы', label: 'Одобрять / отклонять заявки на расход' },
+  expense_pay:          { group: 'Расходы', label: 'Выдавать деньги по заявке (кассир)' },
+  expense_view_all:     { group: 'Расходы', label: 'Видеть все заявки на расход' },
   // Расписание
   schedule_access:      { group: 'Расписание', label: 'Доступ к регулярным задачам (расписание)' },
   // Админ
@@ -512,22 +518,22 @@ function defaultPermissionsFor(roleKey) {
       // admin всё равно имеет всё, но для согласованности — все права
       return Object.keys(PERMISSIONS);
     case 'director':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_approve', 'expense_view_all'];
     case 'senior_manager':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_view_all'];
     case 'courier':
       return ['delivery_courier'];
     case 'b2b':
-      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'gift_create'];
+      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'gift_create', 'expense_create'];
     case 'sales':
-      return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'gift_create', 'shipment_view', 'shipment_edit'];
+      return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'gift_create', 'shipment_view', 'shipment_edit', 'expense_create'];
     case 'warehouse':
       return ['orders_view_all', 'orders_change_status', 'warehouse_pickup', 'grind_fulfill', 'grind_view_all'];
     case 'cashier':
-      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay', 'gift_create'];
+      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay', 'gift_create', 'expense_pay', 'expense_view_all'];
     case 'barista':
     case 'technician':
-      return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create', 'gift_create'];
+      return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create', 'gift_create', 'expense_create'];
     case 'coffee_manager':
       return ['coffee_shipments_view', 'coffee_shipments_pay', 'coffee_tasks_view', 'coffee_tasks_edit'];
     case 'deputy_coffee_manager':
@@ -933,6 +939,8 @@ function seedDB() {
     coffeeShipments: [],
     vacations: [],
     cashOperations: [],
+    expenseCategories: [],
+    expenseRequests: [],
     roleDefinitions: SYSTEM_ROLES.map(key => ({
       key,
       label: ROLES[key].label,
@@ -4579,11 +4587,16 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     }
     if (coffeeItems.length > 0) groups.push({ title: 'Кофейни', items: coffeeItems, collapsible: true, base: 'coffeeshop' });
 
-    // ── ФИНАНСЫ (касса / подотчёт) ────────────────────────────
-    if (['admin', 'director', 'cashier'].includes(currentUser.role)) {
-      groups.push({ title: 'Финансы', items: [
-        { id: 'cash', label: 'Касса / Подотчёт', icon: Banknote },
-      ], collapsible: true, base: 'tk' });
+    // ── ФИНАНСЫ (касса / подотчёт / расходы) ────────────────────────────
+    {
+      const finItems = [];
+      if (['admin', 'director', 'cashier'].includes(currentUser.role)) {
+        finItems.push({ id: 'cash', label: 'Касса / Подотчёт', icon: Banknote });
+      }
+      if (hasPermission(db, currentUser, 'expense_create') || hasPermission(db, currentUser, 'expense_approve') || hasPermission(db, currentUser, 'expense_pay') || hasPermission(db, currentUser, 'expense_view_all')) {
+        finItems.push({ id: 'expenses', label: 'Чеки расходов', icon: Receipt });
+      }
+      if (finItems.length > 0) groups.push({ title: 'Финансы', items: finItems, collapsible: true, base: 'tk' });
     }
 
     // ── HR-КАЛЕНДАРЬ (отпуска и дни рождения) ────────────────────
@@ -5104,6 +5117,9 @@ function Screen({ ctx }) {
     case 'coffee_tasks': return <CoffeeTasksScreen ctx={ctx} />;
     // ─── Финансы (касса) ───
     case 'cash': return <CashScreen ctx={ctx} />;
+    case 'expenses':       return <ExpenseRequestsScreen ctx={ctx} />;
+    case 'create_expense': return <ExpenseRequestsScreen ctx={ctx} />;
+    case 'expense_detail': return <ExpenseRequestsScreen ctx={ctx} />;
     // ─── HR-календарь (отпуска и ДР) ───
     case 'hr_calendar': return <HRCalendarScreen ctx={ctx} />;
     // ─── Подарки клиентам ───

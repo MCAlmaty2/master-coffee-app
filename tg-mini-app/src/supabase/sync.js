@@ -43,6 +43,8 @@ export const SYNC_TABLES = {
   coffeeTasks:        { table: 'coffee_tasks',        pk: 'id', base: 'coffeeshop' },
   vacations:          { table: 'vacations',           pk: 'id' },
   cashOperations:     { table: 'cash_operations',     pk: 'id' },
+  expenseCategories:  { table: 'expense_categories',  pk: 'id' },
+  expenseRequests:    { table: 'expense_requests',    pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_6M } },
 };
 
 /**
