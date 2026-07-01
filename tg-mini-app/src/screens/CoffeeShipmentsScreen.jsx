@@ -193,11 +193,10 @@ export function CoffeeShipmentsScreen({ ctx }) {
     })
     .sort((a, b) => dateSortKey(b.date).localeCompare(dateSortKey(a.date)) || (b.number || '').localeCompare(a.number || ''));
 
-  /* ── Статистика по адресам → организациям (долг) ── */
+  /* ── Долг по адресам — ВСЕ периоды, ВСЕ отгрузки ── */
   const addressStats = useMemo(() => {
-    const all = rows.filter(r => r.month === selectedMonth);
     const byAddr = {};
-    for (const r of all) {
+    for (const r of rows) {
       const addr = normalizeAddress(r.delivery_address) || 'Без адреса';
       if (!byAddr[addr]) byAddr[addr] = { amount: 0, paid: 0, count: 0, orgs: {} };
       byAddr[addr].amount += Number(r.amount) || 0;
@@ -210,7 +209,7 @@ export function CoffeeShipmentsScreen({ ctx }) {
       byAddr[addr].orgs[org].count  += 1;
     }
     return byAddr;
-  }, [rows, selectedMonth]);
+  }, [rows]);
 
   const totalStats = useMemo(() => {
     const all = rows.filter(r => r.month === selectedMonth);
@@ -346,13 +345,18 @@ export function CoffeeShipmentsScreen({ ctx }) {
         </div>
       </div>
 
-      {/* Долг по адресам */}
-      {allAddresses.length > 0 && (
-        <div style={cardStyle}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--mc-text)' }}>
-            Долг по адресам
+      {/* Долг по адресам — все периоды (всегда видна) */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--mc-text)' }}>
+          Долг по адресам <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--mc-muted)' }}>(все периоды)</span>
+        </div>
+        {Object.keys(addressStats).length === 0 ? (
+          <div style={{ padding: '12px 0', textAlign: 'center', fontSize: 12, color: 'var(--mc-muted)' }}>
+            Нет задолженности
           </div>
-          {Object.entries(addressStats).map(([addr, s]) => {
+        ) : Object.entries(addressStats)
+          .sort(([,a], [,b]) => (b.amount - b.paid) - (a.amount - a.paid))
+          .map(([addr, s]) => {
             const debt = s.amount - s.paid;
             const orgs = Object.entries(s.orgs);
             return (
@@ -398,14 +402,13 @@ export function CoffeeShipmentsScreen({ ctx }) {
               </div>
             );
           })}
-          {addressFilter !== 'all' && (
-            <button onClick={() => setAddressFilter('all')}
-              style={{ fontSize: 12, color: '#3390EC', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4 }}>
-              Сбросить фильтр
-            </button>
-          )}
-        </div>
-      )}
+        {addressFilter !== 'all' && (
+          <button onClick={() => setAddressFilter('all')}
+            style={{ fontSize: 12, color: '#3390EC', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4 }}>
+            Сбросить фильтр
+          </button>
+        )}
+      </div>
 
       {/* Фильтр оплаты */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
@@ -585,9 +588,8 @@ export function CoffeeShipmentsScreen({ ctx }) {
 export function CoffeeShipmentsHomeTile({ ctx }) {
   const { db, navigate, can } = ctx;
   if (!can('coffee_shipments_view') && !can('coffee_shipments_edit')) return null;
-  const mk = currentMonthKey();
-  const all = (db.coffeeShipments || []).filter(r => r.month === mk);
-  const totalDebt = all.reduce((s, r) => s + ((Number(r.amount) || 0) - (Number(r.payment_amount) || 0)), 0);
+  const all = db.coffeeShipments || [];
+  const totalDebt = all.reduce((s, r) => s + Math.max(0, (Number(r.amount) || 0) - (Number(r.payment_amount) || 0)), 0);
   return {
     key: 'coffee_shipments',
     label: 'Кофейни',
