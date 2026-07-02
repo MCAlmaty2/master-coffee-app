@@ -2857,7 +2857,7 @@ function App() {
     return { ok: true };
   };
 
-  const payExpense = (expenseId) => {
+  const payExpense = (expenseId, cashOpData) => {
     if (!hasPermission(db, currentUser, 'expense_pay')) return { error: 'Нет прав на выдачу денег' };
     const req = (db.expenseRequests || []).find(r => r.id === expenseId);
     if (!req) return { error: 'Заявка не найдена' };
@@ -2866,11 +2866,11 @@ function App() {
     const cashOp = {
       id: cashOpId,
       type: 'expense',
-      total: req.amount,
-      person_name: req.requester_name,
-      category: req.category,
-      description: `Чек ${req.request_number}: ${req.description}`,
-      bills: {},
+      total: cashOpData?.total || req.amount,
+      person_name: cashOpData?.person_name || req.requester_name,
+      category: cashOpData?.category || req.category,
+      description: cashOpData?.description || `Чек ${req.request_number}: ${req.description}`,
+      bills: cashOpData?.bills || {},
       created_by: currentUser.id,
       created_by_name: currentUser.name,
       created_at: new Date().toISOString(),

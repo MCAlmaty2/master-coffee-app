@@ -219,16 +219,16 @@ export default function CashScreen({ ctx }) {
   );
 }
 
-function AddOperationModal({ onClose, onAdd }) {
-  const [type, setType] = useState('expense');
+export function AddOperationModal({ onClose, onAdd, defaults, lockedType }) {
+  const [type, setType] = useState(defaults?.type || 'expense');
   const [bills, setBills] = useState(() => {
     const b = {};
     DENOMINATIONS.forEach(d => b[d] = 0);
     return b;
   });
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
-  const [person, setPerson] = useState('');
+  const [description, setDescription] = useState(defaults?.description || '');
+  const [category, setCategory] = useState(defaults?.category || '');
+  const [person, setPerson] = useState(defaults?.person || '');
 
   const total = DENOMINATIONS.reduce((s, d) => s + d * (bills[d] || 0), 0);
 
@@ -247,24 +247,32 @@ function AddOperationModal({ onClose, onAdd }) {
         </div>
 
         {/* Type Selector */}
-        <div className="flex gap-2 mb-4">
-          {['income', 'expense', 'return'].map(t => {
-            const m = TYPE_META[t];
-            const active = type === t;
-            return (
-              <button key={t}
-                onClick={() => setType(t)}
-                className="flex-1 py-2 rounded-xl text-xs font-semibold transition-colors"
-                style={{
-                  background: active ? m.color : 'var(--mc-bg)',
-                  color: active ? '#fff' : 'var(--mc-muted)',
-                  border: '1px solid ' + (active ? m.color : 'var(--mc-border)'),
-                }}>
-                {m.label}
-              </button>
-            );
-          })}
-        </div>
+        {!lockedType && (
+          <div className="flex gap-2 mb-4">
+            {['income', 'expense', 'return'].map(t => {
+              const m = TYPE_META[t];
+              const active = type === t;
+              return (
+                <button key={t}
+                  onClick={() => setType(t)}
+                  className="flex-1 py-2 rounded-xl text-xs font-semibold transition-colors"
+                  style={{
+                    background: active ? m.color : 'var(--mc-bg)',
+                    color: active ? '#fff' : 'var(--mc-muted)',
+                    border: '1px solid ' + (active ? m.color : 'var(--mc-border)'),
+                  }}>
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {lockedType && (
+          <div className="mb-4 py-2 rounded-xl text-xs font-semibold text-center"
+            style={{ background: meta.color + '15', color: meta.color, border: '1px solid ' + meta.color + '30' }}>
+            {meta.label}
+          </div>
+        )}
 
         {/* Bills Input */}
         {[{ label: 'Купюры', items: DENOMINATIONS.filter(d => d >= 200) },

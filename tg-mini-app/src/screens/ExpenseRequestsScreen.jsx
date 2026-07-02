@@ -3,6 +3,7 @@ import {
   Receipt, Plus, Search, ChevronRight, ChevronLeft, Check, X,
   CircleDot, CheckCircle2, XCircle, Banknote, Upload, Image, Trash2, Eye,
 } from 'lucide-react';
+import { AddOperationModal } from './CashScreen';
 
 const TZ = 'Asia/Almaty';
 const STATUS_META = {
@@ -271,6 +272,7 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
   const [rejectReason, setRejectReason] = useState('');
   const [showReject, setShowReject] = useState(false);
   const [showImage, setShowImage] = useState(null);
+  const [showCashModal, setShowCashModal] = useState(false);
 
   const req = (db.expenseRequests || []).find(r => r.id === expenseId);
   if (!req) return (
@@ -298,10 +300,11 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
     showToast('Заявка отклонена');
   };
 
-  const handlePay = () => {
-    const result = ctx.payExpense(expenseId);
+  const handlePay = (cashOp) => {
+    const result = ctx.payExpense(expenseId, cashOp);
     if (result.error) { showToast(result.error, 'error'); return; }
-    showToast('Деньги выданы, расход записан в подотчёт');
+    setShowCashModal(false);
+    showToast('Деньги выданы, расход записан в кассу');
   };
 
   return (
@@ -365,11 +368,25 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
         )}
 
         {canPay && (
-          <button onClick={handlePay}
+          <button onClick={() => setShowCashModal(true)}
             className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
             style={{ background: '#3390EC', color: '#fff' }}>
-            <Banknote size={18} /> Выдать деньги из подотчёта
+            <Banknote size={18} /> Выдать деньги из кассы
           </button>
+        )}
+
+        {showCashModal && (
+          <AddOperationModal
+            onClose={() => setShowCashModal(false)}
+            onAdd={handlePay}
+            lockedType
+            defaults={{
+              type: 'expense',
+              description: `Чек ${req.request_number}: ${req.description}`,
+              category: req.category || '',
+              person: req.requester_name || '',
+            }}
+          />
         )}
       </div>
 
