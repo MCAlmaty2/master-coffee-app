@@ -8266,7 +8266,7 @@ function CreateQuickScreen({ ctx }) {
         else if (/v.?60/i.test(rawGrind))                         grind_type = 'v60';
         else if (/фильтр|filter|пуров/i.test(rawGrind))           grind_type = 'filter';
         else if (/френч|french|press/i.test(rawGrind))            grind_type = 'french';
-        else if (/эспрессо|espresso|рожков/i.test(rawGrind))      grind_type = 'espresso';
+        else if (/эспрессо|espresso|рожков|кофемашин/i.test(rawGrind)) grind_type = 'espresso';
         else grind_custom = rawGrind;
         patched = { ...patched, needs_grind: true, grind_type, ...(grind_custom ? { grind_custom } : {}) };
       }
@@ -13798,7 +13798,7 @@ function CreateGrindScreen({ ctx }) {
     if (/v.?60/i.test(text))                 return { grind_type: 'v60',      label: 'V60' };
     if (/фильтр|filter|пуров/i.test(text))   return { grind_type: 'filter',   label: 'Фильтр' };
     if (/френч|french|press/i.test(text))    return { grind_type: 'french',   label: 'Френч-пресс' };
-    if (/эспрессо|espresso|рожков/i.test(text)) return { grind_type: 'espresso', label: 'Эспрессо' };
+    if (/эспрессо|espresso|рожков|кофемашин/i.test(text)) return { grind_type: 'espresso', label: 'Эспрессо' };
     const m = text.match(/помол[:\s]+([^\n|]+)/i);
     if (m) return { grind_type: 'custom', label: m[1].trim(), grind_custom: m[1].trim() };
     return null;
