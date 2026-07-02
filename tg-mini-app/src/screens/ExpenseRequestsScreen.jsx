@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import {
   Receipt, Plus, Search, ChevronRight, ChevronLeft, Check, X,
   CircleDot, CheckCircle2, XCircle, Banknote, Upload, Image, Trash2, Eye,
+  User, ExternalLink,
 } from 'lucide-react';
 import { AddOperationModal } from './CashScreen';
 
@@ -128,7 +129,11 @@ function ExpenseListScreen({ ctx }) {
                     <span className="font-bold text-sm">{r.request_number}</span>
                     <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: s.bg, color: s.color }}>{s.short}</span>
                   </div>
-                  <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--mc-muted)' }}>{r.category} · {r.requester_name}</div>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <User size={12} style={{ color: 'var(--mc-muted)', flexShrink: 0 }} />
+                    <span className="text-xs font-semibold truncate" style={{ color: 'var(--mc-text)' }}>{r.requester_name || '—'}</span>
+                  </div>
+                  <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--mc-muted)' }}>{r.category} · {r.description}</div>
                   <div className="flex items-center justify-between mt-1">
                     <span className="font-bold text-sm" style={{ color: '#3390EC' }}>{fmtMoney(r.amount)}</span>
                     <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>{fmtDate(r.created_at)}</span>
@@ -341,12 +346,23 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
 
         {(req.receipt_urls || []).length > 0 && (
           <div className="rounded-2xl p-4" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
-            <div className="text-xs font-semibold mb-2" style={{ color: 'var(--mc-muted)' }}>Чеки ({req.receipt_urls.length})</div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="text-xs font-semibold mb-2" style={{ color: 'var(--mc-muted)' }}>Документы ({req.receipt_urls.length})</div>
+            <div className="space-y-2">
               {req.receipt_urls.map((url, i) => (
-                <button key={i} onClick={() => setShowImage(url)} className="w-20 h-20 rounded-lg overflow-hidden" style={{ border: '1px solid var(--mc-border)' }}>
-                  <img src={url} alt="" className="w-full h-full object-cover" />
-                </button>
+                <div key={i} className="flex items-center gap-3">
+                  <button onClick={() => setShowImage(url)} className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0" style={{ border: '1px solid var(--mc-border)' }}>
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs truncate" style={{ color: 'var(--mc-muted)' }}>Документ {i + 1}</div>
+                    <a href={url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 mt-1 text-xs font-semibold no-underline"
+                      style={{ color: '#3390EC' }}
+                      onClick={e => e.stopPropagation()}>
+                      <ExternalLink size={14} /> Открыть документ
+                    </a>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
