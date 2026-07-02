@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft, Plus, X, ArrowDownCircle, ArrowUpCircle,
-  RotateCcw, ChevronDown, ChevronUp, Banknote,
+  RotateCcw, ChevronDown, ChevronUp, Banknote, Pencil,
 } from 'lucide-react';
 const TZ = 'Asia/Almaty';
 
@@ -47,6 +47,8 @@ function calcSafeBalance(ops) {
 export default function CashScreen({ ctx }) {
   const { navigate, currentUser, db, setDb } = ctx;
   const [showAdd, setShowAdd] = useState(false);
+  const [editingBalance, setEditingBalance] = useState(false);
+  const [editedBills, setEditedBills] = useState({});
   const [expandedOp, setExpandedOp] = useState(null);
   const [filterType, setFilterType] = useState(null);
 
@@ -72,6 +74,43 @@ export default function CashScreen({ ctx }) {
   const safeBalance = useMemo(() => calcSafeBalance(ops), [ops]);
   const safeTotal = DENOMINATIONS.reduce((s, d) => s + d * safeBalance[d], 0);
 
+  const startEditBalance = () => {
+    const copy = {};
+    DENOMINATIONS.forEach(d => copy[d] = safeBalance[d]);
+    setEditedBills(copy);
+    setEditingBalance(true);
+  };
+
+  const saveBalanceEdit = () => {
+    const delta = {};
+    let hasDiff = false;
+    DENOMINATIONS.forEach(d => {
+      delta[d] = (editedBills[d] || 0) - safeBalance[d];
+      if (delta[d] !== 0) hasDiff = true;
+    });
+    if (!hasDiff) { setEditingBalance(false); return; }
+    const total = DENOMINATIONS.reduce((s, d) => s + d * delta[d], 0);
+    const userName = currentUser ? `${(currentUser.first_name || '')} ${(currentUser.last_name || '').charAt(0)}.`.trim() : '';
+    const adj = {
+      id: crypto.randomUUID(),
+      type: 'income',
+      bills: delta,
+      total: Math.abs(total),
+      description: total === 0 ? 'Размен купюр' : 'Корректировка остатка',
+      category: '',
+      person_name: '',
+      created_by: currentUser?.id || null,
+      created_by_name: userName || 'Пользователь',
+      created_at: new Date().toISOString(),
+    };
+    setDb(d => ({ ...d, cashOperations: [adj, ...(d.cashOperations || [])] }));
+    setEditingBalance(false);
+  };
+
+  const editedTotal = editingBalance
+    ? DENOMINATIONS.reduce((s, d) => s + d * (editedBills[d] || 0), 0)
+    : safeTotal;
+
   return (
     <div className="min-h-screen pb-6" style={{ background: 'var(--mc-bg)' }}>
       {/* Header */}
@@ -95,29 +134,84 @@ export default function CashScreen({ ctx }) {
         <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg, #1a3a4a 0%, #297b8a 100%)' }}>
           <div className="flex items-center gap-2 mb-3">
             <Banknote size={18} className="text-white/70" />
-            <span className="text-sm font-semibold text-white/70">Остаток в сейфе</span>
+            <span className="text-sm font-semibold text-white/70 flex-1">Остаток в сейфе</span>
+            {!editingBalance && (
+              <button onClick={startEditBalance}
+                className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg"
+                style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.8)' }}>
+                <Pencil size={12} /> Изменить
+              </button>
+            )}
           </div>
-          <div className="text-2xl font-bold text-white mb-4">{fmtMoney(safeTotal)}</div>
+          <div className="text-2xl font-bold text-white mb-4">{fmtMoney(editedTotal)}</div>
 
           <div className="text-[10px] text-white/40 mb-1">Купюры</div>
           <div className="grid grid-cols-4 gap-1.5 mb-3">
-            {DENOMINATIONS.filter(d => d >= 200).map(d => (
-              <div key={d} className="rounded-lg px-2 py-1.5 text-center" style={{ background: 'rgba(255,255,255,0.12)' }}>
-                <div className="text-[10px] text-white/50">{d.toLocaleString('ru')}</div>
-                <div className="text-sm font-bold text-white">{safeBalance[d]}</div>
-                <div className="text-[10px] text-white/40">{fmtMoney(d * safeBalance[d])}</div>
-              </div>
-            ))}
+            {DENOMINATIONS.filter(d => d >= 200).map(d => {
+              const val = editingBalance ? (editedBills[d] || 0) : safeBalance[d];
+              const changed = editingBalance && val !== safeBalance[d];
+              return (
+                <div key={d} className="rounded-lg px-2 py-1.5 text-center relative"
+                  style={{ background: changed ? 'rgba(255,200,50,0.25)' : 'rgba(255,255,255,0.12)' }}>
+                  <div className="text-[10px] text-white/50">{d.toLocaleString('ru')}</div>
+                  {editingBalance ? (
+                    <div className="flex items-center justify-center gap-1 my-0.5">
+                      <button onClick={() => setEditedBills(b => ({ ...b, [d]: Math.max(0, (b[d] || 0) - 1) }))}
+                        className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold"
+                        style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>−</button>
+                      <span className="text-sm font-bold text-white w-6 text-center">{val}</span>
+                      <button onClick={() => setEditedBills(b => ({ ...b, [d]: (b[d] || 0) + 1 }))}
+                        className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold"
+                        style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>+</button>
+                    </div>
+                  ) : (
+                    <div className="text-sm font-bold text-white">{val}</div>
+                  )}
+                  <div className="text-[10px] text-white/40">{fmtMoney(d * val)}</div>
+                </div>
+              );
+            })}
           </div>
           <div className="text-[10px] text-white/40 mb-1">Монеты</div>
           <div className="grid grid-cols-7 gap-1.5">
-            {DENOMINATIONS.filter(d => d < 200).map(d => (
-              <div key={d} className="rounded-lg px-1.5 py-1 text-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                <div className="text-[9px] text-white/50">{d}</div>
-                <div className="text-xs font-bold text-white">{safeBalance[d]}</div>
-              </div>
-            ))}
+            {DENOMINATIONS.filter(d => d < 200).map(d => {
+              const val = editingBalance ? (editedBills[d] || 0) : safeBalance[d];
+              const changed = editingBalance && val !== safeBalance[d];
+              return (
+                <div key={d} className="rounded-lg px-1.5 py-1 text-center"
+                  style={{ background: changed ? 'rgba(255,200,50,0.25)' : 'rgba(255,255,255,0.08)' }}>
+                  <div className="text-[9px] text-white/50">{d}</div>
+                  {editingBalance ? (
+                    <div className="flex items-center justify-center gap-0.5 my-0.5">
+                      <button onClick={() => setEditedBills(b => ({ ...b, [d]: Math.max(0, (b[d] || 0) - 1) }))}
+                        className="w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold"
+                        style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>−</button>
+                      <span className="text-xs font-bold text-white w-4 text-center">{val}</span>
+                      <button onClick={() => setEditedBills(b => ({ ...b, [d]: (b[d] || 0) + 1 }))}
+                        className="w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold"
+                        style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>+</button>
+                    </div>
+                  ) : (
+                    <div className="text-xs font-bold text-white">{val}</div>
+                  )}
+                </div>
+              );
+            })}
           </div>
+          {editingBalance && (
+            <div className="flex gap-2 mt-3">
+              <button onClick={() => setEditingBalance(false)}
+                className="flex-1 py-2 rounded-xl text-xs font-semibold"
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
+                Отмена
+              </button>
+              <button onClick={saveBalanceEdit}
+                className="flex-1 py-2 rounded-xl text-xs font-semibold"
+                style={{ background: '#22C55E', color: '#fff' }}>
+                Сохранить
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Quick Stats */}
@@ -223,7 +317,7 @@ export function AddOperationModal({ onClose, onAdd, defaults, lockedType }) {
   const [type, setType] = useState(defaults?.type || 'expense');
   const [bills, setBills] = useState(() => {
     const b = {};
-    DENOMINATIONS.forEach(d => b[d] = 0);
+    DENOMINATIONS.forEach(d => b[d] = defaults?.bills?.[d] || 0);
     return b;
   });
   const [description, setDescription] = useState(defaults?.description || '');
