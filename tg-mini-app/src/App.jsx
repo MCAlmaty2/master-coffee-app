@@ -22,6 +22,7 @@ import HRCalendarScreen from './screens/HRCalendarScreen';
 import CashScreen from './screens/CashScreen';
 import ExpenseRequestsScreen from './screens/ExpenseRequestsScreen';
 import BudgetScreen from './screens/BudgetScreen';
+import MppKanbanScreen from './screens/MppKanbanScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -503,6 +504,9 @@ const PERMISSIONS = {
   expense_view_all:     { group: 'Расходы', label: 'Видеть все заявки на расход' },
   // Бюджет
   budget_view:          { group: 'Финансы', label: 'Просматривать бюджет (план / факт)' },
+  // МПП
+  mpp_manage:           { group: 'МПП', label: 'Управлять воронкой продаж (канбан)' },
+  mpp_view:             { group: 'МПП', label: 'Просматривать воронку продаж' },
   // Расписание
   schedule_access:      { group: 'Расписание', label: 'Доступ к регулярным задачам (расписание)' },
   // Админ
@@ -521,15 +525,15 @@ function defaultPermissionsFor(roleKey) {
       // admin всё равно имеет всё, но для согласованности — все права
       return Object.keys(PERMISSIONS);
     case 'director':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_approve', 'expense_view_all', 'budget_view'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_approve', 'expense_view_all', 'budget_view', 'mpp_manage', 'mpp_view'];
     case 'senior_manager':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_view_all'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_view_all', 'mpp_manage', 'mpp_view'];
     case 'courier':
       return ['delivery_courier'];
     case 'b2b':
-      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'gift_create', 'expense_create'];
+      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'gift_create', 'expense_create', 'mpp_manage'];
     case 'sales':
-      return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'gift_create', 'shipment_view', 'shipment_edit', 'expense_create'];
+      return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'gift_create', 'shipment_view', 'shipment_edit', 'expense_create', 'mpp_manage'];
     case 'warehouse':
       return ['orders_view_all', 'orders_change_status', 'warehouse_pickup', 'grind_fulfill', 'grind_view_all'];
     case 'cashier':
@@ -958,6 +962,11 @@ function seedDB() {
     expenseCategories: [],
     budgetEntries: [],
     expenseRequests: [],
+    mppDeals: [],
+    mppActivities: [],
+    mppTasks: [],
+    mppDealProducts: [],
+    mppComments: [],
     roleDefinitions: SYSTEM_ROLES.map(key => ({
       key,
       label: ROLES[key].label,
@@ -2872,6 +2881,203 @@ function App() {
     return { ok: true };
   };
 
+  const updateBudgetPlan = (categoryId, newPlan) => {
+    if (currentUser.role !== 'admin' && currentUser.role !== 'director') {
+      return { error: 'Только админ или директор может менять план' };
+    }
+    const cat = (db.expenseCategories || []).find(c => c.id === categoryId);
+    if (!cat) return { error: 'Категория не найдена' };
+    setDb(d => ({
+      ...d,
+      expenseCategories: (d.expenseCategories || []).map(c =>
+        c.id === categoryId ? { ...c, budget_plan: Number(newPlan), updated_at: new Date().toISOString() } : c
+      ),
+    }));
+    return { ok: true };
+  };
+
+  const createBudgetCategory = (name, budgetKey, budgetPlan) => {
+    if (currentUser.role !== 'admin' && currentUser.role !== 'director') {
+      return { error: 'Только админ или директор может создавать категории' };
+    }
+    if (!name || !budgetKey) return { error: 'Название и ключ обязательны' };
+    const existing = (db.expenseCategories || []).find(c => c.budget_key === budgetKey);
+    if (existing) return { error: 'Категория с таким ключом уже существует' };
+    const id = crypto.randomUUID();
+    const maxSort = (db.expenseCategories || []).reduce((m, c) => Math.max(m, c.sort_order || 0), 0);
+    setDb(d => ({
+      ...d,
+      expenseCategories: [...(d.expenseCategories || []), {
+        id, name: name.trim(), budget_key: budgetKey.trim(),
+        budget_plan: Number(budgetPlan) || 0, active: true,
+        sort_order: maxSort + 1, created_at: new Date().toISOString(),
+      }],
+    }));
+    return { ok: true, id };
+  };
+
+  const createMppDeal = (data) => {
+    if (!hasPermission(db, currentUser, 'mpp_manage')) return { error: 'Нет прав' };
+    const id = crypto.randomUUID();
+    setDb(d => ({
+      ...d,
+      mppDeals: [...(d.mppDeals || []), {
+        id, title: data.title?.trim() || '', client_name: data.client_name?.trim() || '',
+        client_phone: data.client_phone?.trim() || '', client_company: data.client_company?.trim() || '',
+        stage: 'new_lead', manager_id: data.manager_id || currentUser.id,
+        manager_name: data.manager_name || `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim(),
+        notes: data.notes?.trim() || '', next_action: '', next_action_date: null,
+        amount: Number(data.amount) || 0, sort_order: 0,
+        created_by: currentUser.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }],
+    }));
+    return { ok: true, id };
+  };
+
+  const updateMppDeal = (dealId, updates) => {
+    if (!hasPermission(db, currentUser, 'mpp_manage')) return { error: 'Нет прав' };
+    setDb(d => ({
+      ...d,
+      mppDeals: (d.mppDeals || []).map(deal =>
+        deal.id === dealId ? { ...deal, ...updates, updated_at: new Date().toISOString() } : deal
+      ),
+    }));
+    return { ok: true };
+  };
+
+  const addMppActivity = (dealId, data) => {
+    if (!hasPermission(db, currentUser, 'mpp_manage')) return { error: 'Нет прав' };
+    const id = crypto.randomUUID();
+    setDb(d => ({
+      ...d,
+      mppActivities: [...(d.mppActivities || []), {
+        id, deal_id: dealId, activity_type: data.activity_type || 'call',
+        call_date: data.call_date || new Date().toISOString(),
+        duration_minutes: Number(data.duration_minutes) || 0,
+        result: data.result?.trim() || '',
+        created_by: currentUser.id, created_at: new Date().toISOString(),
+      }],
+    }));
+    return { ok: true, id };
+  };
+
+  const deleteMppDeal = (dealId) => {
+    if (!hasPermission(db, currentUser, 'mpp_manage')) return { error: 'Нет прав' };
+    setDb(d => ({
+      ...d,
+      mppDeals: (d.mppDeals || []).filter(deal => deal.id !== dealId),
+      mppActivities: (d.mppActivities || []).filter(a => a.deal_id !== dealId),
+    }));
+    return { ok: true };
+  };
+
+  const createMppTask = (data) => {
+    if (!hasPermission(db, currentUser, 'mpp_manage')) return { error: 'Нет прав' };
+    const id = crypto.randomUUID();
+    const assigneeName = data.assigned_to_name || getUserName(db, data.assigned_to) || '';
+    const authorName = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь';
+    setDb(d => {
+      const notif = makeNotif(d, {
+        recipient_id: data.assigned_to,
+        title: 'Новая задача МПП',
+        body: `${authorName} поставил задачу: ${data.title}`,
+        link_kind: 'mpp_kanban',
+      });
+      return {
+        ...d,
+        mppTasks: [...(d.mppTasks || []), {
+          id, title: data.title?.trim() || '', description: data.description?.trim() || '',
+          assigned_to: data.assigned_to, assigned_to_name: assigneeName,
+          assigned_by: currentUser.id, assigned_by_name: authorName,
+          status: 'active', min_leads: Number(data.min_leads) || 2,
+          deadline: data.deadline || null,
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        }],
+        notifications: [notif, ...d.notifications].filter(Boolean),
+      };
+    });
+    return { ok: true, id };
+  };
+
+  const completeMppTask = (taskId) => {
+    if (!hasPermission(db, currentUser, 'mpp_manage')) return { error: 'Нет прав' };
+    const task = (db.mppTasks || []).find(t => t.id === taskId);
+    if (!task) return { error: 'Задача не найдена' };
+    const leadsAfterTask = (db.mppDeals || []).filter(d =>
+      d.manager_id === task.assigned_to && d.created_at >= task.created_at
+    ).length;
+    if (leadsAfterTask < (task.min_leads || 2)) {
+      return { error: `Нужно добавить минимум ${task.min_leads || 2} лидов (сейчас: ${leadsAfterTask})` };
+    }
+    setDb(d => ({
+      ...d,
+      mppTasks: (d.mppTasks || []).map(t =>
+        t.id === taskId ? { ...t, status: 'done', updated_at: new Date().toISOString() } : t
+      ),
+    }));
+    return { ok: true };
+  };
+
+  const addMppDealProduct = (dealId, product) => {
+    if (!hasPermission(db, currentUser, 'mpp_manage')) return { error: 'Нет прав' };
+    const id = crypto.randomUUID();
+    setDb(d => ({
+      ...d,
+      mppDealProducts: [...(d.mppDealProducts || []), {
+        id, deal_id: dealId, product_id: product.id || null,
+        product_name: product.name || '', quantity: Number(product.quantity) || 1,
+        price: Number(product.price) || 0, created_at: new Date().toISOString(),
+      }],
+    }));
+    return { ok: true, id };
+  };
+
+  const removeMppDealProduct = (productEntryId) => {
+    if (!hasPermission(db, currentUser, 'mpp_manage')) return { error: 'Нет прав' };
+    setDb(d => ({
+      ...d,
+      mppDealProducts: (d.mppDealProducts || []).filter(p => p.id !== productEntryId),
+    }));
+    return { ok: true };
+  };
+
+  const addMppComment = (dealId, data) => {
+    if (!hasPermission(db, currentUser, 'mpp_manage')) return { error: 'Нет прав' };
+    const id = crypto.randomUUID();
+    const authorName = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь';
+    const deal = (db.mppDeals || []).find(d => d.id === dealId);
+    setDb(d => {
+      const notifs = [];
+      if (deal && deal.manager_id && deal.manager_id !== currentUser.id) {
+        notifs.push(makeNotif(d, {
+          recipient_id: deal.manager_id,
+          title: 'Комментарий по сделке',
+          body: `${authorName}: ${(data.text || '').slice(0, 80)}`,
+          link_kind: 'mpp_deal', link_id: dealId,
+        }));
+      }
+      if (data.is_reminder && data.reminder_date) {
+        notifs.push(makeNotif(d, {
+          recipient_id: currentUser.id,
+          title: 'Напоминание по сделке',
+          body: `${deal?.title || 'Сделка'}: ${(data.text || '').slice(0, 80)}`,
+          link_kind: 'mpp_deal', link_id: dealId,
+        }));
+      }
+      return {
+        ...d,
+        mppComments: [...(d.mppComments || []), {
+          id, deal_id: dealId, text: data.text?.trim() || '',
+          author_id: currentUser.id, author_name: authorName,
+          is_reminder: !!data.is_reminder, reminder_date: data.reminder_date || null,
+          created_at: new Date().toISOString(),
+        }],
+        notifications: [...notifs.filter(Boolean), ...d.notifications],
+      };
+    });
+    return { ok: true, id };
+  };
+
   const payExpense = (expenseId, cashOpData) => {
     if (!hasPermission(db, currentUser, 'expense_pay')) return { error: 'Нет прав на выдачу денег' };
     const req = (db.expenseRequests || []).find(r => r.id === expenseId);
@@ -3870,7 +4076,9 @@ function App() {
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createGift, approveGift, rejectGift, processGift, prepareGift, deliverGift, cancelGift,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
-    createExpenseRequest, approveExpense, rejectExpense, updateExpenseCategory, payExpense,
+    createExpenseRequest, approveExpense, rejectExpense, updateExpenseCategory, payExpense, updateBudgetPlan, createBudgetCategory,
+    createMppDeal, updateMppDeal, addMppActivity, deleteMppDeal,
+    createMppTask, completeMppTask, addMppDealProduct, removeMppDealProduct, addMppComment,
     createGrindRequest, takeGrindRequest, markGrindReady, cancelGrindRequest,
     createCustomRole, updateRolePermissions, updateRoleMeta, deleteCustomRole,
     createProduct, updateProduct, toggleProductActive, deleteProduct, importProducts, renameCategory, createCategory,
@@ -5311,6 +5519,8 @@ function Screen({ ctx }) {
     case 'create_expense': return <ExpenseRequestsScreen ctx={ctx} />;
     case 'expense_detail': return <ExpenseRequestsScreen ctx={ctx} />;
     case 'budget':         return <BudgetScreen ctx={ctx} />;
+    case 'mpp_kanban':     return <MppKanbanScreen ctx={ctx} />;
+    case 'mpp_deal':       return <MppKanbanScreen ctx={ctx} />;
     // ─── HR-календарь (отпуска и ДР) ───
     case 'hr_calendar': return <HRCalendarScreen ctx={ctx} />;
     // ─── Подарки клиентам ───
@@ -5640,6 +5850,7 @@ function HomeCustomizeScreen({ ctx }) {
     { key: 'deliveries', label: 'Доставки',            show: () => has('delivery_manage') || has('delivery_view_all'), section: 'Плитки' },
     { key: 'shipment',   label: 'Реестр отгрузок',     show: () => has('shipment_view'), section: 'Плитки' },
     { key: 'requests',   label: 'Запросы доступа',     show: () => isAdmin, section: 'Плитки' },
+    { key: 'mpp_kanban',   label: 'Воронка МПП',          show: () => has('mpp_manage') || has('mpp_view'), section: 'Плитки' },
     { key: 'coffee_staff', label: 'Сотрудники кофеен',  show: () => !isAdmin && has('manage_coffee_staff'), section: 'Плитки' },
     { key: 'users',      label: 'Пользователи',        show: () => isAdmin, section: 'Плитки' },
     { key: 'products',   label: 'Товары / прайс',      show: () => has('products_edit'), section: 'Плитки' },
@@ -5824,6 +6035,17 @@ function DashboardHome({ ctx, title }) {
       hint: stats.contracts.pending > 0 ? `${stats.contracts.pending} новых` : `всего: ${stats.contracts.total}`,
       color: '#0EA5E9',
       go: () => navigate({ name: 'contracts' }),
+    });
+  }
+  // Воронка МПП
+  if (has('mpp_manage') || has('mpp_view')) {
+    const activeDeals = (db.mppDeals || []).filter(d => d.stage !== 'won' && d.stage !== 'lost');
+    tiles.push({
+      key: 'mpp_kanban', base: 'tk', icon: Monitor, label: 'Воронка МПП',
+      value: activeDeals.length,
+      hint: activeDeals.length > 0 ? 'активных сделок' : 'нет сделок',
+      color: '#7C3AED',
+      go: () => navigate({ name: 'mpp_kanban' }),
     });
   }
   // Доставки (менеджер/директор)
