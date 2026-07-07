@@ -538,7 +538,7 @@ function defaultPermissionsFor(roleKey) {
     case 'technician':
       return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create', 'gift_create', 'expense_create'];
     case 'coffee_manager':
-      return ['coffee_shipments_view', 'coffee_shipments_pay', 'coffee_tasks_view', 'coffee_tasks_edit'];
+      return ['coffee_shipments_view', 'coffee_shipments_pay', 'coffee_tasks_view', 'coffee_tasks_edit', 'manage_coffee_staff'];
     case 'deputy_coffee_manager':
       return ['coffee_shipments_view', 'coffee_shipments_pay', 'coffee_tasks_view', 'coffee_tasks_edit'];
     case 'chef_barista':
@@ -2771,7 +2771,7 @@ function App() {
       id: crypto.randomUUID(),
       request_number: reqNumber,
       requester_id: currentUser.id,
-      requester_name: currentUser.name || 'Пользователь',
+      requester_name: `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь',
       amount: Number(data.amount),
       description: data.description.trim(),
       category: data.category,
@@ -2816,7 +2816,7 @@ function App() {
     setDb(d => {
       const updatedList = (d.expenseRequests || []).map(r => {
         if (r.id !== expenseId) return r;
-        return { ...r, status: 'approved', approved_by: currentUser.id, approved_by_name: currentUser.name, approved_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+        return { ...r, status: 'approved', approved_by: currentUser.id, approved_by_name: `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь', approved_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       });
       const newNotifs = [makeNotif(d, {
         recipient_id: req.requester_id,
@@ -2844,7 +2844,7 @@ function App() {
     setDb(d => {
       const updatedList = (d.expenseRequests || []).map(r => {
         if (r.id !== expenseId) return r;
-        return { ...r, status: 'rejected', approved_by: currentUser.id, approved_by_name: currentUser.name, approved_at: new Date().toISOString(), reject_reason: reason.trim(), updated_at: new Date().toISOString() };
+        return { ...r, status: 'rejected', approved_by: currentUser.id, approved_by_name: `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь', approved_at: new Date().toISOString(), reject_reason: reason.trim(), updated_at: new Date().toISOString() };
       });
       const newNotifs = [makeNotif(d, {
         recipient_id: req.requester_id,
@@ -2854,6 +2854,21 @@ function App() {
       })];
       return { ...d, expenseRequests: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
+    return { ok: true };
+  };
+
+  const updateExpenseCategory = (expenseId, newCategory) => {
+    if (!hasPermission(db, currentUser, 'expense_approve') && !hasPermission(db, currentUser, 'expense_pay')) {
+      return { error: 'Нет прав на изменение заявки' };
+    }
+    const req = (db.expenseRequests || []).find(r => r.id === expenseId);
+    if (!req) return { error: 'Заявка не найдена' };
+    setDb(d => ({
+      ...d,
+      expenseRequests: (d.expenseRequests || []).map(r =>
+        r.id === expenseId ? { ...r, category: newCategory, updated_at: new Date().toISOString() } : r
+      ),
+    }));
     return { ok: true };
   };
 
@@ -2872,13 +2887,14 @@ function App() {
       description: cashOpData?.description || `Чек ${req.request_number}: ${req.description}`,
       bills: cashOpData?.bills || {},
       created_by: currentUser.id,
-      created_by_name: currentUser.name,
+      created_by_name: `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь',
       created_at: new Date().toISOString(),
     };
+    const payerName = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь';
     setDb(d => {
       const updatedList = (d.expenseRequests || []).map(r => {
         if (r.id !== expenseId) return r;
-        return { ...r, status: 'paid', paid_by: currentUser.id, paid_by_name: currentUser.name, paid_at: new Date().toISOString(), cash_operation_id: cashOpId, updated_at: new Date().toISOString() };
+        return { ...r, status: 'paid', paid_by: currentUser.id, paid_by_name: payerName, paid_at: new Date().toISOString(), cash_operation_id: cashOpId, updated_at: new Date().toISOString() };
       });
       const newNotifs = [makeNotif(d, {
         recipient_id: req.requester_id,
@@ -3854,7 +3870,7 @@ function App() {
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createGift, approveGift, rejectGift, processGift, prepareGift, deliverGift, cancelGift,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
-    createExpenseRequest, approveExpense, rejectExpense, payExpense,
+    createExpenseRequest, approveExpense, rejectExpense, updateExpenseCategory, payExpense,
     createGrindRequest, takeGrindRequest, markGrindReady, cancelGrindRequest,
     createCustomRole, updateRolePermissions, updateRoleMeta, deleteCustomRole,
     createProduct, updateProduct, toggleProductActive, deleteProduct, importProducts, renameCategory, createCategory,
@@ -5624,6 +5640,7 @@ function HomeCustomizeScreen({ ctx }) {
     { key: 'deliveries', label: 'Доставки',            show: () => has('delivery_manage') || has('delivery_view_all'), section: 'Плитки' },
     { key: 'shipment',   label: 'Реестр отгрузок',     show: () => has('shipment_view'), section: 'Плитки' },
     { key: 'requests',   label: 'Запросы доступа',     show: () => isAdmin, section: 'Плитки' },
+    { key: 'coffee_staff', label: 'Сотрудники кофеен',  show: () => !isAdmin && has('manage_coffee_staff'), section: 'Плитки' },
     { key: 'users',      label: 'Пользователи',        show: () => isAdmin, section: 'Плитки' },
     { key: 'products',   label: 'Товары / прайс',      show: () => has('products_edit'), section: 'Плитки' },
   ].filter(it => it.show());
@@ -5859,6 +5876,18 @@ function DashboardHome({ ctx, title }) {
       color: '#B45309',
       go: () => navigate({ name: 'coffee_tasks' }),
       highlight: todayTasks.length - doneTasks > 0,
+    });
+  }
+  // Сотрудники кофеен — для управляющего кофейни
+  if (!stats.isAdmin && has('manage_coffee_staff')) {
+    const coffeeRoles = ['coffee_manager', 'deputy_coffee_manager', 'chef_barista', 'chef_cook'];
+    const coffeeStaff = db.users.filter(u => u.active && coffeeRoles.includes(u.role));
+    tiles.push({
+      key: 'coffee_staff', base: 'coffeeshop', icon: Users, label: 'Сотрудники кофеен',
+      value: coffeeStaff.length,
+      hint: 'человек',
+      color: '#92400E',
+      go: () => navigate({ name: 'admin_users' }),
     });
   }
   // Только для админа
@@ -9210,27 +9239,41 @@ function ExportScreen({ ctx }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function AdminUsersScreen({ ctx }) {
-  const { db, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, setPinForUser, resetPinForUser, showToast, resetDB } = ctx;
+  const { db, currentUser, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, setPinForUser, resetPinForUser, showToast, resetDB } = ctx;
 
-  const activeUsers = db.users.filter(u => u.active && u.role !== 'pending');
-  const inactiveUsers = db.users.filter(u => !u.active && u.role !== 'pending');
+  const isAdmin = currentUser.role === 'admin';
+  const isCoffeeStaffManager = !isAdmin && hasPermission(db, currentUser, 'manage_coffee_staff');
+  const COFFEE_ROLES = ['coffee_manager', 'deputy_coffee_manager', 'chef_barista', 'chef_cook'];
+
+  const filterUser = (u) => {
+    if (u.role === 'pending') return false;
+    if (isCoffeeStaffManager) return COFFEE_ROLES.includes(u.role) && u.id !== currentUser.id;
+    return true;
+  };
+
+  const activeUsers = db.users.filter(u => u.active && filterUser(u));
+  const inactiveUsers = db.users.filter(u => !u.active && filterUser(u));
+
+  const allowedRoleKeys = isCoffeeStaffManager ? ['deputy_coffee_manager'] : null;
 
   return (
     <div>
       <PageHeader
-        title="Пользователи"
+        title={isCoffeeStaffManager ? 'Сотрудники кофеен' : 'Пользователи'}
         subtitle={`${activeUsers.length} активных${inactiveUsers.length ? `, ${inactiveUsers.length} отключённых` : ''}`}
-        action={
+        action={isAdmin ? (
           <button onClick={resetDB} className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B', border: '1px solid #FCA5A5' }}>
             Сбросить локальные данные
           </button>
-        }
+        ) : null}
       />
 
-      <div className="rounded-xl p-3 mb-4 text-xs" style={{ background: '#E7F3FE', color: '#1E40AF' }}>
-        💡 Пользователи добавляются автоматически при первом входе через Telegram.
-        Новые запросы появятся в разделе <strong>«Запросы доступа»</strong>.
-      </div>
+      {isAdmin && (
+        <div className="rounded-xl p-3 mb-4 text-xs" style={{ background: '#E7F3FE', color: '#1E40AF' }}>
+          💡 Пользователи добавляются автоматически при первом входе через Telegram.
+          Новые запросы появятся в разделе <strong>«Запросы доступа»</strong>.
+        </div>
+      )}
 
       <div className="space-y-2">
         {[...activeUsers, ...inactiveUsers].map(u => (
@@ -9238,30 +9281,31 @@ function AdminUsersScreen({ ctx }) {
             key={u.id}
             user={u}
             db={db}
+            allowedRoleKeys={allowedRoleKeys}
             onChangeRole={async (r) => {
               const res = await updateUserRole(u.id, r);
               if (res.error) showToast(res.error);
               else showToast('Роль изменена');
             }}
-            onDeactivate={() => deactivateUser(u.id)}
-            onActivate={() => activateUser(u.id)}
+            onDeactivate={isAdmin ? () => deactivateUser(u.id) : null}
+            onActivate={isAdmin ? () => activateUser(u.id) : null}
             onToggleTgNotif={async (uid, enabled) => {
               const res = await updateUserTgNotif(uid, enabled);
               if (res?.error) showToast(res.error);
               else showToast(enabled ? 'TG-уведомления включены' : 'TG-уведомления отключены');
             }}
-            onSetPin={async (userId, pin) => {
+            onSetPin={isAdmin ? async (userId, pin) => {
               const res = await setPinForUser(userId, pin);
               if (res?.error) showToast(res.error);
               else showToast('PIN установлен');
               return res;
-            }}
-            onResetPin={async (userId) => {
+            } : null}
+            onResetPin={isAdmin ? async (userId) => {
               const res = await resetPinForUser(userId);
               if (res?.error) showToast(res.error);
               else showToast('PIN сброшен');
               return res;
-            }}
+            } : null}
           />
         ))}
       </div>
@@ -9269,15 +9313,18 @@ function AdminUsersScreen({ ctx }) {
   );
 }
 
-function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgNotif, onSetPin, onResetPin }) {
+function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActivate, onToggleTgNotif, onSetPin, onResetPin }) {
   const [open, setOpen] = useState(false);
   const [pinFormOpen, setPinFormOpen] = useState(false);
   const [pinValue, setPinValue] = useState('');
   const [pinLoading, setPinLoading] = useState(false);
   const [pinError, setPinError] = useState('');
   const r = roleOf(db, user.role);
-  // Все роли, доступные для назначения (системные + кастомные), кроме admin и pending
-  const assignableRoles = (db.roleDefinitions || []).filter(rd => rd.key !== 'admin' && rd.key !== 'pending');
+  const assignableRoles = (db.roleDefinitions || []).filter(rd => {
+    if (rd.key === 'admin' || rd.key === 'pending') return false;
+    if (allowedRoleKeys) return allowedRoleKeys.includes(rd.key);
+    return true;
+  });
 
   return (
     <div className="bg-white rounded-xl p-4" style={{ border: '1px solid var(--mc-border)' }}>
@@ -9322,11 +9369,12 @@ function UserRow({ user, db, onChangeRole, onDeactivate, onActivate, onToggleTgN
                 {rd.label}
               </button>
             ))}
-            {user.active ? (
+            {onDeactivate && user.active && (
               <button onClick={onDeactivate} className="text-xs font-semibold rounded-full px-3 py-1.5 ml-auto" style={{ background: '#EB5757', color: 'white' }}>
                 Деактивировать
               </button>
-            ) : (
+            )}
+            {onActivate && !user.active && (
               <button onClick={onActivate} className="text-xs font-semibold rounded-full px-3 py-1.5 ml-auto" style={{ background: '#10B981', color: 'white' }}>
                 Активировать
               </button>

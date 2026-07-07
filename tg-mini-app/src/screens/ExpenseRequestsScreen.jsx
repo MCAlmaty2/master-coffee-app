@@ -278,6 +278,10 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
   const [showReject, setShowReject] = useState(false);
   const [showImage, setShowImage] = useState(null);
   const [showCashModal, setShowCashModal] = useState(false);
+  const canEditCategory = hasPerm('expense_approve') || hasPerm('expense_pay');
+  const categories = useMemo(() => {
+    return (db.expenseCategories || []).filter(c => c.active).sort((a, b) => a.sort_order - b.sort_order).map(c => c.name);
+  }, [db.expenseCategories]);
 
   const req = (db.expenseRequests || []).find(r => r.id === expenseId);
   if (!req) return (
@@ -335,7 +339,25 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
 
         <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
           <Row label="Сумма" value={fmtMoney(req.amount)} bold />
-          <Row label="Категория" value={req.category} />
+          {canEditCategory ? (
+            <div className="flex items-center justify-between py-1" style={{ borderBottom: '1px solid var(--mc-border)' }}>
+              <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>Категория</span>
+              <select
+                value={req.category || ''}
+                onChange={e => {
+                  const res = ctx.updateExpenseCategory(expenseId, e.target.value);
+                  if (res.error) showToast(res.error, 'error');
+                  else showToast('Категория изменена');
+                }}
+                className="text-sm font-semibold text-right rounded-lg px-2 py-1 outline-none"
+                style={{ color: 'var(--mc-text)', background: 'var(--mc-bg)', border: '1px solid var(--mc-border)', maxWidth: '60%' }}
+              >
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          ) : (
+            <Row label="Категория" value={req.category} />
+          )}
           <Row label="Описание" value={req.description} />
           <Row label="Подал(а)" value={req.requester_name} />
           <Row label="Дата" value={fmtDateTime(req.created_at)} />

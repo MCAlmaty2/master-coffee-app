@@ -244,7 +244,34 @@ export function DeliveryRegistriesScreen({ ctx }) {
 
   const regs = (db.deliveryRegistries || [])
     .filter(r => tab === 'active' ? r.status === 'active' : r.status !== 'active')
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    .sort((a, b) => {
+      const dateCmp = (b.date || '').localeCompare(a.date || '');
+      if (dateCmp !== 0) return dateCmp;
+      const shiftOrder = { morning: 0, evening: 1 };
+      return (shiftOrder[a.shift] ?? 2) - (shiftOrder[b.shift] ?? 2);
+    });
+
+  const groupedByDate = [];
+  let lastDate = null;
+  for (const reg of regs) {
+    const d = reg.date || '';
+    if (d !== lastDate) {
+      groupedByDate.push({ type: 'header', date: d });
+      lastDate = d;
+    }
+    groupedByDate.push({ type: 'reg', reg });
+  }
+
+  const today = todayISO();
+  const fmtDateHeader = (iso) => {
+    if (iso === today) return 'Сегодня';
+    const d = new Date(iso + 'T00:00:00');
+    const yesterday = new Date(new Date(new Date().toLocaleString('en-US', { timeZone: TZ })).setDate(
+      new Date(new Date().toLocaleString('en-US', { timeZone: TZ })).getDate() - 1
+    )).toLocaleDateString('sv-SE');
+    if (iso === yesterday) return 'Вчера';
+    return d.toLocaleDateString('ru-KZ', { day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ });
+  };
 
   return (
     <div style={{ background: 'var(--mc-bg)' }}>
@@ -269,7 +296,17 @@ export function DeliveryRegistriesScreen({ ctx }) {
             <div style={{ fontSize: 13 }}>{tab === 'active' ? 'Нет активных реестров' : 'Архив пуст'}</div>
           </div>
         )}
-        {regs.map(reg => <RegistryCard key={reg.id} reg={reg} db={db} onClick={() => navigate({ name: 'delivery_registry_detail', registryId: reg.id })} />)}
+        {groupedByDate.map((item, i) =>
+          item.type === 'header' ? (
+            <div key={'h-' + item.date} style={{ fontSize: 12, fontWeight: 700, color: 'var(--mc-text)',
+              padding: '10px 2px 6px', marginTop: i > 0 ? 8 : 0 }}>
+              📅 {fmtDateHeader(item.date)}
+            </div>
+          ) : (
+            <RegistryCard key={item.reg.id} reg={item.reg} db={db}
+              onClick={() => navigate({ name: 'delivery_registry_detail', registryId: item.reg.id })} />
+          )
+        )}
         {tab === 'active' && (
           <button onClick={() => navigate({ name: 'delivery_new_registry' })}
             style={{ width: '100%', padding: 12, background: '#297b8a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4, cursor: 'pointer' }}>

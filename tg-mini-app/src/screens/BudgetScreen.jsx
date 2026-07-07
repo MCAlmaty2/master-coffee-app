@@ -25,18 +25,19 @@ const BUDGET_CATEGORIES = [
   { key: 'largus',       label: 'Ларгус',                        plan: 50000 },
 ];
 
-const EXPENSE_TO_BUDGET = {
-  'Полиграфия':   'print',
-  'Канцелярия':   'office',
-  'Офис':         'office',
-  'Маркетинг':    'marketing',
-  'Тех. сервис':  'techservice',
-  'Бензин':       'fuel',
-  'Транспорт':    'fuel',
-  'Интернет':     'internet',
-  'Ком. услуги':  'utilities',
-  'Охрана':       'security',
-  'Бариста':      'barista',
+const CATEGORY_TO_BUDGET = {
+  'Мега перевозки':      'transport',
+  'Бензин и транспорт':  'fuel',
+  'Ком.услуги':          'utilities',
+  'Охрана':              'security',
+  'Интернет':            'internet',
+  'Списания':            'writeoffs',
+  'Маркетинг':           'marketing',
+  'Полиграфия':          'print',
+  'Расходы офиса':       'office',
+  'Тех.сервис':          'techservice',
+  'Бариста':             'barista',
+  'Ларгус':              'largus',
 };
 
 function getMonthKey(year, month) {
@@ -136,20 +137,43 @@ export default function BudgetScreen({ ctx }) {
     (db.expenseRequests || [])
       .filter(e => e.status === 'paid' && e.paid_at && e.paid_at >= start && e.paid_at < end)
       .forEach(e => {
-        const budgetKey = EXPENSE_TO_BUDGET[e.category] || 'other';
+        const budgetKey = CATEGORY_TO_BUDGET[e.category] || 'other';
         expenseByBudgetKey[budgetKey] = (expenseByBudgetKey[budgetKey] || 0) + Number(e.amount);
+      });
+
+    const linkedCashOpIds = new Set(
+      (db.expenseRequests || [])
+        .filter(e => e.status === 'paid' && e.cash_operation_id)
+        .map(e => e.cash_operation_id)
+    );
+
+    const cashByBudgetKey = {};
+    (db.cashOperations || [])
+      .filter(op =>
+        (op.type === 'expense' || op.type === 'return') &&
+        op.created_at && op.created_at >= start && op.created_at < end &&
+        !linkedCashOpIds.has(op.id)
+      )
+      .forEach(op => {
+        const budgetKey = CATEGORY_TO_BUDGET[op.category];
+        if (!budgetKey) return;
+        const amount = op.type === 'expense' ? Number(op.total) : -Number(op.total);
+        cashByBudgetKey[budgetKey] = (cashByBudgetKey[budgetKey] || 0) + amount;
       });
 
     const rows = BUDGET_CATEGORIES.map(cat => {
       let autoFact = 0;
       if (cat.auto === 'writeoffs') autoFact = writeoffTotal;
       autoFact += (expenseByBudgetKey[cat.key] || 0);
+      autoFact += (cashByBudgetKey[cat.key] || 0);
 
       const manualFact = (manualByKey[cat.key] || []).reduce((s, e) => s + Number(e.amount), 0);
       const fact = autoFact + manualFact;
       const remaining = cat.plan - fact;
       const pct = cat.plan > 0 ? Math.round((fact / cat.plan) * 100) : (fact > 0 ? 100 : 0);
-      return { ...cat, fact, autoFact, manualFact, remaining, pct, entries: manualByKey[cat.key] || [] };
+      const cashFact = cashByBudgetKey[cat.key] || 0;
+      const expenseFact = expenseByBudgetKey[cat.key] || 0;
+      return { ...cat, fact, autoFact, manualFact, cashFact, expenseFact, remaining, pct, entries: manualByKey[cat.key] || [] };
     });
 
     const totalPlan = rows.reduce((s, r) => s + r.plan, 0);
@@ -158,7 +182,7 @@ export default function BudgetScreen({ ctx }) {
     const totalPct = totalPlan > 0 ? Math.round((totalFact / totalPlan) * 100) : 0;
 
     return { rows, totalPlan, totalFact, totalRemaining, totalPct };
-  }, [db.writeOffs, db.expenseRequests, manualByKey, year, month]);
+  }, [db.writeOffs, db.expenseRequests, db.cashOperations, manualByKey, year, month]);
 
   const pctColor = (pct) => {
     if (pct > 100) return '#EF4444';
@@ -170,7 +194,7 @@ export default function BudgetScreen({ ctx }) {
     const id = crypto.randomUUID();
     setDb(d => ({
       ...d,
-      budgetEntries: [...d.budgetEntries, {
+      budgetEntries: [...(d.budgetEntries || []), {
         id,
         category_key: categoryKey,
         month: monthKey,
@@ -258,7 +282,17 @@ export default function BudgetScreen({ ctx }) {
                     <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--mc-border)' }}>
                       {row.auto === 'writeoffs' && row.autoFact > 0 && (
                         <div className="text-[11px] mb-2 px-2 py-1 rounded" style={{ background: 'var(--mc-surface)', color: 'var(--mc-muted)' }}>
-                          Авто (1С документы): {fmtMoney(row.autoFact)}
+                          Авто (1С документы): {fmtMoney(row.autoFact - row.cashFact - row.expenseFact)}
+                        </div>
+                      )}
+                      {row.cashFact > 0 && (
+                        <div className="text-[11px] mb-2 px-2 py-1 rounded" style={{ background: 'var(--mc-surface)', color: 'var(--mc-muted)' }}>
+                          Касса / подотчёт: {fmtMoney(row.cashFact)}
+                        </div>
+                      )}
+                      {row.expenseFact > 0 && (
+                        <div className="text-[11px] mb-2 px-2 py-1 rounded" style={{ background: 'var(--mc-surface)', color: 'var(--mc-muted)' }}>
+                          Чеки расходов: {fmtMoney(row.expenseFact)}
                         </div>
                       )}
 
