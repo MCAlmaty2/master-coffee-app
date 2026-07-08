@@ -1334,10 +1334,9 @@ function App() {
           }
           upsertRow(stateKey, row).catch(e => {
             const msg = String(e?.message || e);
-            // Призрак в локальном state — убираем без репорта
             if (msg.includes('duplicate key value violates unique constraint')
                 || msg.includes('violates foreign key constraint')) {
-              setDb(d => ({ ...d, [stateKey]: (d[stateKey] || []).filter(r => r[cfg.pk] !== id) }));
+              console.warn(`[sync] ${stateKey} ${id}: ${msg} (запись оставлена в локальном state)`);
               return;
             }
             console.warn(`[sync] ${stateKey} upsert ${id}:`, msg);
@@ -1359,7 +1358,7 @@ function App() {
       syncSnapshotRef.current[stateKey] = currArr;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts, db.coffeeShipments, db.coffeeTasks, db.vacations, db.cashOperations]);
+  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts, db.coffeeShipments, db.coffeeTasks, db.vacations, db.cashOperations, db.expenseCategories, db.budgetEntries, db.expenseRequests, db.mppDeals, db.mppActivities, db.mppTasks, db.mppDealProducts, db.mppComments]);
 
   // ─── Напоминания по расписанию (personal TG) — за 15 мин до начала, только себе ───
   useEffect(() => {
