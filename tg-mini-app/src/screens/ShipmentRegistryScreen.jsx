@@ -119,7 +119,7 @@ const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID)
    ГЛАВНЫЙ ЭКРАН
 ───────────────────────────────────────────────────────────── */
 export function ShipmentRegistryScreen({ ctx }) {
-  const { db, currentUser, goBack, setDb, showToast, can } = ctx;
+  const { db, currentUser, goBack, setDb, showToast, can, syncSnapshotRef } = ctx;
 
   const canEdit = can ? can('shipment_edit') : CAN_EDIT_ROLES.includes(currentUser?.role);
   const canPay  = can ? can('shipment_pay')  : CAN_PAY_ROLES.includes(currentUser?.role);
@@ -209,7 +209,11 @@ export function ShipmentRegistryScreen({ ctx }) {
     }));
     const { error } = await supabase.from('shipment_registry').insert(newRows);
     if (error) { showToast('Ошибка: ' + error.message); return; }
-    setDb(d => ({ ...d, shipmentRegistry: [...newRows, ...(d.shipmentRegistry || [])] }));
+    setDb(d => {
+      const updated = [...newRows, ...(d.shipmentRegistry || [])];
+      if (syncSnapshotRef) syncSnapshotRef.current.shipmentRegistry = updated;
+      return { ...d, shipmentRegistry: updated };
+    });
     showToast(`Добавлено ${newRows.length} ${newRows.length === 1 ? 'строка' : 'строк'}`);
   };
 
@@ -228,7 +232,11 @@ export function ShipmentRegistryScreen({ ctx }) {
     }
     const { error } = await supabase.from('shipment_registry').update(patch).eq('id', id);
     if (error) { showToast('Ошибка: ' + error.message); return; }
-    setDb(d => ({ ...d, shipmentRegistry: (d.shipmentRegistry || []).map(r => r.id === id ? { ...r, ...patch } : r) }));
+    setDb(d => {
+      const updated = (d.shipmentRegistry || []).map(r => r.id === id ? { ...r, ...patch } : r);
+      if (syncSnapshotRef) syncSnapshotRef.current.shipmentRegistry = updated;
+      return { ...d, shipmentRegistry: updated };
+    });
   };
 
   const markPaid = async (id, paidAmount) => {
@@ -240,14 +248,22 @@ export function ShipmentRegistryScreen({ ctx }) {
     };
     const { error } = await supabase.from('shipment_registry').update(patch).eq('id', id);
     if (error) { showToast('Ошибка: ' + error.message); return; }
-    setDb(d => ({ ...d, shipmentRegistry: (d.shipmentRegistry || []).map(r => r.id === id ? { ...r, ...patch } : r) }));
+    setDb(d => {
+      const updated = (d.shipmentRegistry || []).map(r => r.id === id ? { ...r, ...patch } : r);
+      if (syncSnapshotRef) syncSnapshotRef.current.shipmentRegistry = updated;
+      return { ...d, shipmentRegistry: updated };
+    });
     showToast('Оплата подтверждена');
   };
 
   const deleteRow = async (id) => {
     const { error } = await supabase.from('shipment_registry').delete().eq('id', id);
     if (error) { showToast('Ошибка: ' + error.message); return; }
-    setDb(d => ({ ...d, shipmentRegistry: (d.shipmentRegistry || []).filter(r => r.id !== id) }));
+    setDb(d => {
+      const updated = (d.shipmentRegistry || []).filter(r => r.id !== id);
+      if (syncSnapshotRef) syncSnapshotRef.current.shipmentRegistry = updated;
+      return { ...d, shipmentRegistry: updated };
+    });
   };
 
   return (

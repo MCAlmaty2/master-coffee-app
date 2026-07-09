@@ -4094,6 +4094,7 @@ function App() {
     theme, toggleTheme,
     can: (perm) => hasPermission(db, currentUser, perm),
     notify: (opts) => makeNotif(db, opts),
+    syncSnapshotRef,
   };
 
   // ─── Интеграция с Telegram Mini App ───
