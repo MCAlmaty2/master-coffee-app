@@ -171,7 +171,12 @@ export function ShipmentRegistryScreen({ ctx }) {
         || (r.organization || '').toLowerCase().includes(q)
         || (r.comment || '').toLowerCase().includes(q);
     })
-    .sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    .sort((a, b) => {
+      const da = (a.doc_date || '').split('.').reverse().join('');
+      const db_ = (b.doc_date || '').split('.').reverse().join('');
+      if (da !== db_) return da.localeCompare(db_);
+      return (a.seq || 0) - (b.seq || 0);
+    });
 
   // Статистика
   const stats = useMemo(() => {
