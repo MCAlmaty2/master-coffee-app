@@ -537,7 +537,7 @@ function defaultPermissionsFor(roleKey) {
     case 'warehouse':
       return ['orders_view_all', 'orders_change_status', 'warehouse_pickup', 'grind_fulfill', 'grind_view_all'];
     case 'cashier':
-      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay', 'gift_create', 'expense_pay', 'expense_view_all'];
+      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay', 'gift_create', 'expense_pay', 'expense_view_all', 'coffee_shipments_view'];
     case 'barista':
     case 'technician':
       return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create', 'gift_create', 'expense_create'];
@@ -4918,6 +4918,9 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     }
     if (hasPermission(db, currentUser, 'shipment_view') || hasPermission(db, currentUser, 'shipment_edit')) {
       sales.push({ id: 'shipment_registry', label: 'Реестр отгрузок', icon: Package });
+    }
+    if (hasPermission(db, currentUser, 'mpp_manage') || hasPermission(db, currentUser, 'mpp_view')) {
+      sales.push({ id: 'mpp_kanban', label: 'Воронка МПП', icon: Monitor });
     }
     if (sales.length > 0) groups.push({ title: 'Отдел продаж', items: sales, collapsible: true, base: 'tk' });
 
@@ -14036,7 +14039,21 @@ function CreateGrindScreen({ ctx }) {
   const [detected, setDetected] = useState(new Set());
   const [parsedItems, setParsedItems] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [editingIdx, setEditingIdx] = useState(null);
   const update = patch => setForm(f => ({ ...f, ...patch }));
+  const updateParsedItem = (idx, patch) => setParsedItems(prev => prev.map((it, i) => i === idx ? { ...it, ...patch } : it));
+  const addParsedItem = () => {
+    setParsedItems(prev => [...(prev || []), {
+      raw: '', name: '', quantity: '1', weight: '1000', weightUnit: 'г',
+      grind_type: 'espresso', grind_label: 'Эспрессо', grind_custom: '',
+      product_id: null, product_name: '', isCoffee: true, needsGrind: true, checked: true,
+    }]);
+    setEditingIdx((parsedItems || []).length);
+  };
+  const removeParsedItem = (idx) => {
+    setParsedItems(prev => prev.filter((_, i) => i !== idx));
+    setEditingIdx(null);
+  };
 
   const matchProduct = (text, weightGrams = null) => {
     const lower = text.toLowerCase();
@@ -14061,16 +14078,26 @@ function CreateGrindScreen({ ctx }) {
     return bestScore >= 1 ? best : null;
   };
 
-  const detectGrind = (text) => {
-    if (/не\s*молоть|в\s*зерн/i.test(text)) return { grind_type: null, label: 'В зёрнах' };
-    if (/турк/i.test(text))                  return { grind_type: 'turka',    label: 'Турка' };
-    if (/v.?60/i.test(text))                 return { grind_type: 'v60',      label: 'V60' };
-    if (/фильтр|filter|пуров/i.test(text))   return { grind_type: 'filter',   label: 'Фильтр' };
-    if (/френч|french|press/i.test(text))    return { grind_type: 'french',   label: 'Френч-пресс' };
-    if (/эспрессо|espresso|рожков|кофемашин/i.test(text)) return { grind_type: 'espresso', label: 'Эспрессо' };
-    const m = text.match(/помол[:\s]+([^\n|]+)/i);
-    if (m) return { grind_type: 'custom', label: m[1].trim(), grind_custom: m[1].trim() };
+  const grindFromKeywords = (s) => {
+    if (/не\s*молоть|в\s*зерн/i.test(s)) return { grind_type: null, label: 'В зёрнах' };
+    if (/турк/i.test(s))                  return { grind_type: 'turka',    label: 'Турка' };
+    if (/v.?60/i.test(s))                 return { grind_type: 'v60',      label: 'V60' };
+    if (/фильтр|filter|пуров/i.test(s))   return { grind_type: 'filter',   label: 'Фильтр' };
+    if (/френч|french|press/i.test(s))    return { grind_type: 'french',   label: 'Френч-пресс' };
+    if (/эспрессо|espresso|рожков|кофемашин/i.test(s)) return { grind_type: 'espresso', label: 'Эспрессо' };
     return null;
+  };
+  const detectGrind = (text) => {
+    const m = text.match(/помол\s*:\s*([^\n|]+)/i);
+    if (m) {
+      const val = m[1].trim();
+      return grindFromKeywords(val) || { grind_type: 'custom', label: val, grind_custom: val };
+    }
+    if (/для\s+(эспрессо|турк|френч|фильтр|пуров)/i.test(text)) {
+      const after = text.match(/для\s+([^\n|,(]+)/i);
+      if (after) return grindFromKeywords(after[1]) || null;
+    }
+    return grindFromKeywords(text);
   };
 
   const parseSiteOrder = (text) => {
@@ -14294,52 +14321,129 @@ function CreateGrindScreen({ ctx }) {
 
         {parsedItems ? (
           <>
-            {/* Мульти-позиции из заказа с сайта */}
-            <Card title={`Позиции заказа (${parsedItems.length})`}>
+            <Card title={`Позиции заказа (${parsedItems.length})`} action={
+              <button onClick={addParsedItem} className="text-xs font-semibold px-2 py-1 rounded"
+                style={{ background: '#297b8a', color: 'white' }}>+ Товар</button>
+            }>
               <div className="space-y-2">
                 {parsedItems.map((it, idx) => {
                   const canGrind = it.isCoffee && it.needsGrind;
+                  const isEditing = editingIdx === idx;
                   const statusColor = canGrind ? '#22C55E' : it.isCoffee ? '#3B82F6' : '#94A3B8';
-                  const statusLabel = canGrind ? it.grind_label : it.isCoffee ? 'В зёрнах' : 'Не кофе';
+                  const statusLabel = canGrind
+                    ? (it.grind_type === 'custom' ? (it.grind_custom || 'Свой') : (GRIND_TYPES[it.grind_type]?.label || it.grind_label))
+                    : it.isCoffee ? 'В зёрнах' : 'Не кофе';
                   return (
-                    <div key={idx} onClick={() => canGrind && toggleItem(idx)}
-                      className="rounded-lg p-3 flex items-start gap-3"
-                      style={{
-                        border: `1.5px solid ${it.checked ? '#297b8a' : 'var(--mc-border)'}`,
-                        background: it.checked ? '#F0F9FB' : 'var(--mc-surface)',
-                        opacity: canGrind ? 1 : 0.6,
-                        cursor: canGrind ? 'pointer' : 'default',
-                      }}>
-                      <div className="pt-0.5">
-                        {canGrind ? (
-                          <div className="w-5 h-5 rounded border-2 flex items-center justify-center"
-                            style={{ borderColor: it.checked ? '#297b8a' : '#CBD5E1', background: it.checked ? '#297b8a' : 'white' }}>
-                            {it.checked && <Check size={14} color="white" />}
-                          </div>
-                        ) : (
-                          <div className="w-5 h-5 rounded flex items-center justify-center"
-                            style={{ background: statusColor + '20' }}>
-                            <span style={{ color: statusColor, fontSize: 11 }}>{it.isCoffee ? '●' : '–'}</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>
-                          {it.product_id ? it.product_name : it.name}
+                    <div key={idx} className="rounded-lg overflow-hidden"
+                      style={{ border: `1.5px solid ${it.checked ? '#297b8a' : 'var(--mc-border)'}`, background: it.checked ? '#F0F9FB' : 'var(--mc-surface)' }}>
+                      <div className="p-3 flex items-start gap-3" style={{ cursor: 'pointer' }}
+                        onClick={() => { if (canGrind) toggleItem(idx); setEditingIdx(isEditing ? null : idx); }}>
+                        <div className="pt-0.5">
+                          {canGrind ? (
+                            <div className="w-5 h-5 rounded border-2 flex items-center justify-center"
+                              style={{ borderColor: it.checked ? '#297b8a' : '#CBD5E1', background: it.checked ? '#297b8a' : 'white' }}>
+                              {it.checked && <Check size={14} color="white" />}
+                            </div>
+                          ) : (
+                            <div className="w-5 h-5 rounded flex items-center justify-center"
+                              style={{ background: statusColor + '20' }}>
+                              <span style={{ color: statusColor, fontSize: 11 }}>{it.isCoffee ? '●' : '–'}</span>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                          {it.weight && <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>{it.weight} {it.weightUnit || 'г'}</span>}
-                          <span className="text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
-                          {it.product_id && <span className="text-xs" style={{ color: '#297b8a' }}>✓ из прайса</span>}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>
+                            {it.product_id ? it.product_name : (it.name || 'Новый товар')}
+                          </div>
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                            {it.weight && <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>{it.weight} {it.weightUnit || 'г'}</span>}
+                            {it.quantity && <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>× {it.quantity} шт</span>}
+                            <span className="text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
+                            {it.product_id && <span className="text-xs" style={{ color: '#297b8a' }}>✓ прайс</span>}
+                          </div>
                         </div>
+                        <Edit3 size={14} style={{ color: 'var(--mc-muted)', marginTop: 4, flexShrink: 0 }} />
                       </div>
+                      {isEditing && (
+                        <div className="px-3 pb-3 space-y-2" style={{ borderTop: '1px solid var(--mc-border)' }}>
+                          <div className="pt-2">
+                            <label className="text-[11px] font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Товар из прайса</label>
+                            <select value={it.product_id || ''} onChange={e => {
+                              const p = coffeeProducts.find(pp => pp.id === e.target.value);
+                              updateParsedItem(idx, p
+                                ? { product_id: p.id, product_name: p.name, isCoffee: true, needsGrind: true, checked: true }
+                                : { product_id: null, product_name: '' });
+                            }} className="w-full px-2 py-1.5 rounded-md text-xs outline-none bg-white"
+                              style={{ border: '1px solid var(--mc-border)' }}>
+                              <option value="">— вручную —</option>
+                              {coffeeProducts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                          </div>
+                          {!it.product_id && (
+                            <div>
+                              <label className="text-[11px] font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Название</label>
+                              <input type="text" value={it.name || ''} placeholder="Название кофе"
+                                onChange={e => updateParsedItem(idx, { name: e.target.value, product_name: e.target.value })}
+                                className="w-full px-2 py-1.5 rounded-md text-xs outline-none"
+                                style={{ border: '1px solid var(--mc-border)' }} />
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <div className="flex-1">
+                              <label className="text-[11px] font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Вес</label>
+                              <div className="flex gap-1">
+                                <input type="number" inputMode="decimal" value={it.weight || ''} placeholder="1000"
+                                  onChange={e => updateParsedItem(idx, { weight: e.target.value })}
+                                  className="flex-1 px-2 py-1.5 rounded-md text-xs outline-none"
+                                  style={{ border: '1px solid var(--mc-border)' }} />
+                                <select value={it.weightUnit || 'г'} onChange={e => updateParsedItem(idx, { weightUnit: e.target.value })}
+                                  className="px-1 py-1.5 rounded-md text-xs outline-none bg-white"
+                                  style={{ border: '1px solid var(--mc-border)' }}>
+                                  <option value="г">г</option><option value="кг">кг</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div style={{ width: 70 }}>
+                              <label className="text-[11px] font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Кол-во</label>
+                              <input type="number" inputMode="numeric" value={it.quantity || ''} placeholder="1"
+                                onChange={e => updateParsedItem(idx, { quantity: e.target.value })}
+                                className="w-full px-2 py-1.5 rounded-md text-xs outline-none"
+                                style={{ border: '1px solid var(--mc-border)' }} />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Помол</label>
+                            <div className="flex flex-wrap gap-1">
+                              {Object.entries(GRIND_TYPES).map(([key, val]) => (
+                                <button key={key} onClick={() => updateParsedItem(idx, {
+                                  grind_type: key, grind_label: val.label, needsGrind: true, isCoffee: true, checked: true,
+                                  ...(key !== 'custom' ? { grind_custom: '' } : {}),
+                                })} className="px-2 py-1 rounded-full text-[11px] font-semibold"
+                                  style={{ background: it.grind_type === key ? '#297b8a' : 'var(--mc-active-item)',
+                                    color: it.grind_type === key ? 'white' : 'var(--mc-muted)',
+                                    border: `1px solid ${it.grind_type === key ? '#297b8a' : 'var(--mc-border)'}` }}>
+                                  {val.label}
+                                </button>
+                              ))}
+                            </div>
+                            {it.grind_type === 'custom' && (
+                              <input value={it.grind_custom || ''} onChange={e => updateParsedItem(idx, { grind_custom: e.target.value, grind_label: e.target.value })}
+                                placeholder="Опишите помол..."
+                                className="w-full mt-1 px-2 py-1.5 rounded-md text-xs outline-none"
+                                style={{ border: '1px solid var(--mc-border)' }} />
+                            )}
+                          </div>
+                          <button onClick={() => removeParsedItem(idx)}
+                            className="w-full py-1.5 rounded-md text-xs font-semibold"
+                            style={{ background: '#FEE2E2', color: '#DC2626' }}>Удалить позицию</button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </Card>
 
-            {/* Номер заказа */}
             <Card title="Номер заказа">
               <input type="text" placeholder="РЗ-00045 / САЙТ-50819"
                 value={form.order_1c} onChange={e => update({ order_1c: e.target.value })}
