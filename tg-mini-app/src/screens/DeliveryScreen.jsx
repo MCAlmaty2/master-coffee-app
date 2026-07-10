@@ -413,7 +413,15 @@ export function DeliveryNewRegistryScreen({ ctx }) {
       const { error: ordErr } = await supabase.from('delivery_orders').insert(orderRows);
       if (ordErr) throw ordErr;
 
-      setDb(d => ({ ...d, deliveryRegistries: [reg, ...d.deliveryRegistries], deliveryOrders: [...orderRows, ...d.deliveryOrders] }));
+      setDb(d => {
+        const updRegs = [reg, ...d.deliveryRegistries];
+        const updOrd = [...orderRows, ...d.deliveryOrders];
+        if (syncSnapshotRef) {
+          syncSnapshotRef.current.deliveryRegistries = updRegs;
+          syncSnapshotRef.current.deliveryOrders = updOrd;
+        }
+        return { ...d, deliveryRegistries: updRegs, deliveryOrders: updOrd };
+      });
       showToast(`Реестр ${number} создан (${finalRows.length} заказов)`, 'success');
       navigate({ name: 'delivery_registry_detail', registryId: reg.id });
     } catch (e) {
@@ -1342,23 +1350,44 @@ export function DeliveryFailedQueueScreen({ ctx, registryId }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function CourierRegistryScreen({ ctx }) {
-  const { db, navigate, currentUser, showToast, setDb } = ctx;
+  const { db, navigate, currentUser, showToast, setDb, syncSnapshotRef } = ctx;
   const [tab, setTab]               = useState('free');
   const [selectedRegId, setSelectedRegId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch fresh data on mount — courier may have app open before registry upload
+  const mergeDeliveryData = (regs, orders) => {
+    setDb(d => {
+      const newD = { ...d };
+      if (regs) {
+        const regMap = new Map((d.deliveryRegistries || []).map(r => [r.id, r]));
+        regs.forEach(r => regMap.set(r.id, r));
+        newD.deliveryRegistries = [...regMap.values()];
+      }
+      if (orders) {
+        const ordMap = new Map((d.deliveryOrders || []).map(o => [o.id, o]));
+        orders.forEach(o => ordMap.set(o.id, o));
+        newD.deliveryOrders = [...ordMap.values()];
+      }
+      if (syncSnapshotRef) {
+        if (regs) syncSnapshotRef.current.deliveryRegistries = newD.deliveryRegistries;
+        if (orders) syncSnapshotRef.current.deliveryOrders = newD.deliveryOrders;
+      }
+      return newD;
+    });
+  };
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        const activeRegIds = (db.deliveryRegistries || []).filter(r => r.status === 'active').map(r => r.id);
+        if (!activeRegIds.length) return;
         const [{ data: regs }, { data: orders }] = await Promise.all([
-          supabase.from('delivery_registries').select('*'),
-          supabase.from('delivery_orders').select('*'),
+          supabase.from('delivery_registries').select('*').in('id', activeRegIds),
+          supabase.from('delivery_orders').select('*').in('registry_id', activeRegIds),
         ]);
         if (cancelled) return;
-        if (regs)   setDb(d => ({ ...d, deliveryRegistries: regs }));
-        if (orders) setDb(d => ({ ...d, deliveryOrders: orders }));
+        mergeDeliveryData(regs, orders);
       } catch (_) { /* silent */ }
     })();
     return () => { cancelled = true; };
@@ -1367,12 +1396,14 @@ export function CourierRegistryScreen({ ctx }) {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
+      const activeRegIds = (db.deliveryRegistries || []).filter(r => r.status === 'active').map(r => r.id);
       const [{ data: regs }, { data: orders }] = await Promise.all([
-        supabase.from('delivery_registries').select('*'),
-        supabase.from('delivery_orders').select('*'),
+        supabase.from('delivery_registries').select('*').eq('status', 'active'),
+        activeRegIds.length
+          ? supabase.from('delivery_orders').select('*').in('registry_id', activeRegIds)
+          : Promise.resolve({ data: [] }),
       ]);
-      if (regs)   setDb(d => ({ ...d, deliveryRegistries: regs }));
-      if (orders) setDb(d => ({ ...d, deliveryOrders: orders }));
+      mergeDeliveryData(regs, orders);
       showToast('Данные обновлены', 'success');
     } catch (_) { showToast('Ошибка обновления', 'error'); }
     setRefreshing(false);
