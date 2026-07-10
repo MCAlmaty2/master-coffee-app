@@ -78,21 +78,29 @@ function checkCompleted(completions, task, userId) {
 }
 
 /** Переключить статус выполнения задачи */
-async function doToggle(completions, task, userId, setDb) {
+async function doToggle(completions, task, userId, setDb, syncSnapshotRef) {
   const key = completionKey(task);
   const existing = completions.find(c => c.task_id === task.id && c.completion_key === key && c.completed_by === userId);
   if (existing) {
     await supabase.from('schedule_completions').delete().eq('id', existing.id);
-    setDb(d => ({ ...d, scheduleCompletions: (d.scheduleCompletions || []).filter(c => c.id !== existing.id) }));
+    setDb(d => {
+      const updated = (d.scheduleCompletions || []).filter(c => c.id !== existing.id);
+      if (syncSnapshotRef) syncSnapshotRef.current.scheduleCompletions = updated;
+      return { ...d, scheduleCompletions: updated };
+    });
   } else {
     const row = { id: uid(), task_id: task.id, completion_key: key, completed_by: userId, completed_at: new Date().toISOString() };
     await supabase.from('schedule_completions').upsert([row], { onConflict: 'id' });
-    setDb(d => ({ ...d, scheduleCompletions: [...(d.scheduleCompletions || []), row] }));
+    setDb(d => {
+      const updated = [...(d.scheduleCompletions || []), row];
+      if (syncSnapshotRef) syncSnapshotRef.current.scheduleCompletions = updated;
+      return { ...d, scheduleCompletions: updated };
+    });
   }
 }
 
 export function ScheduleScreen({ ctx }) {
-  const { db, setDb, currentUser, goBack, showToast } = ctx;
+  const { db, setDb, currentUser, goBack, showToast, syncSnapshotRef } = ctx;
   const role = currentUser?.role;
   const canAccess = ctx.hasPermission?.('schedule_access');
 
@@ -121,14 +129,18 @@ export function ScheduleScreen({ ctx }) {
   }, [db.roleDefinitions]);
   const todayTasks = myTasks.filter(isTaskForToday);
   const isCompleted = (task) => checkCompleted(allCompletions, task, currentUser.id);
-  const toggleComplete = (task) => doToggle(allCompletions, task, currentUser.id, setDb);
+  const toggleComplete = (task) => doToggle(allCompletions, task, currentUser.id, setDb, syncSnapshotRef);
   const deleteTask = async (taskId) => {
     await supabase.from('schedule_tasks').delete().eq('id', taskId);
-    setDb(d => ({
-      ...d,
-      scheduleTasks: (d.scheduleTasks || []).filter(t => t.id !== taskId),
-      scheduleCompletions: (d.scheduleCompletions || []).filter(c => c.task_id !== taskId),
-    }));
+    setDb(d => {
+      const tasks = (d.scheduleTasks || []).filter(t => t.id !== taskId);
+      const comps = (d.scheduleCompletions || []).filter(c => c.task_id !== taskId);
+      if (syncSnapshotRef) {
+        syncSnapshotRef.current.scheduleTasks = tasks;
+        syncSnapshotRef.current.scheduleCompletions = comps;
+      }
+      return { ...d, scheduleTasks: tasks, scheduleCompletions: comps };
+    });
     showToast('Задача удалена');
   };
   const weeklyTasks = myTasks.filter(t => t.frequency === 'weekly' || t.frequency === 'daily' || t.frequency === 'once');
@@ -221,10 +233,11 @@ export function ScheduleScreen({ ctx }) {
           onClose={() => setCreateOpen(false)}
           onSave={async (task) => {
             await supabase.from('schedule_tasks').upsert([task], { onConflict: 'id' });
-            setDb(d => ({
-              ...d,
-              scheduleTasks: [...(d.scheduleTasks || []), task],
-            }));
+            setDb(d => {
+              const updated = [...(d.scheduleTasks || []), task];
+              if (syncSnapshotRef) syncSnapshotRef.current.scheduleTasks = updated;
+              return { ...d, scheduleTasks: updated };
+            });
             setCreateOpen(false);
             showToast('Задача добавлена');
           }}
@@ -253,10 +266,11 @@ export function ScheduleScreen({ ctx }) {
           onClose={() => setEditingTask(null)}
           onSave={async (updated) => {
             await supabase.from('schedule_tasks').upsert([updated], { onConflict: 'id' });
-            setDb(d => ({
-              ...d,
-              scheduleTasks: (d.scheduleTasks || []).map(t => t.id === updated.id ? updated : t),
-            }));
+            setDb(d => {
+              const arr = (d.scheduleTasks || []).map(t => t.id === updated.id ? updated : t);
+              if (syncSnapshotRef) syncSnapshotRef.current.scheduleTasks = arr;
+              return { ...d, scheduleTasks: arr };
+            });
             setEditingTask(null);
             showToast('Задача обновлена');
           }}
@@ -892,7 +906,7 @@ function TaskFormModal({ role, isAdmin, scheduleRoles, db, onClose, onSave, curr
 }
 
 export function ScheduleHomeBanner({ ctx }) {
-  const { db, setDb, currentUser, navigate, effectiveRole } = ctx;
+  const { db, setDb, currentUser, navigate, effectiveRole, syncSnapshotRef } = ctx;
   const role = effectiveRole || currentUser?.role;
   const [viewingTask, setViewingTask] = useState(null);
 
@@ -908,7 +922,7 @@ export function ScheduleHomeBanner({ ctx }) {
   if (myTodayTasks.length === 0 && !viewingTask) return null;
 
   const isCompleted = (task) => checkCompleted(allCompletions, task, currentUser.id);
-  const toggleComplete = (task) => doToggle(allCompletions, task, currentUser.id, setDb);
+  const toggleComplete = (task) => doToggle(allCompletions, task, currentUser.id, setDb, syncSnapshotRef);
   const pending = myTodayTasks.filter(t => !isCompleted(t));
   const completed = myTodayTasks.filter(t => isCompleted(t));
   const allDone = pending.length === 0;

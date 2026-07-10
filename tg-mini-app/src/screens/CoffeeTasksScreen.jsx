@@ -160,7 +160,7 @@ const CATEGORY_COLORS = {
 };
 
 function CoffeeTasksScreen({ ctx }) {
-  const { db, setDb, currentUser, goBack, showToast, notify } = ctx;
+  const { db, setDb, currentUser, goBack, showToast, notify, syncSnapshotRef } = ctx;
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [showAdd, setShowAdd] = useState(false);
   const [showTwi, setShowTwi] = useState(false);
@@ -214,14 +214,22 @@ function CoffeeTasksScreen({ ctx }) {
     );
     if (existing) {
       await supabase.from('schedule_completions').delete().eq('id', existing.id);
-      setDb(d => ({ ...d, scheduleCompletions: (d.scheduleCompletions || []).filter(c => c.id !== existing.id) }));
+      setDb(d => {
+        const updated = (d.scheduleCompletions || []).filter(c => c.id !== existing.id);
+        if (syncSnapshotRef) syncSnapshotRef.current.scheduleCompletions = updated;
+        return { ...d, scheduleCompletions: updated };
+      });
     } else {
       const row = {
         id: uid(), task_id: task.id, completion_key: key,
         completed_by: currentUser.id, completed_at: new Date().toISOString(),
       };
       await supabase.from('schedule_completions').upsert([row], { onConflict: 'id' });
-      setDb(d => ({ ...d, scheduleCompletions: [...(d.scheduleCompletions || []), row] }));
+      setDb(d => {
+        const updated = [...(d.scheduleCompletions || []), row];
+        if (syncSnapshotRef) syncSnapshotRef.current.scheduleCompletions = updated;
+        return { ...d, scheduleCompletions: updated };
+      });
     }
   };
 
@@ -322,11 +330,15 @@ function CoffeeTasksScreen({ ctx }) {
 
   const deleteScheduleTask = async (taskId) => {
     await supabase.from('schedule_tasks').delete().eq('id', taskId);
-    setDb(d => ({
-      ...d,
-      scheduleTasks: (d.scheduleTasks || []).filter(t => t.id !== taskId),
-      scheduleCompletions: (d.scheduleCompletions || []).filter(c => c.task_id !== taskId),
-    }));
+    setDb(d => {
+      const tasks = (d.scheduleTasks || []).filter(t => t.id !== taskId);
+      const comps = (d.scheduleCompletions || []).filter(c => c.task_id !== taskId);
+      if (syncSnapshotRef) {
+        syncSnapshotRef.current.scheduleTasks = tasks;
+        syncSnapshotRef.current.scheduleCompletions = comps;
+      }
+      return { ...d, scheduleTasks: tasks, scheduleCompletions: comps };
+    });
     showToast('Регулярная задача удалена');
   };
 
@@ -403,7 +415,11 @@ function CoffeeTasksScreen({ ctx }) {
       updated_at: new Date().toISOString(),
     };
     await supabase.from('schedule_tasks').upsert([task], { onConflict: 'id' });
-    setDb(d => ({ ...d, scheduleTasks: [...(d.scheduleTasks || []), task] }));
+    setDb(d => {
+      const updated = [...(d.scheduleTasks || []), task];
+      if (syncSnapshotRef) syncSnapshotRef.current.scheduleTasks = updated;
+      return { ...d, scheduleTasks: updated };
+    });
     setShowScheduleAdd(false);
     showToast('Регулярная задача создана');
   };

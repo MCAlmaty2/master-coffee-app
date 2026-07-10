@@ -404,7 +404,7 @@ const emptyClient = {
 };
 
 export function ClientEditScreen({ ctx, clientId }) {
-  const { db, navigate, currentUser, showToast, setDb } = ctx;
+  const { db, navigate, currentUser, showToast, setDb, syncSnapshotRef } = ctx;
   const existing = clientId ? (db.clients || []).find(c => c.id === clientId) : null;
 
   const [form, setForm]   = useState(existing ? { ...emptyClient, ...existing } : { ...emptyClient });
@@ -449,12 +449,13 @@ export function ClientEditScreen({ ctx, clientId }) {
       };
       const { error } = await supabase.from('clients').upsert([row], { onConflict: 'id' });
       if (error) throw error;
-      setDb(d => ({
-        ...d,
-        clients: existing
+      setDb(d => {
+        const updated = existing
           ? d.clients.map(c => c.id === row.id ? row : c)
-          : [row, ...d.clients],
-      }));
+          : [row, ...d.clients];
+        if (syncSnapshotRef) syncSnapshotRef.current.clients = updated;
+        return { ...d, clients: updated };
+      });
       showToast(existing ? 'Клиент обновлён' : 'Клиент добавлен', 'success');
       navigate(existing ? { name: 'client_detail', clientId: row.id } : { name: 'clients' });
     } catch (err) {

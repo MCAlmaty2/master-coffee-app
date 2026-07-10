@@ -221,7 +221,7 @@ function EditableCell({ value, onSave, readOnly, isRevenue, planMode }) {
    ГЛАВНЫЙ ЭКРАН
 ───────────────────────────────────────────────────────────── */
 export function SalesReportScreen({ ctx }) {
-  const { db, currentUser, goBack, setDb, showToast, can } = ctx;
+  const { db, currentUser, goBack, setDb, showToast, can, syncSnapshotRef } = ctx;
   const canEdit = can ? can('report_edit') : CAN_EDIT_ROLES.includes(currentUser?.role);
 
   const nowKey = (() => {
@@ -277,12 +277,13 @@ export function SalesReportScreen({ ctx }) {
         updated_at: new Date().toISOString(),
       }, { onConflict: 'month' });
       if (error) throw error;
-      setDb(d => ({
-        ...d,
-        salesReports: (d.salesReports || []).map(r =>
+      setDb(d => {
+        const updated = (d.salesReports || []).map(r =>
           r.month === selectedKey ? { ...r, facts: draftFacts, plans: draftPlans } : r
-        ),
-      }));
+        );
+        if (syncSnapshotRef) syncSnapshotRef.current.salesReports = updated;
+        return { ...d, salesReports: updated };
+      });
       setEditingPlan(false);
       showToast('Отчёт сохранён');
     } catch (e) {

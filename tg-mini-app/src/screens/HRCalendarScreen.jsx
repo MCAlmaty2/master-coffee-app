@@ -183,7 +183,7 @@ function EditBirthdayModal({ user, onSave, onClose }) {
    Main Screen
    ═══════════════════════════════════════════════════════════════ */
 export default function HRCalendarScreen({ ctx }) {
-  const { db, setDb, currentUser, setRoute, showToast } = ctx;
+  const { db, setDb, currentUser, setRoute, showToast, syncSnapshotRef } = ctx;
   const can = perm => ctx.can(perm);
 
   const [tab, setTab] = useState('vacations');
@@ -252,10 +252,11 @@ export default function HRCalendarScreen({ ctx }) {
   const saveBirthday = async (userId, date) => {
     const { error } = await supabase.from('users').update({ birth_date: date }).eq('id', userId);
     if (error) { showToast('Ошибка: ' + error.message); return; }
-    setDb(d => ({
-      ...d,
-      users: d.users.map(u => u.id === userId ? { ...u, birth_date: date } : u),
-    }));
+    setDb(d => {
+      const updated = d.users.map(u => u.id === userId ? { ...u, birth_date: date } : u);
+      if (syncSnapshotRef) syncSnapshotRef.current.users = updated;
+      return { ...d, users: updated };
+    });
     setEditBirthdayUser(null);
     showToast('Дата рождения сохранена');
   };

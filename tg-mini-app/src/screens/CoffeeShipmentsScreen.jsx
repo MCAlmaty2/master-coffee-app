@@ -132,7 +132,7 @@ function parsePaste(text) {
    ГЛАВНЫЙ ЭКРАН
    ═══════════════════════════════════════════════════════════ */
 export function CoffeeShipmentsScreen({ ctx }) {
-  const { db, currentUser, goBack, setDb, showToast, can } = ctx;
+  const { db, currentUser, goBack, setDb, showToast, can, syncSnapshotRef } = ctx;
 
   const canEdit = can ? can('coffee_shipments_edit') : false;
   const canPay  = can ? can('coffee_shipments_pay')  : false;
@@ -237,14 +237,22 @@ export function CoffeeShipmentsScreen({ ctx }) {
     }));
     const { error } = await supabase.from('coffee_shipments').insert(newRows);
     if (error) { showToast('Ошибка: ' + error.message); return; }
-    setDb(d => ({ ...d, coffeeShipments: [...(d.coffeeShipments || []), ...newRows] }));
+    setDb(d => {
+      const updated = [...(d.coffeeShipments || []), ...newRows];
+      if (syncSnapshotRef) syncSnapshotRef.current.coffeeShipments = updated;
+      return { ...d, coffeeShipments: updated };
+    });
     showToast(`Добавлено ${newRows.length} записей`);
   };
 
   const deleteRow = async (id) => {
     const { error } = await supabase.from('coffee_shipments').delete().eq('id', id);
     if (error) { showToast('Ошибка удаления'); return; }
-    setDb(d => ({ ...d, coffeeShipments: (d.coffeeShipments || []).filter(r => r.id !== id) }));
+    setDb(d => {
+      const updated = (d.coffeeShipments || []).filter(r => r.id !== id);
+      if (syncSnapshotRef) syncSnapshotRef.current.coffeeShipments = updated;
+      return { ...d, coffeeShipments: updated };
+    });
     showToast('Удалено');
   };
 
@@ -256,12 +264,13 @@ export function CoffeeShipmentsScreen({ ctx }) {
       .update({ payment_amount: val, updated_at: now })
       .eq('id', id);
     if (error) { showToast('Ошибка сохранения'); return; }
-    setDb(d => ({
-      ...d,
-      coffeeShipments: (d.coffeeShipments || []).map(r =>
+    setDb(d => {
+      const updated = (d.coffeeShipments || []).map(r =>
         r.id === id ? { ...r, payment_amount: val, updated_at: now } : r
-      ),
-    }));
+      );
+      if (syncSnapshotRef) syncSnapshotRef.current.coffeeShipments = updated;
+      return { ...d, coffeeShipments: updated };
+    });
     setEditingId(null);
     setEditPayment('');
     showToast('Оплата сохранена');
@@ -296,12 +305,13 @@ export function CoffeeShipmentsScreen({ ctx }) {
     };
     const { error } = await supabase.from('coffee_shipments').update(patch).eq('id', id);
     if (error) { showToast('Ошибка сохранения'); return; }
-    setDb(d => ({
-      ...d,
-      coffeeShipments: (d.coffeeShipments || []).map(r =>
+    setDb(d => {
+      const updated = (d.coffeeShipments || []).map(r =>
         r.id === id ? { ...r, ...patch } : r
-      ),
-    }));
+      );
+      if (syncSnapshotRef) syncSnapshotRef.current.coffeeShipments = updated;
+      return { ...d, coffeeShipments: updated };
+    });
     setEditRowId(null);
     setEditRowData({});
     showToast('Запись обновлена');

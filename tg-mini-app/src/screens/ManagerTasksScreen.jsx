@@ -34,7 +34,7 @@ const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('ru-RU', { day: '2
 const userName = (db, id) => { const u = db.users?.find(x => x.id === id); return u ? `${u.first_name} ${u.last_name}` : '—'; };
 
 export function ManagerTasksScreen({ ctx }) {
-  const { db, currentUser, goBack, setDb, showToast, notify } = ctx;
+  const { db, currentUser, goBack, setDb, showToast, notify, syncSnapshotRef } = ctx;
   const isManager = ACCESS_ROLES.includes(currentUser?.role);
   const canCreate = !NO_CREATE_ROLES.includes(currentUser?.role);
 
@@ -86,7 +86,11 @@ export function ManagerTasksScreen({ ctx }) {
     };
     const { error } = await supabase.from('manager_tasks').insert(row);
     if (error) { showToast('Ошибка: ' + error.message); return; }
-    setDb(d => ({ ...d, managerTasks: [row, ...(d.managerTasks || [])] }));
+    setDb(d => {
+      const updated = [row, ...(d.managerTasks || [])];
+      if (syncSnapshotRef) syncSnapshotRef.current.managerTasks = updated;
+      return { ...d, managerTasks: updated };
+    });
     if (row.assignee_id && row.assignee_id !== currentUser.id && notify) {
       const n = notify({ recipient_id: row.assignee_id, title: '📌 Новый вопрос/поручение',
         body: `${row.number}: ${row.title}`, link_kind: 'manager_task', link_id: row.id });
@@ -105,7 +109,11 @@ export function ManagerTasksScreen({ ctx }) {
     const { error } = await supabase.from('manager_tasks').update(patch).eq('id', task.id);
     if (error) { showToast('Ошибка: ' + error.message); return; }
     const updated = { ...task, ...patch };
-    setDb(d => ({ ...d, managerTasks: (d.managerTasks || []).map(t => t.id === task.id ? updated : t) }));
+    setDb(d => {
+      const arr = (d.managerTasks || []).map(t => t.id === task.id ? updated : t);
+      if (syncSnapshotRef) syncSnapshotRef.current.managerTasks = arr;
+      return { ...d, managerTasks: arr };
+    });
     setDetail(updated);
     // уведомить постановщика при решении
     if (status === 'done' && task.created_by && task.created_by !== currentUser.id && notify) {

@@ -2002,7 +2002,11 @@ function App() {
     try {
       const { error } = await supabase.from(cfg.table).delete().eq('id', id);
       if (error) throw error;
-      setDb(d => ({ ...d, [cfg.stateKey]: d[cfg.stateKey].filter(x => x.id !== id) }));
+      setDb(d => {
+        const updated = d[cfg.stateKey].filter(x => x.id !== id);
+        if (syncSnapshotRef) syncSnapshotRef.current[cfg.stateKey] = updated;
+        return { ...d, [cfg.stateKey]: updated };
+      });
       return { ok: true };
     } catch (e) {
       reportError({ kind: 'manual', source: cfg.table, message: `Ошибка удаления: ${e.message}` });
@@ -2024,7 +2028,11 @@ function App() {
       if (ids.length === 0) return { ok: true, deleted: 0 };
       const { error } = await supabase.from(table).delete().in('id', ids);
       if (error) throw error;
-      setDb(d => ({ ...d, [stateKey]: d[stateKey].filter(x => !ids.includes(x.id)) }));
+      setDb(d => {
+        const updated = d[stateKey].filter(x => !ids.includes(x.id));
+        if (syncSnapshotRef) syncSnapshotRef.current[stateKey] = updated;
+        return { ...d, [stateKey]: updated };
+      });
       return { ok: true, deleted: ids.length };
     } catch (e) {
       reportError({ kind: 'manual', source: table, message: `Ошибка массовой очистки: ${e.message}` });
@@ -3658,10 +3666,16 @@ function App() {
         order_1c: grind.order_1c ? `\n1С: ${grind.order_1c}` : '',
         manager: getUserName(d, currentUser.id),
       });
+      const updGrinds = [grind, ...(d.grindRequests || [])];
+      const updNotifs = [...newNotifs.filter(Boolean), ...d.notifications];
+      if (syncSnapshotRef) {
+        syncSnapshotRef.current.grindRequests = updGrinds;
+        syncSnapshotRef.current.notifications = updNotifs;
+      }
       return {
         ...d,
-        grindRequests: [grind, ...(d.grindRequests || [])],
-        notifications: [...newNotifs.filter(Boolean), ...d.notifications],
+        grindRequests: updGrinds,
+        notifications: updNotifs,
         telegramLog: [tgEntry, ...d.telegramLog].slice(0, 200),
       };
     });
@@ -3909,10 +3923,11 @@ function App() {
   /* ═══════════ Уведомления ═══════════ */
 
   const markNotificationRead = async (notificationId) => {
-    setDb(d => ({
-      ...d,
-      notifications: d.notifications.map(n => n.id === notificationId ? { ...n, read: true } : n),
-    }));
+    setDb(d => {
+      const updated = d.notifications.map(n => n.id === notificationId ? { ...n, read: true } : n);
+      if (syncSnapshotRef) syncSnapshotRef.current.notifications = updated;
+      return { ...d, notifications: updated };
+    });
     try {
       await supabase.from('notifications').update({ read: true }).eq('id', notificationId);
     } catch (e) {
@@ -3926,10 +3941,11 @@ function App() {
       .filter(n => n.recipient_id === currentUser.id && !n.read)
       .map(n => n.id);
     if (myUnreadIds.length === 0) return;
-    setDb(d => ({
-      ...d,
-      notifications: d.notifications.map(n => n.recipient_id === currentUser.id ? { ...n, read: true } : n),
-    }));
+    setDb(d => {
+      const updated = d.notifications.map(n => n.recipient_id === currentUser.id ? { ...n, read: true } : n);
+      if (syncSnapshotRef) syncSnapshotRef.current.notifications = updated;
+      return { ...d, notifications: updated };
+    });
     try {
       await supabase.from('notifications').update({ read: true }).in('id', myUnreadIds);
     } catch (e) {
@@ -3944,10 +3960,11 @@ function App() {
       .filter(n => n.recipient_id === currentUser.id && n.read)
       .map(n => n.id);
     if (myReadIds.length === 0) return;
-    setDb(d => ({
-      ...d,
-      notifications: d.notifications.filter(n => !(n.recipient_id === currentUser.id && n.read)),
-    }));
+    setDb(d => {
+      const updated = d.notifications.filter(n => !(n.recipient_id === currentUser.id && n.read));
+      if (syncSnapshotRef) syncSnapshotRef.current.notifications = updated;
+      return { ...d, notifications: updated };
+    });
     try {
       await supabase.from('notifications').delete().in('id', myReadIds);
     } catch (e) {
@@ -15674,7 +15691,11 @@ function AdminReleaseNotesScreen({ ctx }) {
     };
     const { error } = await supabase.from('release_notes').insert(row);
     if (error) return showToast('Ошибка: ' + error.message);
-    setDb(d => ({ ...d, releaseNotes: [row, ...(d.releaseNotes || [])] }));
+    setDb(d => {
+      const updated = [row, ...(d.releaseNotes || [])];
+      if (syncSnapshotRef) syncSnapshotRef.current.releaseNotes = updated;
+      return { ...d, releaseNotes: updated };
+    });
     setTitle(''); setBody('');
     showToast('Добавлено в «Что нового»');
   };
@@ -15682,7 +15703,11 @@ function AdminReleaseNotesScreen({ ctx }) {
   const deleteNote = async (id) => {
     const { error } = await supabase.from('release_notes').delete().eq('id', id);
     if (error) return showToast('Ошибка: ' + error.message);
-    setDb(d => ({ ...d, releaseNotes: (d.releaseNotes || []).filter(n => n.id !== id) }));
+    setDb(d => {
+      const updated = (d.releaseNotes || []).filter(n => n.id !== id);
+      if (syncSnapshotRef) syncSnapshotRef.current.releaseNotes = updated;
+      return { ...d, releaseNotes: updated };
+    });
   };
 
   // Отправить запись сейчас всем сотрудникам в личку

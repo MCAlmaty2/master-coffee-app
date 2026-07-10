@@ -67,7 +67,7 @@ function Cell({ value, onSave, readOnly, align = 'right' }) {
 
 /* ── Экран ─────────────────────────────────────────────────── */
 export function DailyRevenueScreen({ ctx }) {
-  const { db, currentUser, goBack, setDb, showToast, can } = ctx;
+  const { db, currentUser, goBack, setDb, showToast, can, syncSnapshotRef } = ctx;
   const canEdit = can ? can('report_edit') : ['admin', 'senior_manager', 'director'].includes(currentUser?.role);
 
   const rows = db.dailyRevenue || [];
@@ -114,8 +114,9 @@ export function DailyRevenueScreen({ ctx }) {
     const { error } = await supabase.from('daily_revenue').upsert(row, { onConflict: 'date' });
     if (error) { showToast('Ошибка: ' + error.message); return; }
     setDb(d => {
-      const list = (d.dailyRevenue || []).filter(r => r.date !== dateStr);
-      return { ...d, dailyRevenue: [...list, row] };
+      const updated = [...(d.dailyRevenue || []).filter(r => r.date !== dateStr), row];
+      if (syncSnapshotRef) syncSnapshotRef.current.dailyRevenue = updated;
+      return { ...d, dailyRevenue: updated };
     });
   }, [byDate, canEdit, currentUser, setDb, showToast]);
 
