@@ -1317,10 +1317,10 @@ function App() {
       const prevMap = new Map(prevArr.map(x => [x[cfg.pk], x]));
       const currMap = new Map(currArr.map(x => [x[cfg.pk], x]));
 
-      // upsert только изменённые (не новые — они уже в Supabase через прямой insert)
+      // upsert новые и изменённые
       for (const [id, row] of currMap) {
         const prevRow = prevMap.get(id);
-        if (prevRow && JSON.stringify(prevRow) !== JSON.stringify(row)) {
+        if (!prevRow || JSON.stringify(prevRow) !== JSON.stringify(row)) {
           // Защита от FK: не пушим заказ доставки, чей реестр отсутствует локально
           // (реестр был удалён — заказ остался «сиротой» в кэше). Иначе ошибка FK.
           if (stateKey === 'deliveryOrders' && row.registry_id
