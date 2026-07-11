@@ -25,9 +25,9 @@ export const SYNC_TABLES = {
   tasks:              { table: 'tasks',             pk: 'id', base: 'tk' },
   writeOffs:          { table: 'write_offs',        pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M }, base: 'tk' },
   contractRequests:   { table: 'contract_requests', pk: 'id', base: 'tk' },
-  notifications:      { table: 'notifications',     pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M } },
+  notifications:      { table: 'notifications',     pk: 'id', dateFilter: { column: 'at', cutoff: CUTOFF_3M } },
   roleDefinitions:    { table: 'role_definitions',  pk: 'key' },
-  telegramLog:        { table: 'telegram_log',      pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M } },
+  telegramLog:        { table: 'telegram_log',      pk: 'id', dateFilter: { column: 'at', cutoff: CUTOFF_3M } },
   deliveryRegistries: { table: 'delivery_registries', pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M }, base: 'tk' },
   deliveryOrders:     { table: 'delivery_orders',     pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M }, base: 'tk' },
   clients:            { table: 'clients',             pk: 'id', base: 'tk' },
@@ -76,13 +76,22 @@ export function getTablesForRole(role) {
 export const fetchAllOfTable = async (stateKey) => {
   const cfg = SYNC_TABLES[stateKey];
   if (!cfg) throw new Error(`Unknown table: ${stateKey}`);
-  let query = supabase.from(cfg.table).select('*');
-  if (cfg.dateFilter) {
-    query = query.gte(cfg.dateFilter.column, cfg.dateFilter.cutoff());
+  const PAGE = 1000;
+  let all = [];
+  let from = 0;
+  while (true) {
+    let query = supabase.from(cfg.table).select('*').range(from, from + PAGE - 1);
+    if (cfg.dateFilter) {
+      query = query.gte(cfg.dateFilter.column, cfg.dateFilter.cutoff());
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = data || [];
+    all = all.concat(rows);
+    if (rows.length < PAGE) break;
+    from += PAGE;
   }
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  return all;
 };
 
 /**
