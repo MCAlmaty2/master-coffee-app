@@ -1,0 +1,18 @@
+{
+  "name": "Master Coffee CRM",
+  "short_name": "MC CRM",
+  "description": "CRM-система Master Coffee Roasters",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#297b8a",
+  "icons": [
+    {
+      "src": "/logo-symbol.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
