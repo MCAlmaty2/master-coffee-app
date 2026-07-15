@@ -97,7 +97,7 @@ export function ClientsScreen({ ctx }) {
       const qDigits = q.replace(/\D/g, '');
       list = list.filter(c =>
         (c.name    || '').toLowerCase().includes(q) ||
-        (c.phone   || '').replace(/\D/g, '').includes(qDigits) ||
+        (qDigits && (c.phone || '').replace(/\D/g, '').includes(qDigits)) ||
         (c.bin     || '').includes(q) ||
         (c.address || '').toLowerCase().includes(q) ||
         (c.addresses || []).some(a => (a.address || '').toLowerCase().includes(q)) ||
