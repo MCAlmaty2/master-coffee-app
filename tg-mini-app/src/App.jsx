@@ -1339,6 +1339,15 @@ function App() {
               console.warn(`[sync] ${stateKey} ${id}: ${msg} (запись оставлена в локальном state)`);
               return;
             }
+            // Сетевая или другая ошибка — откатываем snapshot для этой записи,
+            // чтобы sync diff повторил upsert при следующем рендере
+            const snap = syncSnapshotRef.current[stateKey];
+            if (snap) {
+              const prev = prevMap.get(id);
+              syncSnapshotRef.current[stateKey] = prev
+                ? snap.map(r => r[cfg.pk] === id ? prev : r)
+                : snap.filter(r => r[cfg.pk] !== id);
+            }
             console.warn(`[sync] ${stateKey} upsert ${id}:`, msg);
             reportError({
               kind: 'sync',
