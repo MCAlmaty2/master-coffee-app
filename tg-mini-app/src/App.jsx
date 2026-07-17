@@ -3140,8 +3140,8 @@ function App() {
   const createGift = async (data) => {
     if (!hasPermission(db, currentUser, 'gift_create')) return { error: 'Нет прав на создание заявки на подарок' };
     if (!data.client_name?.trim()) return { error: 'Укажите клиента' };
-    if (!data.product_name?.trim()) return { error: 'Укажите товар' };
-    if (!Number(data.quantity) || Number(data.quantity) <= 0) return { error: 'Кол-во должно быть больше 0' };
+    const items = (data.items || []).filter(i => i && i.name && String(i.name).trim() && Number(i.quantity) > 0);
+    if (items.length === 0) return { error: 'Добавьте хотя бы одну позицию' };
     if (data.delivery_type === 'delivery' && !data.address?.trim()) return { error: 'Укажите адрес доставки' };
 
     const year = new Date().getFullYear();
@@ -3157,12 +3157,21 @@ function App() {
     } catch { /* fallback to localMax */ }
     const number = `GF-${year}-${String(Math.max(localMax, dbMax) + 1).padStart(3, '0')}`;
 
+    const giftItems = items.map(i => ({
+      id: uid(),
+      product_id: i.product_id || null,
+      name: String(i.name).trim(),
+      unit: i.unit || 'шт',
+      quantity: Number(i.quantity),
+    }));
+    const firstItem = giftItems[0];
     const gift = {
       id: uid(), number, status: 'pending',
       created_by: currentUser.id, created_at: new Date().toISOString(),
       client_name: data.client_name.trim(), client_phone: data.client_phone || null,
-      product_id: data.product_id || null, product_name: data.product_name.trim(),
-      quantity: Number(data.quantity), unit: data.unit || 'шт',
+      product_id: firstItem.product_id, product_name: firstItem.name,
+      quantity: giftItems.reduce((s, i) => s + i.quantity, 0), unit: firstItem.unit,
+      items: giftItems,
       delivery_type: data.delivery_type || 'pickup', address: data.address || null,
       comment: data.comment || null,
       approved_by: null, approved_at: null, approval_comment: null,
@@ -3170,6 +3179,9 @@ function App() {
       pickup_code: null, delivered_by: null, delivered_at: null,
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
     };
+    const itemsSummary = giftItems.length === 1
+      ? `${firstItem.name} × ${firstItem.quantity}`
+      : `${giftItems.length} поз.`;
     setDb(d => {
       const directors = d.users.filter(u => u.active && u.role === 'director' && u.id !== currentUser.id);
       const admins = d.users.filter(u => u.active && u.role === 'admin' && u.id !== currentUser.id);
@@ -3177,7 +3189,7 @@ function App() {
       const newNotifs = notifTargets.map(a => makeNotif(d, {
         recipient_id: a.id,
         title: '🎁 Заявка на подарок',
-        body: `${number}: ${gift.product_name} × ${gift.quantity} для ${gift.client_name}`,
+        body: `${number}: ${itemsSummary} для ${gift.client_name}`,
         link_kind: 'gift', link_id: gift.id,
       }));
       return { ...d, gifts: [gift, ...(d.gifts || [])], notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
@@ -3199,7 +3211,7 @@ function App() {
       const processors = d.users.filter(u => u.active && (u.role === 'admin' || u.role === 'senior_manager') && u.id !== currentUser.id);
       const newNotifs = [
         makeNotif(d, { recipient_id: g.created_by, title: 'Подарок одобрен', body: `${g.number}: одобрен`, link_kind: 'gift', link_id: g.id }),
-        ...processors.map(p => makeNotif(d, { recipient_id: p.id, title: '🎁 Подарок к списанию', body: `${g.number}: ${g.product_name} для ${g.client_name}`, link_kind: 'gift', link_id: g.id })),
+        ...processors.map(p => makeNotif(d, { recipient_id: p.id, title: '🎁 Подарок к списанию', body: `${g.number}: ${g.items ? g.items.length + ' поз.' : g.product_name} для ${g.client_name}`, link_kind: 'gift', link_id: g.id })),
       ];
       return { ...d, gifts: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });

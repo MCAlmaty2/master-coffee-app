@@ -204,7 +204,11 @@ function GiftCard({ gift, ctx }) {
       </div>
       <div className="font-semibold mb-1 truncate" style={{ color: 'var(--mc-text)' }}>
         <Gift size={14} className="inline mr-1" style={{ color: '#EC4899' }} />
-        {gift.product_name} × {gift.quantity} {gift.unit}
+        {gift.items && gift.items.length > 0
+          ? (gift.items.length === 1
+            ? `${gift.items[0].name} × ${gift.items[0].quantity} ${gift.items[0].unit}`
+            : `${gift.items.length} поз. — ${gift.items.map(i => i.name).join(', ')}`)
+          : `${gift.product_name} × ${gift.quantity} ${gift.unit}`}
       </div>
       <div className="text-sm mb-1" style={{ color: 'var(--mc-muted)' }}>
         <User size={12} className="inline mr-1" /> Клиент: {gift.client_name}
@@ -226,26 +230,30 @@ function GiftCard({ gift, ctx }) {
    Создание заявки на подарок
    ══════════════════════════════════════════════════════════════════════ */
 function CreateGiftScreen({ ctx }) {
-  const { db, goBack, showToast, navigate } = ctx;
+  const { db, goBack, showToast } = ctx;
+  const tmpId = () => Math.random().toString(36).slice(2);
 
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
-  const [productId, setProductId] = useState('');
-  const [productName, setProductName] = useState('');
-  const [productUnit, setProductUnit] = useState('шт');
-  const [quantity, setQuantity] = useState('1');
+  const [items, setItems] = useState([{ tempId: tmpId(), product_id: '', name: '', unit: 'шт', quantity: '1' }]);
   const [deliveryType, setDeliveryType] = useState('pickup');
   const [address, setAddress] = useState('');
   const [comment, setComment] = useState('');
   const [errors, setErrors] = useState({});
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(null);
   const [clientPickerOpen, setClientPickerOpen] = useState(false);
+
+  const updateItem = (idx, patch) => setItems(arr => arr.map((it, i) => i === idx ? { ...it, ...patch } : it));
+  const removeItem = (idx) => setItems(arr => arr.length === 1 ? arr : arr.filter((_, i) => i !== idx));
+  const addItem = () => setItems(arr => [...arr, { tempId: tmpId(), product_id: '', name: '', unit: 'шт', quantity: '' }]);
 
   const handleSubmit = async () => {
     const e = {};
     if (!clientName.trim()) e.client = 'Укажите клиента';
-    if (!productName.trim()) e.product = 'Выберите товар';
-    if (!Number(quantity) || Number(quantity) <= 0) e.qty = 'Больше 0';
+    items.forEach((it, i) => {
+      if (!it.name || it.name.trim().length < 2) e[`name_${i}`] = 'Укажите наименование';
+      if (!Number(it.quantity) || Number(it.quantity) <= 0) e[`qty_${i}`] = 'Больше 0';
+    });
     if (deliveryType === 'delivery' && !address.trim()) e.address = 'Укажите адрес доставки';
     setErrors(e);
     if (Object.keys(e).length > 0) return;
@@ -253,10 +261,7 @@ function CreateGiftScreen({ ctx }) {
     const r = await ctx.createGift({
       client_name: clientName.trim(),
       client_phone: clientPhone.trim() || null,
-      product_id: productId || null,
-      product_name: productName.trim(),
-      unit: productUnit,
-      quantity: Number(quantity),
+      items,
       delivery_type: deliveryType,
       address: deliveryType === 'delivery' ? address.trim() : null,
       comment: comment.trim() || null,
@@ -267,10 +272,9 @@ function CreateGiftScreen({ ctx }) {
   };
 
   const pickProduct = (p) => {
-    setProductId(p.id);
-    setProductName(p.name);
-    setProductUnit(p.unit);
-    setPickerOpen(false);
+    if (pickerOpen === null) return;
+    updateItem(pickerOpen, { product_id: p.id, name: p.name, unit: p.unit });
+    setPickerOpen(null);
   };
 
   const pickClient = (c) => {
@@ -281,7 +285,7 @@ function CreateGiftScreen({ ctx }) {
 
   return (
     <div>
-      <PageHeader title="Заявка на подарок" subtitle="Укажите клиента, товар и способ получения" onBack={goBack} />
+      <PageHeader title="Заявка на подарок" subtitle="Укажите клиента, позиции и способ получения" onBack={goBack} />
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
@@ -316,42 +320,62 @@ function CreateGiftScreen({ ctx }) {
             </div>
           </Card>
 
-          {/* Товар */}
-          <Card title="Товар">
+          {/* Позиции */}
+          <Card title="Позиции подарка">
             <div className="space-y-3">
-              <div>
-                <button onClick={() => setPickerOpen(true)}
-                  className="w-full px-3 py-2 rounded-lg flex items-center justify-between text-left text-sm bg-white"
-                  style={{ border: `1px solid ${errors.product && !productName ? '#EB5757' : 'var(--mc-border)'}` }}>
-                  {productName ? (
-                    <span style={{ color: 'var(--mc-text)' }}>{productName} <span style={{ color: 'var(--mc-muted)' }}>({productUnit})</span></span>
-                  ) : (
-                    <span style={{ color: '#A8A8AE' }}>Выбрать из базы…</span>
-                  )}
-                  <ChevronRight size={16} style={{ color: '#A8A8AE' }} />
-                </button>
-                <div className="text-[11px] mt-1" style={{ color: 'var(--mc-muted)' }}>или впишите вручную:</div>
-                <input value={productName} onChange={e => { setProductName(e.target.value); setProductId(''); }}
-                  placeholder="Название товара"
-                  className="w-full px-3 py-2 mt-1 rounded-lg outline-none text-sm"
-                  style={{ border: `1px solid ${errors.product && !productName ? '#EB5757' : 'var(--mc-border)'}` }} />
-                {errors.product && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.product}</div>}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Кол-во *</label>
-                  <input value={quantity} onChange={e => setQuantity(e.target.value.replace(/[^0-9.]/g, ''))}
-                    placeholder="1" className="w-full px-3 py-2 rounded-lg outline-none text-sm bg-white"
-                    style={{ border: `1px solid ${errors.qty ? '#EB5757' : 'var(--mc-border)'}` }} />
-                  {errors.qty && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.qty}</div>}
+              {items.map((it, i) => (
+                <div key={it.tempId} className="rounded-lg p-3" style={{ background: 'var(--mc-active-item)', border: '1px solid var(--mc-border)' }}>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="text-xs font-semibold" style={{ color: 'var(--mc-muted)' }}>Позиция {i + 1}</div>
+                    {items.length > 1 && (
+                      <button onClick={() => removeItem(i)} className="p-1" style={{ color: '#EB5757' }}>
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <button onClick={() => setPickerOpen(i)}
+                        className="w-full px-3 py-2 rounded-lg flex items-center justify-between text-left text-sm bg-white"
+                        style={{ border: `1px solid ${errors[`name_${i}`] && !it.name ? '#EB5757' : 'var(--mc-border)'}` }}>
+                        {it.name ? (
+                          <span className="truncate" style={{ color: 'var(--mc-text)' }}>
+                            {it.name} <span style={{ color: 'var(--mc-muted)' }}>({it.unit})</span>
+                          </span>
+                        ) : (
+                          <span style={{ color: '#A8A8AE' }}>Выбрать из базы…</span>
+                        )}
+                        <ChevronRight size={16} style={{ color: '#A8A8AE', flexShrink: 0 }} />
+                      </button>
+                      <div className="text-[11px] mt-1" style={{ color: 'var(--mc-muted)' }}>или впишите вручную:</div>
+                      <input value={it.name || ''} onChange={e => updateItem(i, { name: e.target.value, product_id: '' })}
+                        placeholder="Название товара"
+                        className="w-full px-3 py-2 mt-1 rounded-lg outline-none text-sm"
+                        style={{ border: `1px solid ${errors[`name_${i}`] && !it.name ? '#EB5757' : 'var(--mc-border)'}` }} />
+                      {errors[`name_${i}`] && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors[`name_${i}`]}</div>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Кол-во *</label>
+                        <input value={it.quantity || ''} onChange={e => updateItem(i, { quantity: e.target.value.replace(/[^0-9.]/g, '') })}
+                          placeholder="1" className="w-full px-3 py-2 rounded-lg outline-none text-sm bg-white"
+                          style={{ border: `1px solid ${errors[`qty_${i}`] ? '#EB5757' : 'var(--mc-border)'}` }} />
+                        {errors[`qty_${i}`] && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors[`qty_${i}`]}</div>}
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Ед.</label>
+                        <input value={it.unit || ''} onChange={e => updateItem(i, { unit: e.target.value })}
+                          placeholder="шт" className="w-full px-3 py-2 rounded-lg outline-none text-sm bg-white"
+                          style={{ border: '1px solid var(--mc-border)' }} />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Ед.</label>
-                  <input value={productUnit} onChange={e => setProductUnit(e.target.value)}
-                    placeholder="шт" className="w-full px-3 py-2 rounded-lg outline-none text-sm bg-white"
-                    style={{ border: '1px solid var(--mc-border)' }} />
-                </div>
-              </div>
+              ))}
+              <button onClick={addItem} className="w-full py-2 rounded-lg font-semibold text-sm flex items-center justify-center gap-1"
+                style={{ background: '#fce7f3', color: '#EC4899' }}>
+                <Plus size={14} /> Ещё позиция
+              </button>
             </div>
           </Card>
 
@@ -411,7 +435,7 @@ function CreateGiftScreen({ ctx }) {
         </div>
       </div>
 
-      {pickerOpen && <ProductPickerModal db={db} onPick={pickProduct} onClose={() => setPickerOpen(false)} />}
+      {pickerOpen !== null && <ProductPickerModal db={db} onPick={pickProduct} onClose={() => setPickerOpen(null)} />}
       {clientPickerOpen && <ClientPickerModal db={db} onPick={pickClient} onClose={() => setClientPickerOpen(false)} />}
     </div>
   );
@@ -504,7 +528,28 @@ function GiftDetailScreen({ ctx, giftId }) {
           {/* Информация */}
           <Card title="Информация о подарке">
             <div className="space-y-3">
-              <InfoRow label="Товар" value={`${gift.product_name} × ${gift.quantity} ${gift.unit}`} />
+              {gift.items && gift.items.length > 0 ? (
+                <div>
+                  <div className="text-sm font-medium mb-2" style={{ color: 'var(--mc-muted)' }}>
+                    Позиции ({gift.items.length})
+                  </div>
+                  <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--mc-border)' }}>
+                    {gift.items.map((it, i) => (
+                      <div key={it.id || i} className="flex items-center justify-between px-3 py-2"
+                        style={{ borderBottom: i < gift.items.length - 1 ? '1px solid var(--mc-border)' : 'none', background: 'var(--mc-active-item)' }}>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate" style={{ color: 'var(--mc-text)' }}>{it.name}</div>
+                        </div>
+                        <div className="text-sm font-semibold ml-3 whitespace-nowrap" style={{ color: '#EC4899' }}>
+                          {it.quantity} {it.unit}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <InfoRow label="Товар" value={`${gift.product_name} × ${gift.quantity} ${gift.unit}`} />
+              )}
               <InfoRow label="Клиент" value={gift.client_name} />
               {gift.client_phone && <InfoRow label="Телефон" value={gift.client_phone} />}
               <InfoRow label="Получение" value={DELIVERY_LABELS[gift.delivery_type]} />
@@ -552,7 +597,9 @@ function GiftDetailScreen({ ctx, giftId }) {
         <ActionModal title="Одобрить подарок" onClose={() => setActionOpen(null)}
           onConfirm={() => doAction('approve')} confirmLabel="Одобрить" confirmColor="#22C55E">
           <p className="text-sm mb-3" style={{ color: 'var(--mc-muted)' }}>
-            {gift.product_name} × {gift.quantity} для {gift.client_name}
+            {gift.items && gift.items.length > 0
+              ? `${gift.items.length} поз. для ${gift.client_name}`
+              : `${gift.product_name} × ${gift.quantity} для ${gift.client_name}`}
           </p>
           <textarea value={comment} onChange={e => setComment(e.target.value)} rows={2}
             placeholder="Комментарий (необязательно)"
@@ -573,7 +620,9 @@ function GiftDetailScreen({ ctx, giftId }) {
         <ActionModal title="Списать подарок" onClose={() => setActionOpen(null)}
           onConfirm={() => doAction('process')} confirmLabel="Списать" confirmColor="#8B5CF6">
           <p className="text-sm mb-3" style={{ color: 'var(--mc-muted)' }}>
-            {gift.product_name} × {gift.quantity} для {gift.client_name}
+            {gift.items && gift.items.length > 0
+              ? `${gift.items.length} поз. для ${gift.client_name}`
+              : `${gift.product_name} × ${gift.quantity} для ${gift.client_name}`}
           </p>
           <div className="mb-1">
             <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>
