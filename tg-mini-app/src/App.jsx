@@ -3183,6 +3183,8 @@ function App() {
       ? `${firstItem.name} × ${firstItem.quantity}`
       : `${giftItems.length} поз.`;
     setDb(d => {
+      const appUrl = d.telegramSettings?.app_url || 'https://master-coffee-app.vercel.app';
+      const btnUrl = `${appUrl}?startapp=gift_${gift.id}`;
       const directors = d.users.filter(u => u.active && u.role === 'director' && u.id !== currentUser.id);
       const admins = d.users.filter(u => u.active && u.role === 'admin' && u.id !== currentUser.id);
       const notifTargets = [...directors, ...admins];
@@ -3191,6 +3193,7 @@ function App() {
         title: '🎁 Заявка на подарок',
         body: `${number}: ${itemsSummary} для ${gift.client_name}`,
         link_kind: 'gift', link_id: gift.id,
+        button_url: btnUrl, button_text: '📋 Открыть заявку',
       }));
       return { ...d, gifts: [gift, ...(d.gifts || [])], notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
@@ -3203,6 +3206,8 @@ function App() {
     if (!g) return { error: 'Заявка не найдена' };
     if (g.status !== 'pending') return { error: 'Заявка уже обработана' };
     setDb(d => {
+      const appUrl = d.telegramSettings?.app_url || 'https://master-coffee-app.vercel.app';
+      const btnUrl = `${appUrl}?startapp=gift_${giftId}`;
       const updatedList = (d.gifts || []).map(x => x.id !== giftId ? x : {
         ...x, status: 'approved', approved_by: currentUser.id,
         approved_at: new Date().toISOString(), approval_comment: (comment || '').trim() || null,
@@ -3210,8 +3215,8 @@ function App() {
       });
       const processors = d.users.filter(u => u.active && (u.role === 'admin' || u.role === 'senior_manager') && u.id !== currentUser.id);
       const newNotifs = [
-        makeNotif(d, { recipient_id: g.created_by, title: 'Подарок одобрен', body: `${g.number}: одобрен`, link_kind: 'gift', link_id: g.id }),
-        ...processors.map(p => makeNotif(d, { recipient_id: p.id, title: '🎁 Подарок к списанию', body: `${g.number}: ${g.items ? g.items.length + ' поз.' : g.product_name} для ${g.client_name}`, link_kind: 'gift', link_id: g.id })),
+        makeNotif(d, { recipient_id: g.created_by, title: 'Подарок одобрен', body: `${g.number}: одобрен`, link_kind: 'gift', link_id: g.id, button_url: btnUrl, button_text: '📋 Открыть заявку' }),
+        ...processors.map(p => makeNotif(d, { recipient_id: p.id, title: '🎁 Подарок к списанию', body: `${g.number}: ${g.items ? g.items.length + ' поз.' : g.product_name} для ${g.client_name}`, link_kind: 'gift', link_id: g.id, button_url: btnUrl, button_text: '📋 Открыть заявку' })),
       ];
       return { ...d, gifts: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
@@ -3225,12 +3230,14 @@ function App() {
     if (!g) return { error: 'Заявка не найдена' };
     if (g.status !== 'pending') return { error: 'Заявка уже обработана' };
     setDb(d => {
+      const appUrl = d.telegramSettings?.app_url || 'https://master-coffee-app.vercel.app';
+      const btnUrl = `${appUrl}?startapp=gift_${giftId}`;
       const updatedList = (d.gifts || []).map(x => x.id !== giftId ? x : {
         ...x, status: 'rejected', approved_by: currentUser.id,
         approved_at: new Date().toISOString(), approval_comment: comment.trim(),
         log: [...x.log, { event: 'status', from: 'pending', to: 'rejected', actor: currentUser.id, at: new Date().toISOString(), meta: { comment: comment.trim() } }],
       });
-      const newNotifs = [makeNotif(d, { recipient_id: g.created_by, title: 'Подарок отклонён', body: `${g.number}: ${comment.trim().slice(0, 80)}`, link_kind: 'gift', link_id: g.id })];
+      const newNotifs = [makeNotif(d, { recipient_id: g.created_by, title: 'Подарок отклонён', body: `${g.number}: ${comment.trim().slice(0, 80)}`, link_kind: 'gift', link_id: g.id, button_url: btnUrl, button_text: '📋 Открыть заявку' })];
       return { ...d, gifts: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
     return { ok: true };
@@ -3244,14 +3251,17 @@ function App() {
     const trimmed = (docNo || '').trim();
     if (!isValidDocNo(trimmed)) return { error: 'Номер документа должен быть в формате 00ЦТ-NNNNNN (например 00ЦТ-012573)' };
     setDb(d => {
+      const appUrl = d.telegramSettings?.app_url || 'https://master-coffee-app.vercel.app';
+      const btnUrl = `${appUrl}?startapp=gift_${giftId}`;
       const updatedList = (d.gifts || []).map(x => x.id !== giftId ? x : {
         ...x, status: 'processed', doc_no: trimmed, processed_by: currentUser.id, processed_at: new Date().toISOString(),
         log: [...x.log, { event: 'status', from: 'approved', to: 'processed', actor: currentUser.id, at: new Date().toISOString(), meta: { doc_no: trimmed } }],
       });
+      const itemsSummary = g.items ? g.items.length + ' поз.' : `${g.product_name} × ${g.quantity}`;
       const warehouseUsers = d.users.filter(u => u.active && u.role === 'warehouse' && u.id !== currentUser.id);
       const newNotifs = [
-        makeNotif(d, { recipient_id: g.created_by, title: 'Подарок списан', body: `${g.number}: ${trimmed} · передан на склад`, link_kind: 'gift', link_id: g.id }),
-        ...warehouseUsers.map(wu => makeNotif(d, { recipient_id: wu.id, title: '🎁 Подарок · собрать', body: `${g.number}: ${g.product_name} × ${g.quantity} для ${g.client_name}`, link_kind: 'gift', link_id: g.id })),
+        makeNotif(d, { recipient_id: g.created_by, title: 'Подарок списан', body: `${g.number}: ${trimmed} · передан на склад`, link_kind: 'gift', link_id: g.id, button_url: btnUrl, button_text: '📋 Открыть заявку' }),
+        ...warehouseUsers.map(wu => makeNotif(d, { recipient_id: wu.id, title: '🎁 Подарок · собрать', body: `${g.number}: ${itemsSummary} для ${g.client_name}`, link_kind: 'gift', link_id: g.id, button_url: btnUrl, button_text: '📋 Открыть заявку' })),
       ];
       return { ...d, gifts: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
@@ -3266,11 +3276,13 @@ function App() {
     const existingCodes = (db.gifts || []).filter(x => x.pickup_code).map(x => x.pickup_code);
     const code = gen4DigitCode(existingCodes);
     setDb(d => {
+      const appUrl = d.telegramSettings?.app_url || 'https://master-coffee-app.vercel.app';
+      const btnUrl = `${appUrl}?startapp=gift_${giftId}`;
       const updatedList = (d.gifts || []).map(x => x.id !== giftId ? x : {
         ...x, status: 'prepared', pickup_code: code, prepared_by: currentUser.id, prepared_at: new Date().toISOString(),
         log: [...x.log, { event: 'status', from: 'processed', to: 'prepared', actor: currentUser.id, at: new Date().toISOString(), meta: { pickup_code: code } }],
       });
-      const newNotifs = [makeNotif(d, { recipient_id: g.created_by, title: '🎁 Подарок готов к выдаче', body: `${g.number}: код ${code}`, link_kind: 'gift', link_id: g.id })];
+      const newNotifs = [makeNotif(d, { recipient_id: g.created_by, title: '🎁 Подарок готов к выдаче', body: `${g.number}: код ${code}`, link_kind: 'gift', link_id: g.id, button_url: btnUrl, button_text: '📋 Открыть заявку' })];
       return { ...d, gifts: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
     return { ok: true, code };
@@ -3283,11 +3295,13 @@ function App() {
     if (g.status !== 'prepared') return { error: 'Подарок ещё не подготовлен' };
     if (g.pickup_code && (code || '').trim() !== g.pickup_code) return { error: 'Код выдачи не совпадает' };
     setDb(d => {
+      const appUrl = d.telegramSettings?.app_url || 'https://master-coffee-app.vercel.app';
+      const btnUrl = `${appUrl}?startapp=gift_${giftId}`;
       const updatedList = (d.gifts || []).map(x => x.id !== giftId ? x : {
         ...x, status: 'delivered', delivered_by: currentUser.id, delivered_at: new Date().toISOString(),
         log: [...x.log, { event: 'status', from: 'prepared', to: 'delivered', actor: currentUser.id, at: new Date().toISOString() }],
       });
-      const newNotifs = [makeNotif(d, { recipient_id: g.created_by, title: '🎁 Подарок выдан', body: `${g.number}: ${g.delivery_type === 'delivery' ? 'доставлен' : 'выдан на складе'}`, link_kind: 'gift', link_id: g.id })];
+      const newNotifs = [makeNotif(d, { recipient_id: g.created_by, title: '🎁 Подарок выдан', body: `${g.number}: ${g.delivery_type === 'delivery' ? 'доставлен' : 'выдан на складе'}`, link_kind: 'gift', link_id: g.id, button_url: btnUrl, button_text: '📋 Открыть заявку' })];
       return { ...d, gifts: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
     return { ok: true };
