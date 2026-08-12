@@ -2775,7 +2775,7 @@ function App() {
 
   /* ═══════════ Чеки расходов ═══════════ */
 
-  const createExpenseRequest = (data) => {
+  const createExpenseRequest = async (data) => {
     if (!hasPermission(db, currentUser, 'expense_create')) return { error: 'Нет прав на создание заявки на расход' };
     if (!data.amount || Number(data.amount) <= 0) return { error: 'Укажите сумму' };
     if (!data.category) return { error: 'Выберите категорию' };
@@ -2783,14 +2783,20 @@ function App() {
 
     const year = new Date().getFullYear();
     const prefix = `ЧР-${year}-`;
-    let max = 0;
+    let localMax = 0;
     for (const r of (db.expenseRequests || [])) {
       if (r.request_number?.startsWith(prefix)) {
         const n = parseInt(r.request_number.slice(prefix.length), 10);
-        if (n > max) max = n;
+        if (n > localMax) localMax = n;
       }
     }
-    const reqNumber = prefix + String(max + 1).padStart(3, '0');
+    let dbMax = 0;
+    try {
+      const { data: rows } = await supabase.from('expense_requests').select('request_number')
+        .like('request_number', `${prefix}%`).order('request_number', { ascending: false }).limit(1);
+      if (rows?.[0]?.request_number) dbMax = parseInt(rows[0].request_number.slice(prefix.length), 10) || 0;
+    } catch { /* fallback to localMax */ }
+    const reqNumber = prefix + String(Math.max(localMax, dbMax) + 1).padStart(3, '0');
 
     const newReq = {
       id: crypto.randomUUID(),

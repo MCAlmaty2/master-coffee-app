@@ -194,8 +194,8 @@ function CreateExpenseScreen({ ctx }) {
     setReceiptUrls(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSubmit = () => {
-    const result = ctx.createExpenseRequest({ amount, category, description: description.trim(), receipt_urls: receiptUrls });
+  const handleSubmit = async () => {
+    const result = await ctx.createExpenseRequest({ amount, category, description: description.trim(), receipt_urls: receiptUrls });
     if (result.error) { showToast(result.error, 'error'); return; }
     showToast('Заявка создана');
     navigate({ name: 'expenses' });
