@@ -3195,7 +3195,9 @@ function App() {
 
   const createDeferredShipment = (data) => {
     const isAdmin = currentUser.role === 'admin' || currentUser.role === 'director';
-    if (!isAdmin && !hasPermission(db, currentUser, 'deferred_shipment')) return { error: 'Нет прав' };
+    const client = (db.deferredClients || []).find(c => c.id === data.client_id);
+    const isMyClient = client && client.manager_id === currentUser.id;
+    if (!isAdmin && !isMyClient && !hasPermission(db, currentUser, 'deferred_shipment')) return { error: 'Нет прав' };
     if (!data.client_id) return { error: 'Не указан клиент' };
     if (!data.shipment_date) return { error: 'Укажите дату отгрузки' };
     if (!Number(data.amount) || Number(data.amount) <= 0) return { error: 'Сумма должна быть > 0' };
@@ -3243,7 +3245,11 @@ function App() {
   };
 
   const deleteDeferredShipment = (shipmentId) => {
-    if (!hasPermission(db, currentUser, 'deferred_manage')) return { error: 'Нет прав' };
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'director';
+    const existing = (db.deferredShipments || []).find(s => s.id === shipmentId);
+    const client = existing && (db.deferredClients || []).find(c => c.id === existing.client_id);
+    const isMyClient = client && client.manager_id === currentUser.id;
+    if (!isAdmin && !isMyClient && !hasPermission(db, currentUser, 'deferred_manage')) return { error: 'Нет прав' };
     setDb(d => ({ ...d, deferredShipments: (d.deferredShipments || []).filter(s => s.id !== shipmentId) }));
     return { ok: true };
   };
