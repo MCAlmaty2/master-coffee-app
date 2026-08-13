@@ -51,6 +51,8 @@ export const SYNC_TABLES = {
   mppTasks:           { table: 'mpp_tasks',           pk: 'id' },
   mppDealProducts:    { table: 'mpp_deal_products',   pk: 'id' },
   mppComments:        { table: 'mpp_comments',        pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_6M } },
+  deferredClients:    { table: 'deferred_clients',    pk: 'id' },
+  deferredShipments:  { table: 'deferred_shipments',  pk: 'id' },
 };
 
 /**

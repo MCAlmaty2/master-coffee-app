@@ -251,9 +251,47 @@ export function ShipmentRegistryScreen({ ctx }) {
     setDb(d => {
       const updated = (d.shipmentRegistry || []).map(r => r.id === id ? { ...r, ...patch } : r);
       if (syncSnapshotRef) syncSnapshotRef.current.shipmentRegistry = updated;
-      return { ...d, shipmentRegistry: updated };
+
+      const row = updated.find(r => r.id === id);
+      const deferredShipments = linkDeferredPayment(d, row, paidAmount, currentUser.id);
+      if (syncSnapshotRef && deferredShipments !== d.deferredShipments) {
+        syncSnapshotRef.current.deferredShipments = deferredShipments;
+      }
+
+      return { ...d, shipmentRegistry: updated, deferredShipments };
     });
     showToast('Оплата подтверждена');
+  };
+
+  const linkDeferredPayment = (d, registryRow, paidAmount, userId) => {
+    if (!registryRow?.doc_no) return d.deferredShipments || [];
+    const shipments = d.deferredShipments || [];
+    const normalizeDocNo = (s) => (s || '').replace(/\s+/g, '').toLowerCase();
+    const regDocNo = normalizeDocNo(registryRow.doc_no);
+    const regAmount = Number(registryRow.amount) || 0;
+
+    const match = shipments.find(s => {
+      if (s.paid_at) return false;
+      if (normalizeDocNo(s.invoice_no) !== regDocNo) return false;
+      const sAmount = Number(s.amount) || 0;
+      if (Math.abs(sAmount - regAmount) > 0.01) return false;
+      return true;
+    });
+
+    if (!match) return shipments;
+
+    const prevPaid = Number(match.paid_amount) || 0;
+    const payAmt = Number(paidAmount) || regAmount;
+    const newPaid = Math.min(prevPaid + payAmt, Number(match.amount));
+    const fullyPaid = newPaid >= Number(match.amount);
+
+    const updated = {
+      ...match,
+      paid_amount: newPaid,
+      paid_at: fullyPaid ? new Date().toISOString().slice(0, 10) : null,
+      paid_by: fullyPaid ? userId : null,
+    };
+    return shipments.map(s => s.id === match.id ? updated : s);
   };
 
   const deleteRow = async (id) => {

@@ -23,6 +23,7 @@ import CashScreen from './screens/CashScreen';
 import ExpenseRequestsScreen from './screens/ExpenseRequestsScreen';
 import BudgetScreen from './screens/BudgetScreen';
 import MppKanbanScreen from './screens/MppKanbanScreen';
+import { DeferredPaymentScreen, DeferredPaymentHomeBanner } from './screens/DeferredPaymentScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -507,6 +508,10 @@ const PERMISSIONS = {
   // МПП
   mpp_manage:           { group: 'МПП', label: 'Управлять воронкой продаж (канбан)' },
   mpp_view:             { group: 'МПП', label: 'Просматривать воронку продаж' },
+  // Отсрочки
+  deferred_manage:      { group: 'Отсрочки', label: 'Управлять клиентами с отсрочкой (создание, редактирование)' },
+  deferred_view_all:    { group: 'Отсрочки', label: 'Видеть всех клиентов с отсрочкой' },
+  deferred_shipment:    { group: 'Отсрочки', label: 'Добавлять отгрузки и отмечать оплату' },
   // Расписание
   schedule_access:      { group: 'Расписание', label: 'Доступ к регулярным задачам (расписание)' },
   // Админ
@@ -3141,6 +3146,95 @@ function App() {
     return { ok: true };
   };
 
+  /* ═══════════ Отсрочки платежей ═══════════ */
+
+  const createDeferredClient = (data) => {
+    if (!hasPermission(db, currentUser, 'deferred_manage')) return { error: 'Нет прав' };
+    if (!data.name?.trim()) return { error: 'Укажите наименование клиента' };
+    if (!data.manager_id) return { error: 'Выберите менеджера' };
+    if (!Number(data.default_days) || Number(data.default_days) < 1) return { error: 'Укажите срок отсрочки' };
+    const id = uid();
+    const now = todayISO();
+    const client = {
+      id,
+      name: data.name.trim(),
+      manager_id: data.manager_id,
+      default_days: Number(data.default_days),
+      notify_days_before: Number(data.notify_days_before) || 3,
+      phone: data.phone || null,
+      contact_info: data.contact_info || null,
+      active: true,
+      created_at: now,
+      created_by: currentUser.id,
+    };
+    setDb(d => ({ ...d, deferredClients: [client, ...(d.deferredClients || [])] }));
+    return { ok: true, id };
+  };
+
+  const updateDeferredClient = (clientId, data) => {
+    if (!hasPermission(db, currentUser, 'deferred_manage')) return { error: 'Нет прав' };
+    const existing = (db.deferredClients || []).find(c => c.id === clientId);
+    if (!existing) return { error: 'Клиент не найден' };
+    const updated = { ...existing, ...data, updated_at: todayISO() };
+    setDb(d => ({ ...d, deferredClients: (d.deferredClients || []).map(c => c.id === clientId ? updated : c) }));
+    return { ok: true };
+  };
+
+  const createDeferredShipment = (data) => {
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdmin && !hasPermission(db, currentUser, 'deferred_shipment')) return { error: 'Нет прав' };
+    if (!data.client_id) return { error: 'Не указан клиент' };
+    if (!data.shipment_date) return { error: 'Укажите дату отгрузки' };
+    if (!Number(data.amount) || Number(data.amount) <= 0) return { error: 'Сумма должна быть > 0' };
+    if (!data.due_date) return { error: 'Не удалось рассчитать дату оплаты' };
+    const id = uid();
+    const shipment = {
+      id,
+      client_id: data.client_id,
+      shipment_date: data.shipment_date,
+      amount: Number(data.amount),
+      invoice_no: data.invoice_no || null,
+      deferral_days: Number(data.deferral_days) || 14,
+      due_date: data.due_date,
+      comment: data.comment || null,
+      paid_at: null,
+      paid_by: null,
+      created_at: todayISO(),
+      created_by: currentUser.id,
+    };
+    setDb(d => ({ ...d, deferredShipments: [shipment, ...(d.deferredShipments || [])] }));
+    return { ok: true, id };
+  };
+
+  const markDeferredShipmentPaid = (shipmentId, paidDate, payAmount) => {
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'director';
+    const existing = (db.deferredShipments || []).find(s => s.id === shipmentId);
+    if (!existing) return { error: 'Отгрузка не найдена' };
+    const client = (db.deferredClients || []).find(c => c.id === existing.client_id);
+    const isMyClient = client && client.manager_id === currentUser.id;
+    if (!isAdmin && !isMyClient && !hasPermission(db, currentUser, 'deferred_shipment')) return { error: 'Нет прав' };
+    if (existing.paid_at) return { error: 'Уже полностью оплачена' };
+    const prevPaid = Number(existing.paid_amount) || 0;
+    const amt = Number(payAmount) || (Number(existing.amount) - prevPaid);
+    if (amt <= 0) return { error: 'Сумма оплаты должна быть > 0' };
+    const newPaid = prevPaid + amt;
+    const fullyPaid = newPaid >= Number(existing.amount);
+    const updated = {
+      ...existing,
+      paid_amount: Math.min(newPaid, Number(existing.amount)),
+      paid_at: fullyPaid ? (paidDate || todayISO()) : null,
+      paid_by: fullyPaid ? currentUser.id : null,
+    };
+    setDb(d => ({ ...d, deferredShipments: (d.deferredShipments || []).map(s => s.id === shipmentId ? updated : s) }));
+    return { ok: true, fullyPaid };
+  };
+
+  const deleteDeferredShipment = (shipmentId) => {
+    if (!hasPermission(db, currentUser, 'deferred_manage')) return { error: 'Нет прав' };
+    setDb(d => ({ ...d, deferredShipments: (d.deferredShipments || []).filter(s => s.id !== shipmentId) }));
+    return { ok: true };
+  };
+
   /* ═══════════ Подарки клиентам ═══════════ */
 
   const createGift = async (data) => {
@@ -4134,6 +4228,7 @@ function App() {
     createGift, approveGift, rejectGift, processGift, prepareGift, deliverGift, cancelGift,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createExpenseRequest, approveExpense, rejectExpense, updateExpenseCategory, payExpense, updateBudgetPlan, createBudgetCategory,
+    createDeferredClient, updateDeferredClient, createDeferredShipment, markDeferredShipmentPaid, deleteDeferredShipment,
     createMppDeal, updateMppDeal, addMppActivity, deleteMppDeal,
     createMppTask, completeMppTask, addMppDealProduct, removeMppDealProduct, addMppComment,
     createGrindRequest, takeGrindRequest, markGrindReady, cancelGrindRequest,
@@ -5055,6 +5150,9 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       if (hasPermission(db, currentUser, 'budget_view')) {
         finItems.push({ id: 'budget', label: 'Бюджет', icon: Wallet });
       }
+      if (hasPermission(db, currentUser, 'deferred_manage') || hasPermission(db, currentUser, 'deferred_view_all') || hasPermission(db, currentUser, 'deferred_shipment')) {
+        finItems.push({ id: 'deferred_payments', label: 'Отсрочки платежей', icon: Calendar });
+      }
       if (finItems.length > 0) groups.push({ title: 'Финансы', items: finItems, collapsible: true, base: 'tk' });
     }
 
@@ -5588,6 +5686,13 @@ function Screen({ ctx }) {
     case 'gifts':        return <GiftsScreen ctx={ctx} />;
     case 'create_gift':  return <GiftsScreen ctx={ctx} />;
     case 'gift_detail':  return <GiftsScreen ctx={ctx} />;
+    // ─── Отсрочки платежей ───
+    case 'deferred_payments':
+    case 'deferred_client_detail':
+    case 'deferred_client_create':
+    case 'deferred_client_edit':
+    case 'deferred_shipment_create':
+      return <DeferredPaymentScreen ctx={ctx} />;
     // ─── Клиенты ───
     case 'clients':       return <ClientsScreen ctx={ctx} />;
     case 'client_detail': return <ClientDetailScreen ctx={ctx} clientId={route.clientId} />;
@@ -6236,6 +6341,7 @@ function DashboardHome({ ctx, title }) {
         {hasPermission(db, currentUser, 'schedule_access') && <ScheduleHomeBanner ctx={ctx} />}
         {(hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
           || hasPermission(db, currentUser, 'gift_process') || currentUser.role === 'warehouse') && <GiftsHomeBanner ctx={ctx} />}
+        {(hasPermission(db, currentUser, 'deferred_manage') || hasPermission(db, currentUser, 'deferred_view_all') || hasPermission(db, currentUser, 'deferred_shipment')) && <DeferredPaymentHomeBanner ctx={ctx} />}
         {!hidden('w_sales') && <SalesReportHomeTile ctx={ctx} />}
 
         {!hidden('w_shipment') && <ShipmentRegistryHomeTile ctx={ctx} />}
