@@ -472,8 +472,9 @@ function BulkImportModal({ client, onClose, onCreate, showToast }) {
 
   const handleImport = () => {
     let ok = 0;
-    let err = 0;
-    for (const row of parsed) {
+    const errors = [];
+    for (let i = 0; i < parsed.length; i++) {
+      const row = parsed[i];
       const dateStr = parseDate(row.doc_date) || row.doc_date;
       const dueDate = dateStr ? addDays(dateStr, client.default_days) : null;
       const r = onCreate({
@@ -486,9 +487,14 @@ function BulkImportModal({ client, onClose, onCreate, showToast }) {
         comment: row.comment || null,
       });
       if (r?.ok) ok++;
-      else err++;
+      else errors.push(`№${row.doc_no}: ${r?.error || 'Ошибка'}`);
     }
-    showToast(`Импортировано: ${ok}${err > 0 ? `, ошибок: ${err}` : ''}`);
+    if (errors.length > 0) {
+      showToast(`Ошибка: ${errors[0]}`);
+      setParsed(p => p.filter((_, i) => i >= ok));
+      return;
+    }
+    showToast(`Импортировано: ${ok}`);
     onClose();
   };
 

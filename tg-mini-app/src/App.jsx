@@ -3212,6 +3212,7 @@ function App() {
       deferral_days: Number(data.deferral_days) || 14,
       due_date: data.due_date,
       comment: data.comment || null,
+      paid_amount: 0,
       paid_at: null,
       paid_by: null,
       created_at: todayISO(),
