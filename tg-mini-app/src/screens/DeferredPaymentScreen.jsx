@@ -90,12 +90,14 @@ export function DeferredPaymentHomeBanner({ ctx }) {
 function ClientListScreen({ ctx }) {
   const { db, currentUser, navigate } = ctx;
   const isAdmin = currentUser.role === 'admin' || currentUser.role === 'director';
+  const canManageClients = isAdmin || ctx.hasPermission('deferred_manage');
+  const canViewAll = isAdmin || ctx.hasPermission('deferred_view_all');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('active');
 
   const clients = useMemo(() => {
     let list = db.deferredClients || [];
-    if (!isAdmin) list = list.filter(c => c.manager_id === currentUser.id);
+    if (!canViewAll) list = list.filter(c => c.manager_id === currentUser.id);
     if (filter === 'active') list = list.filter(c => c.active);
     else if (filter === 'inactive') list = list.filter(c => !c.active);
     if (search.trim()) {
@@ -103,7 +105,7 @@ function ClientListScreen({ ctx }) {
       list = list.filter(c => (c.name || '').toLowerCase().includes(q));
     }
     return list.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-  }, [db.deferredClients, currentUser, isAdmin, filter, search]);
+  }, [db.deferredClients, currentUser, canViewAll, filter, search]);
 
   const shipments = db.deferredShipments || [];
   const today = todayStr();
@@ -121,8 +123,8 @@ function ClientListScreen({ ctx }) {
     <div>
       <PageHeader
         title="Отсрочки платежей"
-        subtitle={isAdmin ? 'Все клиенты' : 'Ваши клиенты'}
-        action={isAdmin && (
+        subtitle={canViewAll ? 'Все клиенты' : 'Ваши клиенты'}
+        action={canManageClients && (
           <button onClick={() => navigate({ name: 'deferred_client_create' })}
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold text-white text-sm"
             style={{ background: '#3B82F6' }}>
@@ -164,7 +166,7 @@ function ClientListScreen({ ctx }) {
                 <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                   Отсрочка: {c.default_days} дн. · Неоплач.: {stats.total} ({fmtNum(stats.totalAmount)} ₸)
                 </div>
-                {isAdmin && manager && (
+                {canViewAll && manager && (
                   <div className="text-xs mt-1" style={{ color: '#A8A8AE' }}>
                     <User size={11} className="inline mr-1" />
                     {manager.first_name} {(manager.last_name || '')[0] || ''}.
@@ -183,6 +185,8 @@ function ClientListScreen({ ctx }) {
 function ClientDetailScreen({ ctx, clientId }) {
   const { db, currentUser, navigate, goBack, showToast } = ctx;
   const isAdmin = currentUser.role === 'admin' || currentUser.role === 'director';
+  const canManageClients = isAdmin || ctx.hasPermission('deferred_manage');
+  const canShipment = isAdmin || ctx.hasPermission('deferred_shipment');
   const client = (db.deferredClients || []).find(c => c.id === clientId);
   const [filter, setFilter] = useState('unpaid');
   const [showPayModal, setShowPayModal] = useState(null);
@@ -198,7 +202,8 @@ function ClientDetailScreen({ ctx, clientId }) {
   );
 
   const manager = (db.users || []).find(u => u.id === client.manager_id);
-  const canManage = isAdmin || client.manager_id === currentUser.id;
+  const isMyClient = client.manager_id === currentUser.id;
+  const canManage = isAdmin || isMyClient || canShipment;
   const today = todayStr();
 
   const shipments = useMemo(() => {
@@ -242,7 +247,7 @@ function ClientDetailScreen({ ctx, clientId }) {
         subtitle={`Отсрочка: ${client.default_days} дн. · Неоплач.: ${fmtNum(totalUnpaid)} ₸`}
         action={canManage && (
           <div className="flex gap-2">
-            {isAdmin && (
+            {canManageClients && (
               <button onClick={() => navigate({ name: 'deferred_client_edit', clientId })}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', color: 'var(--mc-text)' }}>
@@ -347,7 +352,7 @@ function ClientDetailScreen({ ctx, clientId }) {
                       style={{ background: '#22C55E' }}>
                       <CheckCircle2 size={14} /> {paidAmt > 0 ? 'Доплатить' : 'Оплата'}
                     </button>
-                    {isAdmin && (
+                    {canManageClients && (
                       <button onClick={() => handleDelete(s.id)}
                         className="px-3 py-2 rounded-lg" style={{ color: '#EB5757', background: '#FEE2E2' }}>
                         <Trash2 size={14} />
