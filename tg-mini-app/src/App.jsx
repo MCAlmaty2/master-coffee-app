@@ -2121,6 +2121,19 @@ function App() {
     }
   };
 
+  const updateUserName = async (userId, firstName, lastName) => {
+    if (currentUser?.role !== 'admin' && currentUser?.role !== 'director') return { error: 'Нет прав' };
+    try {
+      const patch = { first_name: firstName.trim(), last_name: (lastName || '').trim() };
+      const { error } = await supabase.from('users').update(patch).eq('id', userId);
+      if (error) throw error;
+      setDb(d => ({ ...d, users: d.users.map(u => u.id === userId ? { ...u, ...patch } : u) }));
+      return { ok: true };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+
   // Личная настройка главного экрана (какие блоки показывать)
   const updateMyHomePrefs = async (prefs) => {
     try {
@@ -4222,7 +4235,7 @@ function App() {
     bootStatus,
     loginViaTelegram, logout,
     createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, changeDeliveryMethod, cancelOrder, editOrder, revertLastAction,
-    approveAccess, rejectAccess, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, updateMyTgPrefs, updateMyHomePrefs, transferAdmin,
+    approveAccess, rejectAccess, updateUserRole, updateUserName, deactivateUser, activateUser, updateUserTgNotif, updateMyTgPrefs, updateMyHomePrefs, transferAdmin,
     createTask, startTask, completeTask, rescheduleTask, deleteTask, reassignTask, editTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createGift, approveGift, rejectGift, processGift, prepareGift, deliverGift, cancelGift,
@@ -9628,9 +9641,11 @@ function ExportScreen({ ctx }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function AdminUsersScreen({ ctx }) {
-  const { db, currentUser, updateUserRole, deactivateUser, activateUser, updateUserTgNotif, setPinForUser, resetPinForUser, showToast, resetDB } = ctx;
+  const { db, currentUser, updateUserRole, updateUserName, deactivateUser, activateUser, updateUserTgNotif, setPinForUser, resetPinForUser, showToast, resetDB } = ctx;
 
   const isAdmin = currentUser.role === 'admin';
+  const isDirector = currentUser.role === 'director';
+  const canEditNames = isAdmin || isDirector;
   const isCoffeeStaffManager = !isAdmin && hasPermission(db, currentUser, 'manage_coffee_staff');
   const COFFEE_ROLES = ['coffee_manager', 'deputy_coffee_manager', 'chef_barista', 'chef_cook'];
 
@@ -9695,6 +9710,12 @@ function AdminUsersScreen({ ctx }) {
               else showToast('PIN сброшен');
               return res;
             } : null}
+            onEditName={canEditNames ? async (userId, first, last) => {
+              const res = await updateUserName(userId, first, last);
+              if (res?.error) showToast(res.error);
+              else showToast('Имя обновлено');
+              return res;
+            } : null}
           />
         ))}
       </div>
@@ -9702,12 +9723,16 @@ function AdminUsersScreen({ ctx }) {
   );
 }
 
-function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActivate, onToggleTgNotif, onSetPin, onResetPin }) {
+function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActivate, onToggleTgNotif, onSetPin, onResetPin, onEditName }) {
   const [open, setOpen] = useState(false);
   const [pinFormOpen, setPinFormOpen] = useState(false);
   const [pinValue, setPinValue] = useState('');
   const [pinLoading, setPinLoading] = useState(false);
   const [pinError, setPinError] = useState('');
+  const [nameEditing, setNameEditing] = useState(false);
+  const [editFirst, setEditFirst] = useState(user.first_name || '');
+  const [editLast, setEditLast] = useState(user.last_name || '');
+  const [nameLoading, setNameLoading] = useState(false);
   const r = roleOf(db, user.role);
   const assignableRoles = (db.roleDefinitions || []).filter(rd => {
     if (rd.key === 'admin' || rd.key === 'pending') return false;
@@ -9725,8 +9750,14 @@ function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActi
           }
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm truncate" style={{ color: 'var(--mc-text)' }}>
+          <div className="font-semibold text-sm truncate flex items-center gap-1.5" style={{ color: 'var(--mc-text)' }}>
             {user.first_name} {user.last_name}
+            {onEditName && open && !nameEditing && (
+              <button onClick={(e) => { e.stopPropagation(); setEditFirst(user.first_name || ''); setEditLast(user.last_name || ''); setNameEditing(true); }}
+                className="p-0.5 rounded" style={{ color: 'var(--mc-muted)' }}>
+                <Edit3 size={12} />
+              </button>
+            )}
           </div>
           <div className="text-xs truncate flex items-center gap-1.5" style={{ color: 'var(--mc-muted)' }}>
             <Send size={10} />
@@ -9749,6 +9780,36 @@ function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActi
       </div>
       {open && user.role !== 'admin' && (
         <div className="mt-3 pt-3 space-y-2" style={{ borderTop: '1px solid #F1F5F9' }}>
+          {/* Имя */}
+          {nameEditing && onEditName && (
+            <div className="rounded-lg p-3" style={{ background: 'var(--mc-active-item)' }}>
+              <div className="text-xs font-semibold mb-2" style={{ color: 'var(--mc-text)' }}>Редактировать имя</div>
+              <div className="flex gap-2 mb-2">
+                <input value={editFirst} onChange={e => setEditFirst(e.target.value)} placeholder="Имя"
+                  className="flex-1 px-2.5 py-1.5 rounded-lg text-sm outline-none"
+                  style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)' }} />
+                <input value={editLast} onChange={e => setEditLast(e.target.value)} placeholder="Фамилия"
+                  className="flex-1 px-2.5 py-1.5 rounded-lg text-sm outline-none"
+                  style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)' }} />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setNameEditing(false)} className="flex-1 text-xs font-semibold py-1.5 rounded-lg"
+                  style={{ background: 'var(--mc-surface)', color: 'var(--mc-muted)', border: '1px solid var(--mc-border)' }}>
+                  Отмена
+                </button>
+                <button disabled={nameLoading || !editFirst.trim()} onClick={async () => {
+                    setNameLoading(true);
+                    await onEditName(user.id, editFirst, editLast);
+                    setNameLoading(false);
+                    setNameEditing(false);
+                  }}
+                  className="flex-1 text-xs font-semibold py-1.5 rounded-lg text-white"
+                  style={{ background: editFirst.trim() && !nameLoading ? '#297b8a' : '#A8A8AE' }}>
+                  {nameLoading ? '…' : 'Сохранить'}
+                </button>
+              </div>
+            </div>
+          )}
           {/* Роли */}
           <div className="flex flex-wrap gap-1.5">
             {assignableRoles.map(rd => (
