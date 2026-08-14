@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import {
   Plus, ChevronRight, ChevronLeft, Search, Wrench, User, Truck,
-  Check, AlertTriangle, Edit3, Trash2, Package, ClipboardList, BarChart3,
+  Check, AlertTriangle, Edit3, Trash2, Package, ClipboardList, ClipboardPaste,
   ArrowLeftRight, Coffee, Phone, MapPin,
 } from 'lucide-react';
+import { EquipmentImportModal } from './RentalImportModal';
 
 const TZ = 'Asia/Almaty';
 const inputCls = 'w-full px-3 py-2 rounded-lg outline-none text-sm';
@@ -96,10 +97,11 @@ function RentalHomeScreen({ ctx }) {
   );
 }
 
-/* ═══════════ ОБОРУДОВАНИЕ — список ═══════════ */
+
 function EquipmentListTab({ ctx }) {
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
+  const [showImport, setShowImport] = useState(false);
   const isAdmin = ctx.currentUser?.role === 'admin' || ctx.currentUser?.role === 'director';
   const canManage = isAdmin || ctx.hasPermission('rental_equipment');
   const equipment = ctx.db.rentalEquipment || [];
@@ -130,6 +132,7 @@ function EquipmentListTab({ ctx }) {
           <Search size={14} className="absolute left-2.5 top-2.5" style={{ color: 'var(--mc-muted)' }} />
           <input className={inputCls + ' pl-8'} style={inputBorder()} placeholder="Поиск..." value={q} onChange={e => setQ(e.target.value)} />
         </div>
+        {canManage && <button onClick={() => setShowImport(true)} className="rounded-xl px-3 py-2 text-sm font-semibold" style={{ background: '#EDE9FE', color: '#7C3AED', border: '1px solid #C4B5FD' }}><ClipboardPaste size={16} /></button>}
         {canManage && <button onClick={() => ctx.navigate({ name: 'rental_equipment_form' })} className="rounded-xl px-4 py-2 text-sm font-semibold text-white" style={{ background: '#3B82F6' }}><Plus size={16} /></button>}
       </div>
       <Tabs items={[{ id: 'all', label: 'Все', count: counts.all }, ...Object.entries(EQ_STATUS).map(([k, v]) => ({ id: k, label: v.label, count: counts[k] }))]} value={filter} onChange={setFilter} />
@@ -149,11 +152,11 @@ function EquipmentListTab({ ctx }) {
           </div>
         </button>
       ))}
+      {showImport && <EquipmentImportModal onClose={() => setShowImport(false)} onCreate={ctx.createRentalEquipment} />}
     </>
   );
 }
 
-/* ═══════════ ОБОРУДОВАНИЕ — форма ═══════════ */
 function EquipmentFormScreen({ ctx, equipmentId }) {
   const existing = equipmentId ? (ctx.db.rentalEquipment || []).find(e => e.id === equipmentId) : null;
   const [form, setForm] = useState({
@@ -193,7 +196,6 @@ function EquipmentFormScreen({ ctx, equipmentId }) {
   );
 }
 
-/* ═══════════ ОБОРУДОВАНИЕ — детали ═══════════ */
 function EquipmentDetailScreen({ ctx, equipmentId }) {
   const eq = (ctx.db.rentalEquipment || []).find(e => e.id === equipmentId);
   const clients = ctx.db.rentalClients || [];
@@ -248,7 +250,6 @@ function EquipmentDetailScreen({ ctx, equipmentId }) {
   );
 }
 
-/* ═══════════ ПЕРЕМЕЩЕНИЕ — форма ═══════════ */
 function MovementFormScreen({ ctx, equipmentId }) {
   const eq = (ctx.db.rentalEquipment || []).find(e => e.id === equipmentId);
   const clients = (ctx.db.rentalClients || []).filter(c => c.status === 'active');
@@ -304,7 +305,6 @@ function MovementFormScreen({ ctx, equipmentId }) {
   );
 }
 
-/* ═══════════ КЛИЕНТЫ — список ═══════════ */
 function ClientsListTab({ ctx }) {
   const [q, setQ] = useState('');
   const isAdmin = ctx.currentUser?.role === 'admin' || ctx.currentUser?.role === 'director';
@@ -351,7 +351,6 @@ function ClientsListTab({ ctx }) {
   );
 }
 
-/* ═══════════ КЛИЕНТ — форма ═══════════ */
 function RentalClientFormScreen({ ctx, clientId }) {
   const existing = clientId ? (ctx.db.rentalClients || []).find(c => c.id === clientId) : null;
   const users = ctx.db.users || [];
@@ -415,7 +414,6 @@ function RentalClientFormScreen({ ctx, clientId }) {
   );
 }
 
-/* ═══════════ КЛИЕНТ — детали ═══════════ */
 function RentalClientDetailScreen({ ctx, clientId }) {
   const client = (ctx.db.rentalClients || []).find(c => c.id === clientId);
   const equipment = (ctx.db.rentalEquipment || []).filter(e => e.current_client_id === clientId && e.status === 'rented');
@@ -468,7 +466,6 @@ function RentalClientDetailScreen({ ctx, clientId }) {
   );
 }
 
-/* ═══════════ ЗАКУП — помесячный ═══════════ */
 function PurchasesTab({ ctx }) {
   const [month, setMonth] = useState(monthNow());
   const clients = (ctx.db.rentalClients || []).filter(c => c.status === 'active');
@@ -551,7 +548,6 @@ function PurchasesTab({ ctx }) {
   );
 }
 
-/* ═══════════ РЕВИЗИИ ═══════════ */
 function RevisionsTab({ ctx }) {
   const revisions = (ctx.db.rentalRevisions || []).sort((a, b) => b.revision_date.localeCompare(a.revision_date));
   const isAdmin = ctx.currentUser?.role === 'admin' || ctx.currentUser?.role === 'director';
@@ -585,7 +581,6 @@ function RevisionsTab({ ctx }) {
   );
 }
 
-/* ═══════════ РЕВИЗИЯ — форма ═══════════ */
 function RevisionFormScreen({ ctx }) {
   const clients = (ctx.db.rentalClients || []).filter(c => c.status === 'active');
   const equipment = ctx.db.rentalEquipment || [];
@@ -670,7 +665,6 @@ function RevisionFormScreen({ ctx }) {
   );
 }
 
-/* ═══════════ ОТЧЁТ ═══════════ */
 function ReportTab({ ctx }) {
   const [month, setMonth] = useState(monthNow());
   const equipment = ctx.db.rentalEquipment || [];
