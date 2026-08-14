@@ -5,7 +5,7 @@ import {
   ChevronRight, Trash2, Eye, Users, ArrowRight, Hash, ChevronDown,
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
-  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt, Wallet,
+  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt, Wallet, Wrench,
 } from 'lucide-react';
 import { supabase } from './supabase/client';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
@@ -24,6 +24,7 @@ import ExpenseRequestsScreen from './screens/ExpenseRequestsScreen';
 import BudgetScreen from './screens/BudgetScreen';
 import MppKanbanScreen from './screens/MppKanbanScreen';
 import { DeferredPaymentScreen, DeferredPaymentHomeBanner } from './screens/DeferredPaymentScreen';
+import { RentalEquipmentScreen, RentalHomeBanner } from './screens/RentalEquipmentScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -512,6 +513,12 @@ const PERMISSIONS = {
   deferred_manage:      { group: 'Отсрочки', label: 'Управлять клиентами с отсрочкой (создание, редактирование)' },
   deferred_view_all:    { group: 'Отсрочки', label: 'Видеть всех клиентов с отсрочкой' },
   deferred_shipment:    { group: 'Отсрочки', label: 'Добавлять отгрузки и отмечать оплату' },
+  // Аренда оборудования
+  rental_equipment:     { group: 'Аренда', label: 'Справочник оборудования (просмотр, добавление, перемещение)' },
+  rental_clients:       { group: 'Аренда', label: 'Клиенты-арендаторы (просмотр, редактирование)' },
+  rental_purchases:     { group: 'Аренда', label: 'Ввод факта закупа кофе' },
+  rental_revisions:     { group: 'Аренда', label: 'Проведение ревизий оборудования' },
+  rental_report:        { group: 'Аренда', label: 'Сводный отчёт по аренде' },
   // Расписание
   schedule_access:      { group: 'Расписание', label: 'Доступ к регулярным задачам (расписание)' },
   // Админ
@@ -1308,25 +1315,7 @@ function App() {
     return () => { channels.forEach(c => supabase.removeChannel(c)); };
   }, [bootStatus.phase]);
 
-  // ─── Буфер ошибок для повторной отправки при восстановлении сети ───
   const pendingErrorReports = React.useRef([]);
-  useEffect(() => {
-    const flush = () => {
-      const batch = pendingErrorReports.current.splice(0);
-      batch.forEach(entry => {
-        supabase.from('error_reports').insert({
-          id: entry.id, reporter_id: currentUser?.id || null,
-          reporter_name: currentUser ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim() : 'Гость',
-          kind: entry.kind, source: entry.source, message: entry.message,
-          details: entry.details, route_name: entry.route, at: entry.at,
-        }).then(({ error }) => {
-          if (error) console.warn('[reportError flush] не удалось:', error.message);
-        }).catch(() => { pendingErrorReports.current.push(entry); });
-      });
-    };
-    window.addEventListener('online', flush);
-    return () => window.removeEventListener('online', flush);
-  }, [currentUser]);
 
   // ─── Авто-синхронизация: когда меняются массивы в db — шлём diff в Supabase ───
   // Хранит снимок предыдущего состояния для каждого синхронизируемого ключа.
@@ -1398,7 +1387,7 @@ function App() {
       syncSnapshotRef.current[stateKey] = currArr;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts, db.coffeeShipments, db.coffeeTasks, db.vacations, db.cashOperations, db.expenseCategories, db.budgetEntries, db.expenseRequests, db.mppDeals, db.mppActivities, db.mppTasks, db.mppDealProducts, db.mppComments, db.deferredClients, db.deferredShipments]);
+  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts, db.coffeeShipments, db.coffeeTasks, db.vacations, db.cashOperations, db.expenseCategories, db.budgetEntries, db.expenseRequests, db.mppDeals, db.mppActivities, db.mppTasks, db.mppDealProducts, db.mppComments, db.deferredClients, db.deferredShipments, db.rentalEquipment, db.rentalClients, db.rentalPurchases, db.rentalMovements, db.rentalRevisions]);
 
   // ─── Напоминания по расписанию (personal TG) — за 15 мин до начала, только себе ───
   useEffect(() => {
@@ -1447,6 +1436,25 @@ function App() {
   const currentUser = session ? db.users.find(u => u.id === session.user_id) : null;
   // effectiveRole — роль, под которой Admin сейчас "видит" приложение
   const effectiveRole = (currentUser?.role === 'admin' && actAs) ? actAs : currentUser?.role;
+
+  // ─── Буфер ошибок для повторной отправки при восстановлении сети ───
+  useEffect(() => {
+    const flush = () => {
+      const batch = pendingErrorReports.current.splice(0);
+      batch.forEach(entry => {
+        supabase.from('error_reports').insert({
+          id: entry.id, reporter_id: currentUser?.id || null,
+          reporter_name: currentUser ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim() : 'Гость',
+          kind: entry.kind, source: entry.source, message: entry.message,
+          details: entry.details, route_name: entry.route, at: entry.at,
+        }).then(({ error }) => {
+          if (error) console.warn('[reportError flush] не удалось:', error.message);
+        }).catch(() => { pendingErrorReports.current.push(entry); });
+      });
+    };
+    window.addEventListener('online', flush);
+    return () => window.removeEventListener('online', flush);
+  }, [currentUser]);
 
   const navigate = (r) => { setRouteStack(s => [...s, route]); setRoute(r); setMobileMenuOpen(false); };
   const goBack = () => {
@@ -3280,6 +3288,105 @@ function App() {
     return { ok: true };
   };
 
+  /* ═══════════ Арендное оборудование ═══════════ */
+
+  const createRentalEquipment = (data) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'rental_equipment')) return { error: 'Нет прав' };
+    if (!data.type?.trim()) return { error: 'Укажите вид оборудования' };
+    const id = uid();
+    const row = { id, ...data, residual_value: Number(data.residual_value) || 0, status: data.status || 'in_office', created_at: todayISO(), updated_at: todayISO() };
+    setDb(d => ({ ...d, rentalEquipment: [row, ...(d.rentalEquipment || [])] }));
+    return { ok: true, id };
+  };
+
+  const updateRentalEquipment = (eqId, data) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'rental_equipment')) return { error: 'Нет прав' };
+    const existing = (db.rentalEquipment || []).find(e => e.id === eqId);
+    if (!existing) return { error: 'Не найдено' };
+    const updated = { ...existing, ...data, residual_value: Number(data.residual_value) || 0, updated_at: todayISO() };
+    setDb(d => ({ ...d, rentalEquipment: (d.rentalEquipment || []).map(e => e.id === eqId ? updated : e) }));
+    return { ok: true };
+  };
+
+  const deleteRentalEquipment = (eqId) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'rental_equipment')) return { error: 'Нет прав' };
+    setDb(d => ({ ...d, rentalEquipment: (d.rentalEquipment || []).filter(e => e.id !== eqId) }));
+    return { ok: true };
+  };
+
+  const createRentalClient = (data) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'rental_clients')) return { error: 'Нет прав' };
+    if (!data.name?.trim()) return { error: 'Укажите наименование' };
+    const id = uid();
+    const row = { id, ...data, plan_kg: Number(data.plan_kg) || 0, plan_price_per_kg: Number(data.plan_price_per_kg) || 0, purchase_day: Number(data.purchase_day) || null, status: 'active', created_at: todayISO(), updated_at: todayISO() };
+    setDb(d => ({ ...d, rentalClients: [row, ...(d.rentalClients || [])] }));
+    return { ok: true, id };
+  };
+
+  const updateRentalClient = (clientId, data) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'rental_clients')) return { error: 'Нет прав' };
+    const existing = (db.rentalClients || []).find(c => c.id === clientId);
+    if (!existing) return { error: 'Не найден' };
+    const updated = { ...existing, ...data, plan_kg: Number(data.plan_kg) || 0, plan_price_per_kg: Number(data.plan_price_per_kg) || 0, purchase_day: Number(data.purchase_day) || null, updated_at: todayISO() };
+    setDb(d => ({ ...d, rentalClients: (d.rentalClients || []).map(c => c.id === clientId ? updated : c) }));
+    return { ok: true };
+  };
+
+  const createRentalPurchase = (data) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'rental_purchases')) return { error: 'Нет прав' };
+    const id = uid();
+    const row = { id, client_id: data.client_id, month: data.month, kg_fact: Number(data.kg_fact) || 0, amount_fact: Number(data.amount_fact) || 0, entered_by: currentUser.id, created_at: todayISO(), updated_at: todayISO() };
+    setDb(d => ({ ...d, rentalPurchases: [row, ...(d.rentalPurchases || [])] }));
+    return { ok: true, id };
+  };
+
+  const updateRentalPurchase = (purchaseId, data) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'rental_purchases')) return { error: 'Нет прав' };
+    const existing = (db.rentalPurchases || []).find(p => p.id === purchaseId);
+    if (!existing) return { error: 'Не найдено' };
+    const updated = { ...existing, kg_fact: Number(data.kg_fact) || 0, amount_fact: Number(data.amount_fact) || 0, updated_at: todayISO() };
+    setDb(d => ({ ...d, rentalPurchases: (d.rentalPurchases || []).map(p => p.id === purchaseId ? updated : p) }));
+    return { ok: true };
+  };
+
+  const createRentalMovement = (data) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'rental_equipment')) return { error: 'Нет прав' };
+    const eq = (db.rentalEquipment || []).find(e => e.id === data.equipment_id);
+    if (!eq) return { error: 'Оборудование не найдено' };
+    const id = uid();
+    const now = todayISO();
+    const movement = { id, equipment_id: data.equipment_id, movement_type: data.movement_type, from_location: eq.current_location || (eq.current_client_id ? 'client' : 'office'), to_location: data.to_location || '', client_id: data.client_id || null, performed_by: currentUser.id, doc_ref: data.doc_ref || null, notes: data.notes || null, moved_at: now, created_at: now };
+    const statusMap = { to_client: 'rented', from_client: 'in_office', to_repair: 'in_repair', from_repair: 'in_office', write_off: 'written_off' };
+    const newStatus = statusMap[data.movement_type] || eq.status;
+    const clientId = data.movement_type === 'to_client' ? data.client_id : (data.movement_type === 'from_client' ? null : eq.current_client_id);
+    const clientObj = clientId ? (db.rentalClients || []).find(c => c.id === clientId) : null;
+    const loc = data.movement_type === 'to_client' ? (clientObj?.name || '') : (data.movement_type === 'from_client' || data.movement_type === 'from_repair' ? 'Офис' : eq.current_location);
+    const updatedEq = { ...eq, status: newStatus, current_client_id: clientId || null, current_location: loc, updated_at: now };
+    setDb(d => ({
+      ...d,
+      rentalMovements: [movement, ...(d.rentalMovements || [])],
+      rentalEquipment: (d.rentalEquipment || []).map(e => e.id === eq.id ? updatedEq : e),
+    }));
+    return { ok: true, id };
+  };
+
+  const createRentalRevision = (data) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'rental_revisions')) return { error: 'Нет прав' };
+    const id = uid();
+    const row = { id, location_type: data.location_type, location_id: data.location_id || null, conducted_by: currentUser.id, revision_date: data.revision_date || todayISO(), checklist: data.checklist || [], result: data.result || null, notes: data.notes || null, created_at: todayISO() };
+    setDb(d => ({ ...d, rentalRevisions: [row, ...(d.rentalRevisions || [])] }));
+    return { ok: true, id };
+  };
+
   /* ═══════════ Подарки клиентам ═══════════ */
 
   const createGift = async (data) => {
@@ -4274,6 +4381,10 @@ function App() {
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createExpenseRequest, approveExpense, rejectExpense, updateExpenseCategory, payExpense, updateBudgetPlan, createBudgetCategory,
     createDeferredClient, updateDeferredClient, createDeferredShipment, markDeferredShipmentPaid, deleteDeferredShipment,
+    createRentalEquipment, updateRentalEquipment, deleteRentalEquipment,
+    createRentalClient, updateRentalClient,
+    createRentalPurchase, updateRentalPurchase,
+    createRentalMovement, createRentalRevision,
     createMppDeal, updateMppDeal, addMppActivity, deleteMppDeal,
     createMppTask, completeMppTask, addMppDealProduct, removeMppDealProduct, addMppComment,
     createGrindRequest, takeGrindRequest, markGrindReady, cancelGrindRequest,
@@ -5201,6 +5312,15 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       if (finItems.length > 0) groups.push({ title: 'Финансы', items: finItems, collapsible: true, base: 'tk' });
     }
 
+    // ── АРЕНДА ОБОРУДОВАНИЯ ────────────────────
+    {
+      const rentalItems = [];
+      if (hasPermission(db, currentUser, 'rental_equipment') || hasPermission(db, currentUser, 'rental_clients') || hasPermission(db, currentUser, 'rental_purchases') || hasPermission(db, currentUser, 'rental_revisions') || hasPermission(db, currentUser, 'rental_report')) {
+        rentalItems.push({ id: 'rental_home', label: 'Арендное оборудование', icon: Wrench });
+      }
+      if (rentalItems.length > 0) groups.push({ title: 'Аренда', items: rentalItems, collapsible: true, base: 'tk' });
+    }
+
     // ── HR-КАЛЕНДАРЬ (отпуска и дни рождения) ────────────────────
     if (hasPermission(db, currentUser, 'hr_calendar_view')) {
       groups.push({ title: 'HR', items: [
@@ -5738,6 +5858,15 @@ function Screen({ ctx }) {
     case 'deferred_client_edit':
     case 'deferred_shipment_create':
       return <DeferredPaymentScreen ctx={ctx} />;
+    // ─── Арендное оборудование ───
+    case 'rental_home':
+    case 'rental_equipment_form':
+    case 'rental_equipment_detail':
+    case 'rental_client_form':
+    case 'rental_client_detail':
+    case 'rental_movement_form':
+    case 'rental_revision_form':
+      return <RentalEquipmentScreen ctx={ctx} />;
     // ─── Клиенты ───
     case 'clients':       return <ClientsScreen ctx={ctx} />;
     case 'client_detail': return <ClientDetailScreen ctx={ctx} clientId={route.clientId} />;
@@ -6387,6 +6516,7 @@ function DashboardHome({ ctx, title }) {
         {(hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
           || hasPermission(db, currentUser, 'gift_process') || currentUser.role === 'warehouse') && <GiftsHomeBanner ctx={ctx} />}
         {(hasPermission(db, currentUser, 'deferred_manage') || hasPermission(db, currentUser, 'deferred_view_all') || hasPermission(db, currentUser, 'deferred_shipment')) && <DeferredPaymentHomeBanner ctx={ctx} />}
+        {(hasPermission(db, currentUser, 'rental_equipment') || hasPermission(db, currentUser, 'rental_clients') || hasPermission(db, currentUser, 'rental_purchases') || hasPermission(db, currentUser, 'rental_revisions') || hasPermission(db, currentUser, 'rental_report')) && <RentalHomeBanner ctx={ctx} />}
         {!hidden('w_sales') && <SalesReportHomeTile ctx={ctx} />}
 
         {!hidden('w_shipment') && <ShipmentRegistryHomeTile ctx={ctx} />}

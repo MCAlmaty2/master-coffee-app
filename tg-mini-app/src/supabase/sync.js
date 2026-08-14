@@ -53,6 +53,11 @@ export const SYNC_TABLES = {
   mppComments:        { table: 'mpp_comments',        pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_6M } },
   deferredClients:    { table: 'deferred_clients',    pk: 'id' },
   deferredShipments:  { table: 'deferred_shipments',  pk: 'id' },
+  rentalEquipment:    { table: 'rental_equipment',    pk: 'id' },
+  rentalClients:      { table: 'rental_clients',      pk: 'id' },
+  rentalPurchases:    { table: 'rental_purchases',    pk: 'id' },
+  rentalMovements:    { table: 'rental_movements',    pk: 'id' },
+  rentalRevisions:    { table: 'rental_revisions',    pk: 'id' },
 };
 
 /**
