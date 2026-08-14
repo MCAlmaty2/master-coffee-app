@@ -376,7 +376,7 @@ function DealDetailScreen({ ctx, dealId, canManage }) {
   const productsTotal = products.reduce((s, p) => s + (Number(p.price) || 0) * (Number(p.quantity) || 1), 0);
 
   const handleMove = (newStage) => { updateMppDeal(dealId, { stage: newStage }); showToast('Стадия изменена'); setMoveModal(false); };
-  const handleDelete = () => { if (!confirm('Удалить сделку?')) return; deleteMppDeal(dealId); showToast('Удалено'); goBack(); };
+  const handleDelete = async () => { if (!confirm('Удалить сделку?')) return; const r = await deleteMppDeal(dealId); if (r?.error) { showToast(r.error); return; } showToast('Удалено'); goBack(); };
 
   return (
     <div>

@@ -205,9 +205,10 @@ function EquipmentDetailScreen({ ctx, equipmentId }) {
   if (!eq) return <div className="p-4 text-sm" style={{ color: 'var(--mc-muted)' }}>Оборудование не найдено</div>;
   const clientName = (id) => clients.find(c => c.id === id)?.name || '—';
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!confirm('Удалить оборудование?')) return;
-    ctx.deleteRentalEquipment(equipmentId);
+    const r = await ctx.deleteRentalEquipment(equipmentId);
+    if (r?.error) return;
     ctx.navigate({ name: 'rental_home' });
   };
 

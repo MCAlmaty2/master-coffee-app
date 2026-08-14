@@ -233,9 +233,9 @@ function ClientDetailScreen({ ctx, clientId }) {
     setPayAmount('');
   };
 
-  const handleDelete = (shipmentId) => {
+  const handleDelete = async (shipmentId) => {
     if (!confirm('Удалить отгрузку?')) return;
-    const r = ctx.deleteDeferredShipment(shipmentId);
+    const r = await ctx.deleteDeferredShipment(shipmentId);
     if (r?.error) return showToast(r.error);
     showToast('Отгрузка удалена');
   };

@@ -3034,14 +3034,34 @@ function App() {
     return { ok: true, id };
   };
 
-  const deleteMppDeal = (dealId) => {
+  const deleteMppDeal = async (dealId) => {
     if (!hasPermission(db, currentUser, 'mpp_manage')) return { error: 'Нет прав' };
-    setDb(d => ({
-      ...d,
-      mppDeals: (d.mppDeals || []).filter(deal => deal.id !== dealId),
-      mppActivities: (d.mppActivities || []).filter(a => a.deal_id !== dealId),
-    }));
-    return { ok: true };
+    try {
+      const { error: eAct } = await supabase.from('mpp_activities').delete().eq('deal_id', dealId);
+      if (eAct) throw eAct;
+      const { error: eProd } = await supabase.from('mpp_deal_products').delete().eq('deal_id', dealId);
+      if (eProd) throw eProd;
+      const { error: eComm } = await supabase.from('mpp_comments').delete().eq('deal_id', dealId);
+      if (eComm) throw eComm;
+      await deleteRow('mppDeals', dealId);
+      setDb(d => ({
+        ...d,
+        mppDeals: (d.mppDeals || []).filter(deal => deal.id !== dealId),
+        mppActivities: (d.mppActivities || []).filter(a => a.deal_id !== dealId),
+        mppDealProducts: (d.mppDealProducts || []).filter(p => p.deal_id !== dealId),
+        mppComments: (d.mppComments || []).filter(c => c.deal_id !== dealId),
+      }));
+      if (syncSnapshotRef) {
+        syncSnapshotRef.current.mppDeals = (syncSnapshotRef.current.mppDeals || []).filter(d => d.id !== dealId);
+        syncSnapshotRef.current.mppActivities = (syncSnapshotRef.current.mppActivities || []).filter(a => a.deal_id !== dealId);
+        syncSnapshotRef.current.mppDealProducts = (syncSnapshotRef.current.mppDealProducts || []).filter(p => p.deal_id !== dealId);
+        syncSnapshotRef.current.mppComments = (syncSnapshotRef.current.mppComments || []).filter(c => c.deal_id !== dealId);
+      }
+      return { ok: true };
+    } catch (e) {
+      reportError({ kind: 'manual', source: 'mpp', message: `Ошибка удаления сделки: ${e.message}` });
+      return { error: e.message };
+    }
   };
 
   const createMppTask = (data) => {
@@ -3278,14 +3298,21 @@ function App() {
     return { ok: true, fullyPaid };
   };
 
-  const deleteDeferredShipment = (shipmentId) => {
+  const deleteDeferredShipment = async (shipmentId) => {
     const isAdmin = currentUser.role === 'admin' || currentUser.role === 'director';
     const existing = (db.deferredShipments || []).find(s => s.id === shipmentId);
     const client = existing && (db.deferredClients || []).find(c => c.id === existing.client_id);
     const isMyClient = client && client.manager_id === currentUser.id;
     if (!isAdmin && !isMyClient && !hasPermission(db, currentUser, 'deferred_manage')) return { error: 'Нет прав' };
-    setDb(d => ({ ...d, deferredShipments: (d.deferredShipments || []).filter(s => s.id !== shipmentId) }));
-    return { ok: true };
+    try {
+      await deleteRow('deferredShipments', shipmentId);
+      setDb(d => ({ ...d, deferredShipments: (d.deferredShipments || []).filter(s => s.id !== shipmentId) }));
+      if (syncSnapshotRef) syncSnapshotRef.current.deferredShipments = (syncSnapshotRef.current.deferredShipments || []).filter(s => s.id !== shipmentId);
+      return { ok: true };
+    } catch (e) {
+      reportError({ kind: 'manual', source: 'deferred', message: `Ошибка удаления отгрузки: ${e.message}` });
+      return { error: e.message };
+    }
   };
 
   /* ═══════════ Арендное оборудование ═══════════ */
@@ -3305,16 +3332,26 @@ function App() {
     if (!isAdm && !hasPermission(db, currentUser, 'rental_equipment')) return { error: 'Нет прав' };
     const existing = (db.rentalEquipment || []).find(e => e.id === eqId);
     if (!existing) return { error: 'Не найдено' };
-    const updated = { ...existing, ...data, residual_value: Number(data.residual_value) || 0, updated_at: todayISO() };
-    setDb(d => ({ ...d, rentalEquipment: (d.rentalEquipment || []).map(e => e.id === eqId ? updated : e) }));
+    setDb(d => {
+      const fresh = (d.rentalEquipment || []).find(e => e.id === eqId) || existing;
+      const updated = { ...fresh, ...data, residual_value: Number(data.residual_value) || 0, updated_at: todayISO() };
+      return { ...d, rentalEquipment: (d.rentalEquipment || []).map(e => e.id === eqId ? updated : e) };
+    });
     return { ok: true };
   };
 
-  const deleteRentalEquipment = (eqId) => {
+  const deleteRentalEquipment = async (eqId) => {
     const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
     if (!isAdm && !hasPermission(db, currentUser, 'rental_equipment')) return { error: 'Нет прав' };
-    setDb(d => ({ ...d, rentalEquipment: (d.rentalEquipment || []).filter(e => e.id !== eqId) }));
-    return { ok: true };
+    try {
+      await deleteRow('rentalEquipment', eqId);
+      setDb(d => ({ ...d, rentalEquipment: (d.rentalEquipment || []).filter(e => e.id !== eqId) }));
+      if (syncSnapshotRef) syncSnapshotRef.current.rentalEquipment = (syncSnapshotRef.current.rentalEquipment || []).filter(e => e.id !== eqId);
+      return { ok: true };
+    } catch (e) {
+      reportError({ kind: 'manual', source: 'rental', message: `Ошибка удаления оборудования: ${e.message}` });
+      return { error: e.message };
+    }
   };
 
   const createRentalClient = (data) => {
@@ -3332,8 +3369,11 @@ function App() {
     if (!isAdm && !hasPermission(db, currentUser, 'rental_clients')) return { error: 'Нет прав' };
     const existing = (db.rentalClients || []).find(c => c.id === clientId);
     if (!existing) return { error: 'Не найден' };
-    const updated = { ...existing, ...data, plan_kg: Number(data.plan_kg) || 0, plan_price_per_kg: Number(data.plan_price_per_kg) || 0, purchase_day: Number(data.purchase_day) || null, updated_at: todayISO() };
-    setDb(d => ({ ...d, rentalClients: (d.rentalClients || []).map(c => c.id === clientId ? updated : c) }));
+    setDb(d => {
+      const fresh = (d.rentalClients || []).find(c => c.id === clientId) || existing;
+      const updated = { ...fresh, ...data, plan_kg: Number(data.plan_kg) || 0, plan_price_per_kg: Number(data.plan_price_per_kg) || 0, purchase_day: Number(data.purchase_day) || null, updated_at: todayISO() };
+      return { ...d, rentalClients: (d.rentalClients || []).map(c => c.id === clientId ? updated : c) };
+    });
     return { ok: true };
   };
 
@@ -3351,8 +3391,11 @@ function App() {
     if (!isAdm && !hasPermission(db, currentUser, 'rental_purchases')) return { error: 'Нет прав' };
     const existing = (db.rentalPurchases || []).find(p => p.id === purchaseId);
     if (!existing) return { error: 'Не найдено' };
-    const updated = { ...existing, kg_fact: Number(data.kg_fact) || 0, amount_fact: Number(data.amount_fact) || 0, updated_at: todayISO() };
-    setDb(d => ({ ...d, rentalPurchases: (d.rentalPurchases || []).map(p => p.id === purchaseId ? updated : p) }));
+    setDb(d => {
+      const fresh = (d.rentalPurchases || []).find(p => p.id === purchaseId) || existing;
+      const updated = { ...fresh, kg_fact: Number(data.kg_fact) || 0, amount_fact: Number(data.amount_fact) || 0, updated_at: todayISO() };
+      return { ...d, rentalPurchases: (d.rentalPurchases || []).map(p => p.id === purchaseId ? updated : p) };
+    });
     return { ok: true };
   };
 
@@ -3365,16 +3408,19 @@ function App() {
     const now = todayISO();
     const movement = { id, equipment_id: data.equipment_id, movement_type: data.movement_type, from_location: eq.current_location || (eq.current_client_id ? 'client' : 'office'), to_location: data.to_location || '', client_id: data.client_id || null, performed_by: currentUser.id, doc_ref: data.doc_ref || null, notes: data.notes || null, moved_at: now, created_at: now };
     const statusMap = { to_client: 'rented', from_client: 'in_office', to_repair: 'in_repair', from_repair: 'in_office', write_off: 'written_off' };
-    const newStatus = statusMap[data.movement_type] || eq.status;
-    const clientId = data.movement_type === 'to_client' ? data.client_id : (data.movement_type === 'from_client' ? null : eq.current_client_id);
-    const clientObj = clientId ? (db.rentalClients || []).find(c => c.id === clientId) : null;
-    const loc = data.movement_type === 'to_client' ? (clientObj?.name || '') : (data.movement_type === 'from_client' || data.movement_type === 'from_repair' ? 'Офис' : eq.current_location);
-    const updatedEq = { ...eq, status: newStatus, current_client_id: clientId || null, current_location: loc, updated_at: now };
-    setDb(d => ({
-      ...d,
-      rentalMovements: [movement, ...(d.rentalMovements || [])],
-      rentalEquipment: (d.rentalEquipment || []).map(e => e.id === eq.id ? updatedEq : e),
-    }));
+    setDb(d => {
+      const freshEq = (d.rentalEquipment || []).find(e => e.id === data.equipment_id) || eq;
+      const newStatus = statusMap[data.movement_type] || freshEq.status;
+      const clientId = data.movement_type === 'to_client' ? data.client_id : (data.movement_type === 'from_client' ? null : freshEq.current_client_id);
+      const clientObj = clientId ? (d.rentalClients || []).find(c => c.id === clientId) : null;
+      const loc = data.movement_type === 'to_client' ? (clientObj?.name || '') : (data.movement_type === 'from_client' || data.movement_type === 'from_repair' ? 'Офис' : freshEq.current_location);
+      const updatedEq = { ...freshEq, status: newStatus, current_client_id: clientId || null, current_location: loc, updated_at: now };
+      return {
+        ...d,
+        rentalMovements: [movement, ...(d.rentalMovements || [])],
+        rentalEquipment: (d.rentalEquipment || []).map(e => e.id === data.equipment_id ? updatedEq : e),
+      };
+    });
     return { ok: true, id };
   };
 
@@ -3864,12 +3910,19 @@ function App() {
     }));
   };
 
-  const deleteCustomRole = (roleKey) => {
+  const deleteCustomRole = async (roleKey) => {
     if (SYSTEM_ROLES.includes(roleKey)) return { error: 'Системную роль нельзя удалить' };
     const usersWithRole = db.users.filter(u => u.role === roleKey && u.active);
     if (usersWithRole.length > 0) return { error: `Сначала переназначьте ${usersWithRole.length} пользователей с этой ролью` };
-    setDb(d => ({ ...d, roleDefinitions: d.roleDefinitions.filter(r => r.key !== roleKey) }));
-    return { ok: true };
+    try {
+      await deleteRow('roleDefinitions', roleKey);
+      setDb(d => ({ ...d, roleDefinitions: d.roleDefinitions.filter(r => r.key !== roleKey) }));
+      if (syncSnapshotRef) syncSnapshotRef.current.roleDefinitions = (syncSnapshotRef.current.roleDefinitions || []).filter(r => r.key !== roleKey);
+      return { ok: true };
+    } catch (e) {
+      reportError({ kind: 'manual', source: 'roles', message: `Ошибка удаления роли: ${e.message}` });
+      return { error: e.message };
+    }
   };
 
   /* ═══════════ Помол кофе ═══════════ */
@@ -11963,9 +12016,9 @@ function AdminRolesScreen({ ctx }) {
             <div className="flex gap-2">
               <button onClick={() => setDeleteConfirmOpen(false)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
               <button
-                onClick={() => {
-                  const r = deleteCustomRole(selected.key);
-                  if (r.error) { showToast(r.error); return; }
+                onClick={async () => {
+                  const r = await deleteCustomRole(selected.key);
+                  if (r?.error) { showToast(r.error); return; }
                   showToast('Роль удалена');
                   setDeleteConfirmOpen(false);
                   setSelectedKey(roles[0]?.key);
