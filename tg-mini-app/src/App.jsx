@@ -1308,6 +1308,26 @@ function App() {
     return () => { channels.forEach(c => supabase.removeChannel(c)); };
   }, [bootStatus.phase]);
 
+  // ─── Буфер ошибок для повторной отправки при восстановлении сети ───
+  const pendingErrorReports = React.useRef([]);
+  useEffect(() => {
+    const flush = () => {
+      const batch = pendingErrorReports.current.splice(0);
+      batch.forEach(entry => {
+        supabase.from('error_reports').insert({
+          id: entry.id, reporter_id: currentUser?.id || null,
+          reporter_name: currentUser ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim() : 'Гость',
+          kind: entry.kind, source: entry.source, message: entry.message,
+          details: entry.details, route_name: entry.route, at: entry.at,
+        }).then(({ error }) => {
+          if (error) console.warn('[reportError flush] не удалось:', error.message);
+        }).catch(() => { pendingErrorReports.current.push(entry); });
+      });
+    };
+    window.addEventListener('online', flush);
+    return () => window.removeEventListener('online', flush);
+  }, [currentUser]);
+
   // ─── Авто-синхронизация: когда меняются массивы в db — шлём diff в Supabase ───
   // Хранит снимок предыдущего состояния для каждого синхронизируемого ключа.
   const syncSnapshotRef = React.useRef({});
@@ -1467,20 +1487,19 @@ function App() {
       return [...prev, entry];
     });
     // 2. Параллельно отправляем в Supabase, чтобы админ видел
-    try {
+    const sendReport = (reportEntry) => {
       supabase.from('error_reports').insert({
-        id: entry.id,
+        id: reportEntry.id,
         reporter_id:   currentUser?.id || null,
         reporter_name: currentUser ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim() : 'Не залогинен',
-        kind:          entry.kind,
-        source:        entry.source,
-        message:       entry.message,
-        details:       entry.details,
-        route_name:    entry.route,
-        at:            entry.at,
+        kind:          reportEntry.kind,
+        source:        reportEntry.source,
+        message:       reportEntry.message,
+        details:       reportEntry.details,
+        route_name:    reportEntry.route,
+        at:            reportEntry.at,
       }).then(({ error }) => {
         if (!error) {
-          // 3. Личный Telegram только для админа (не в группу)
           const adminUser = db.users.find(u => u.role === 'admin');
           if (adminUser) {
             const reporter = currentUser
@@ -1488,33 +1507,33 @@ function App() {
               : 'Гость';
             sendPrivateTelegram(
               adminUser,
-              `🚨 <b>Ошибка в приложении</b>\nПользователь: ${reporter}\nМаршрут: ${entry.route || '—'}\n\n${entry.message}`,
+              `🚨 <b>Ошибка в приложении</b>\nПользователь: ${reporter}\nМаршрут: ${reportEntry.route || '—'}\n\n${reportEntry.message}`,
             );
           }
+          return;
         }
-        if (error) {
-          // eslint-disable-next-line no-console
-          console.error('[reportError] не удалось записать в БД:', error);
-          // Показываем пользователю что ошибка не доехала до админа
-          const diag = error.message?.includes('relation') || error.message?.includes('does not exist')
-            ? 'Таблица error_reports не создана. Админ должен запустить MIGRATE_ERROR_REPORTS.sql в Supabase.'
-            : error.message?.includes('permission') || error.message?.includes('policy') || error.code === '42501'
-              ? 'Нет прав на запись в журнал ошибок. Проверь RLS-политику для anon на таблицу error_reports.'
-              : error.message || JSON.stringify(error);
-          setErrors(prev => [...prev, {
-            id: uid(),
-            kind: 'sync',
-            source: 'error_reports',
-            message: `⚠️ Ошибка выше НЕ попала к админу: ${diag}`,
-            details: { original_error: error, original_message: entry.message },
-            route: entry.route,
-            at: new Date().toISOString(),
-          }]);
+        console.warn('[reportError] не удалось записать в БД:', error);
+        if (String(error.message || '').includes('Failed to fetch')) {
+          pendingErrorReports.current.push(reportEntry);
+          return;
         }
+        const diag = error.message?.includes('relation') || error.message?.includes('does not exist')
+          ? 'Таблица error_reports не создана в Supabase.'
+          : error.message?.includes('permission') || error.message?.includes('policy') || error.code === '42501'
+            ? 'Нет прав на запись в журнал ошибок (RLS).'
+            : error.message || JSON.stringify(error);
+        setErrors(prev => [...prev, {
+          id: uid(), kind: 'sync', source: 'error_reports',
+          message: `⚠️ Ошибка выше НЕ попала к админу: ${diag}`,
+          details: { original_error: error, original_message: reportEntry.message },
+          route: reportEntry.route, at: new Date().toISOString(),
+        }]);
+      }).catch(e => {
+        console.warn('[reportError] сетевая ошибка, буферизуем:', e.message);
+        pendingErrorReports.current.push(reportEntry);
       });
-    } catch (e) {
-      console.error('[reportError] сбой:', e);
-    }
+    };
+    sendReport(entry);
   };
 
   const dismissError = (id) => setErrors(prev => prev.filter(e => e.id !== id));
