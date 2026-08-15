@@ -1703,10 +1703,6 @@ function App() {
         if (newStatus === 'shipped') {
           updated.shipped_at = meta.shipped_at;
           updated.realization_doc_no = meta.doc_no;
-          if (o.delivery_method !== 'pickup') {
-            updated.status = 'archived';
-            updated.log = [...updated.log, { event: 'status', from: 'shipped', to: 'archived', actor: currentUser.id, at: new Date().toISOString(), meta: { auto: true } }];
-          }
         }
         if (newStatus === 'paid' && meta.paid_amount != null) {
           updated.paid_amount = meta.paid_amount;
@@ -1769,21 +1765,22 @@ function App() {
           total: fmtNum(updatedOrder.total_amount),
         }));
       }
-      if (newStatus === 'shipped' && updatedOrder?.delivery_method === 'pickup') {
-        // → Storage and Delivery: отгружен заказ-самовывоз
-        tgEntries.push(makeTgLogEntry(d, 'storage_shipped_pickup', {
-          order_number: updatedOrder.order_number,
-          doc_no: updatedOrder.realization_doc_no ? ` · ${updatedOrder.realization_doc_no}` : '',
-          client: updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name,
-          pickup_code: updatedOrder.pickup_code || '—',
-          total: fmtNum(updatedOrder.total_amount),
-        }));
-        // In-app: уведомить всех активных кладовщиков о новом самовывозе
+      if (newStatus === 'shipped' && updatedOrder) {
+        const isPickup = updatedOrder.delivery_method === 'pickup';
+        if (isPickup) {
+          tgEntries.push(makeTgLogEntry(d, 'storage_shipped_pickup', {
+            order_number: updatedOrder.order_number,
+            doc_no: updatedOrder.realization_doc_no ? ` · ${updatedOrder.realization_doc_no}` : '',
+            client: updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name,
+            pickup_code: updatedOrder.pickup_code || '—',
+            total: fmtNum(updatedOrder.total_amount),
+          }));
+        }
         const clientName = updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name;
         d.users.filter(u => u.active && u.role === 'warehouse' && u.id !== currentUser.id).forEach(wu => {
           newNotifs.push(makeNotif(d, {
             recipient_id: wu.id,
-            title: '📦 Новый самовывоз',
+            title: isPickup ? '📦 Новый самовывоз' : '🚚 Новая доставка',
             body: `${updatedOrder.order_number} · ${clientName}`,
             link_kind: 'order', link_id: orderId,
           }));
@@ -6337,12 +6334,9 @@ function DashboardHome({ ctx, title }) {
     const pendingUsers = db.users.filter(u => u.role === 'pending');
     const unread = db.notifications.filter(n => n.recipient_id === userId && !n.read).length;
 
-    // Специально для склада: заявки на сборку и выдачу
     const isWarehouse = currentUser.role === 'warehouse' || currentUser.role === 'admin';
-    const ordersToAssemble = db.orders.filter(o => o.status === 'paid');           // оплачено — нужно собрать
-    const ordersToShip     = db.orders.filter(o => o.status === 'shipped' && o.delivery_method === 'delivery'); // готово к доставке
-    const ordersAwaitingPickup = db.orders.filter(o => o.status === 'shipped' && o.delivery_method === 'pickup');
-    const ordersReadyPickup = db.orders.filter(o => o.status === 'ready');         // самовывоз, ждёт клиента
+    const ordersToAssemble = db.orders.filter(o => o.status === 'shipped');
+    const ordersReadyPickup = db.orders.filter(o => o.status === 'ready');
 
     // Списания на складе: invoiced — нужно собрать; prepared — нужно выдать
     const warehouseWOToAssemble = isWarehouse ? allWriteOffs.filter(w => w.status === 'invoiced') : [];
@@ -6353,8 +6347,6 @@ function DashboardHome({ ctx, title }) {
       isWarehouse,
       warehouse: {
         toAssemble: ordersToAssemble.length,
-        toShip: ordersToShip.length,
-        awaitingPickup: ordersAwaitingPickup.length,
         readyPickup: ordersReadyPickup.length,
         writeOffsToAssemble: warehouseWOToAssemble.length,
         writeOffsToDeliver: warehouseWOToDeliver.length,
@@ -6634,38 +6626,20 @@ function DashboardHome({ ctx, title }) {
       )}
 
       {/* СКЛАД — приоритетные плитки на сборку и выдачу (только ТК) */}
-      {(userBase !== 'all' ? userBase === 'tk' : viewBase === 'tk') && stats.isWarehouse && (stats.warehouse.toAssemble + stats.warehouse.toShip + stats.warehouse.awaitingPickup + stats.warehouse.readyPickup + stats.warehouse.writeOffsToAssemble + stats.warehouse.writeOffsToDeliver) > 0 && (
+      {(userBase !== 'all' ? userBase === 'tk' : viewBase === 'tk') && stats.isWarehouse && (stats.warehouse.toAssemble + stats.warehouse.readyPickup + stats.warehouse.writeOffsToAssemble + stats.warehouse.writeOffsToDeliver) > 0 && (
         <div className="mb-6">
           <div className="text-xs uppercase font-bold mb-2" style={{ color: 'var(--mc-muted)', letterSpacing: '0.08em' }}>
             🏭 Работа склада — сегодня
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             <button
-              onClick={() => navigate({ name: 'orders_list', filterStatus: 'paid' })}
+              onClick={() => navigate({ name: 'warehouse' })}
               className="rounded-xl p-3 text-left transition hover:shadow-md"
               style={{ background: stats.warehouse.toAssemble > 0 ? '#FEF3C7' : 'white', border: '1.5px solid ' + (stats.warehouse.toAssemble > 0 ? '#F59E0B' : 'var(--mc-border)') }}
             >
               <div className="text-2xl font-bold" style={{ color: '#F59E0B' }}>{stats.warehouse.toAssemble}</div>
-              <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>К сборке</div>
-              <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>оплачены</div>
-            </button>
-            <button
-              onClick={() => navigate({ name: 'orders_list', filterStatus: 'shipped' })}
-              className="rounded-xl p-3 text-left transition hover:shadow-md"
-              style={{ background: stats.warehouse.toShip > 0 ? '#DBEAFE' : 'white', border: '1.5px solid ' + (stats.warehouse.toShip > 0 ? '#3390EC' : 'var(--mc-border)') }}
-            >
-              <div className="text-2xl font-bold" style={{ color: '#3390EC' }}>{stats.warehouse.toShip}</div>
-              <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>К отгрузке</div>
-              <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>доставка</div>
-            </button>
-            <button
-              onClick={() => navigate({ name: 'warehouse' })}
-              className="rounded-xl p-3 text-left transition hover:shadow-md"
-              style={{ background: stats.warehouse.awaitingPickup > 0 ? '#E0E7FF' : 'white', border: '1.5px solid ' + (stats.warehouse.awaitingPickup > 0 ? '#6366F1' : 'var(--mc-border)') }}
-            >
-              <div className="text-2xl font-bold" style={{ color: '#6366F1' }}>{stats.warehouse.awaitingPickup}</div>
-              <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>Самовывоз</div>
-              <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>подготовить</div>
+              <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>На сборке</div>
+              <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>отгружены</div>
             </button>
             <button
               onClick={() => navigate({ name: 'warehouse' })}
@@ -6881,8 +6855,7 @@ function SalesHome({ ctx }) {
 
 function WarehouseHome({ ctx }) {
   const { db, changeStatus, closePickupOrder, archiveDeliveredOrder, showToast, navigate } = ctx;
-  const pickupShipped    = db.orders.filter(o => o.status === 'shipped' && o.delivery_method === 'pickup');
-  const deliveryShipped  = db.orders.filter(o => o.status === 'shipped' && o.delivery_method === 'delivery');
+  const allShipped = db.orders.filter(o => o.status === 'shipped');
   const readyToPickup    = db.orders.filter(o => o.status === 'ready');
   const [pickupModal, setPickupModal] = useState(null);
   const [enteredCode, setEnteredCode] = useState('');
@@ -6896,7 +6869,7 @@ function WarehouseHome({ ctx }) {
     <div>
       <PageHeader
         title="Склад"
-        subtitle={`Готовых: ${readyToPickup.length} · самовывоз: ${pickupShipped.length} · доставка: ${deliveryShipped.length}${totalWriteoffs > 0 ? ` · списаний: ${totalWriteoffs}` : ''}`}
+        subtitle={`На сборке: ${allShipped.length} · готовых: ${readyToPickup.length}${totalWriteoffs > 0 ? ` · списаний: ${totalWriteoffs}` : ''}`}
       />
 
       {/* Списания к сборке / выдаче */}
@@ -6932,7 +6905,7 @@ function WarehouseHome({ ctx }) {
         </div>
       )}
 
-      {readyToPickup.length === 0 && pickupShipped.length === 0 && deliveryShipped.length === 0 && totalWriteoffs === 0 && (
+      {readyToPickup.length === 0 && allShipped.length === 0 && totalWriteoffs === 0 && (
         <Empty icon={Package} title="Сейчас нечего выдавать" subtitle="Когда появятся заказы или списания к сборке — они отобразятся здесь" />
       )}
 
@@ -6970,80 +6943,62 @@ function WarehouseHome({ ctx }) {
         </>
       )}
 
-      {pickupShipped.length > 0 && (
-        <>
-          <h2 className="display-font text-xl mb-3" style={{ color: 'var(--mc-text)' }}>Ожидают подготовки</h2>
-          <div className="space-y-3">
-            {pickupShipped.map(o => (
-              <div key={o.id} className="rounded-xl p-4 bg-white" style={{ border: '1px solid var(--mc-border)' }}>
-                <div className="font-bold mono-font text-sm mb-1" style={{ color: '#3390EC' }}>№{o.order_number}</div>
-                <div className="font-semibold mb-1" style={{ color: 'var(--mc-text)' }}>
-                  {o.client_type === 'individual' ? o.full_name : o.company_name}
-                </div>
-                <div className="text-sm mb-3" style={{ color: 'var(--mc-muted)' }}>
-                  {o.items.map(it => `${it.name} — ${it.quantity} ${it.unit}`).join(' · ')}
-                </div>
-                <button
-                  onClick={() => { changeStatus(o.id, 'ready'); showToast('Заказ готов · код сгенерирован'); }}
-                  className="w-full py-2.5 rounded-lg font-semibold text-white text-sm"
-                  style={{ background: '#297b8a' }}
-                >
-                  Подтвердить готовность
-                </button>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Заказы на доставку — отгружены, ожидают подтверждения доставки */}
-      {deliveryShipped.length > 0 && (
+      {allShipped.length > 0 && (
         <>
           <h2 className="display-font text-xl mb-3" style={{ color: 'var(--mc-text)' }}>
-            В доставке
-            <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: '#E0F2FE', color: '#0284C7' }}>
-              {deliveryShipped.length}
+            На сборке
+            <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: '#FEF3C7', color: '#D97706' }}>
+              {allShipped.length}
             </span>
           </h2>
           <div className="space-y-3 mb-6">
-            {deliveryShipped.map(o => (
-              <div key={o.id} className="rounded-xl p-4 bg-white" style={{ border: '1px solid #BAE6FD' }}>
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold mono-font text-sm mb-1" style={{ color: '#0284C7' }}>№{o.order_number}</div>
-                    <div className="font-semibold truncate" style={{ color: 'var(--mc-text)' }}>
-                      {o.client_type === 'individual' ? o.full_name : o.company_name}
+            {allShipped.map(o => {
+              const isPickup = o.delivery_method === 'pickup';
+              return (
+                <div key={o.id} className="rounded-xl p-4 bg-white" style={{ border: `1px solid ${isPickup ? 'var(--mc-border)' : '#BAE6FD'}` }}>
+                  <div className="flex items-start justify-between gap-3 mb-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold mono-font text-sm mb-1" style={{ color: isPickup ? '#3390EC' : '#0284C7' }}>№{o.order_number}</div>
+                      <div className="font-semibold truncate" style={{ color: 'var(--mc-text)' }}>
+                        {o.client_type === 'individual' ? o.full_name : o.company_name}
+                      </div>
                     </div>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: isPickup ? '#F0FDF4' : '#E0F2FE', color: isPickup ? '#16A34A' : '#0284C7' }}>
+                      {isPickup ? 'Самовывоз' : 'Доставка'}
+                    </span>
                   </div>
-                  <button
-                    onClick={() => navigate({ name: 'order_detail', orderId: o.id })}
-                    className="text-xs px-3 py-1.5 rounded-lg font-semibold flex-shrink-0"
-                    style={{ background: '#F1F5F9', color: 'var(--mc-muted)' }}
-                  >
-                    Детали
-                  </button>
-                </div>
-                <div className="text-sm mb-3" style={{ color: 'var(--mc-muted)' }}>
-                  {o.items.map(it => `${it.name} — ${it.quantity} ${it.unit}`).join(' · ')}
-                </div>
-                {o.address && (
-                  <div className="text-xs mb-3 flex items-center gap-1" style={{ color: 'var(--mc-muted)' }}>
-                    <Truck size={12} /> {o.address}
+                  <div className="text-sm mb-2" style={{ color: 'var(--mc-muted)' }}>
+                    {o.items.map(it => `${it.name} — ${it.quantity} ${it.unit}`).join(' · ')}
                   </div>
-                )}
-                <button
-                  onClick={() => {
-                    const res = archiveDeliveredOrder(o.id);
-                    if (res.error) showToast(res.error);
-                    else showToast('Доставка подтверждена · заказ в архиве');
-                  }}
-                  className="w-full py-2.5 rounded-lg font-semibold text-white text-sm"
-                  style={{ background: '#0284C7' }}
-                >
-                  ✓ Подтвердить доставку
-                </button>
-              </div>
-            ))}
+                  {!isPickup && o.address && (
+                    <div className="text-xs mb-2 flex items-center gap-1" style={{ color: 'var(--mc-muted)' }}>
+                      <Truck size={12} /> {o.address}
+                    </div>
+                  )}
+                  {isPickup ? (
+                    <button
+                      onClick={() => { changeStatus(o.id, 'ready'); showToast('Заказ готов · код сгенерирован'); }}
+                      className="w-full py-2.5 rounded-lg font-semibold text-white text-sm"
+                      style={{ background: '#297b8a' }}
+                    >
+                      Собрано · сгенерировать код
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        const res = archiveDeliveredOrder(o.id);
+                        if (res.error) showToast(res.error);
+                        else showToast('Собрано · отправлено · заказ в архиве');
+                      }}
+                      className="w-full py-2.5 rounded-lg font-semibold text-white text-sm"
+                      style={{ background: '#0284C7' }}
+                    >
+                      Собрано · подтвердить отправку
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </>
       )}
@@ -7716,40 +7671,30 @@ function OrderDetailScreen({ ctx, orderId }) {
 
           {effectiveRole === 'warehouse' && order.status === 'shipped' && order.delivery_method === 'pickup' && (
             <button
-              onClick={() => { changeStatus(order.id, 'ready'); showToast('Заказ готов · код сгенерирован'); }}
+              onClick={() => { changeStatus(order.id, 'ready'); showToast('Собрано · код сгенерирован'); }}
               className="w-full py-3 rounded-lg font-semibold text-white"
               style={{ background: '#22C55E' }}
             >
-              <Package size={16} className="inline mr-1" /> Готов к выдаче — сгенерировать код
+              <Package size={16} className="inline mr-1" /> Собрано · сгенерировать код
             </button>
           )}
 
-          {/* Блок выдачи самовывоза по коду — для склада/админа когда статус 'ready' */}
-          {(currentUser.role === 'warehouse' || currentUser.role === 'admin') && order.status === 'ready' && order.delivery_method === 'pickup' && order.pickup_code && (
-            <PickupDeliverBlock order={order} closePickupOrder={closePickupOrder} showToast={showToast} />
+          {effectiveRole === 'warehouse' && order.status === 'shipped' && order.delivery_method === 'delivery' && (
+            <button
+              onClick={() => {
+                const r = archiveDeliveredOrder(order.id);
+                if (r?.error) showToast(r.error);
+                else { showToast('Собрано · отправлено · в архиве'); goBack(); }
+              }}
+              className="w-full py-3 rounded-lg font-semibold text-white"
+              style={{ background: '#0284C7' }}
+            >
+              <Truck size={16} className="inline mr-1" /> Собрано · подтвердить отправку
+            </button>
           )}
 
-          {/* Подтверждение доставки — для склада/админа когда статус 'shipped' + delivery */}
-          {(currentUser.role === 'warehouse' || currentUser.role === 'admin') && order.status === 'shipped' && order.delivery_method === 'delivery' && (
-            <div className="rounded-xl p-4" style={{ background: '#F0F9FF', border: '1.5px solid #BAE6FD' }}>
-              <div className="text-xs font-bold uppercase mb-2" style={{ color: '#0284C7', letterSpacing: '0.08em' }}>
-                Подтверждение доставки
-              </div>
-              <div className="text-sm mb-3" style={{ color: '#0369A1' }}>
-                Нажми когда курьер подтвердил доставку. Заказ перейдёт в архив, менеджеру придёт уведомление.
-              </div>
-              <button
-                onClick={() => {
-                  const r = archiveDeliveredOrder(order.id);
-                  if (r?.error) showToast(r.error);
-                  else { showToast('Доставка подтверждена · заказ в архиве'); goBack(); }
-                }}
-                className="w-full py-2.5 rounded-lg font-semibold text-white text-sm"
-                style={{ background: '#0284C7' }}
-              >
-                <Truck size={15} className="inline mr-1.5" /> Подтвердить доставку
-              </button>
-            </div>
+          {(currentUser.role === 'warehouse' || currentUser.role === 'admin') && order.status === 'ready' && order.delivery_method === 'pickup' && order.pickup_code && (
+            <PickupDeliverBlock order={order} closePickupOrder={closePickupOrder} showToast={showToast} />
           )}
         </div>
       </div>
