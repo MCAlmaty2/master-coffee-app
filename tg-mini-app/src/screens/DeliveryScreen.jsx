@@ -28,6 +28,15 @@ const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID)
 
 const SHIFT_LABEL = { morning: '☀️ Утренний', evening: '🌙 Вечерний' };
 
+const PAYMENT_NEEDS_COLLECTION = ['наличные при доставке', 'не оплачен', 'частично оплачен'];
+const needsPayment = (info) => info && PAYMENT_NEEDS_COLLECTION.includes(info.toLowerCase().trim());
+
+const DELIVERY_PAY_METHODS = {
+  cash:           { label: 'Наличные',       icon: '💵', color: '#16a34a' },
+  remote_invoice: { label: 'Удалённый счёт', icon: '📄', color: '#2563EB' },
+  card_qr:        { label: 'Карта / QR',     icon: '💳', color: '#7C3AED' },
+};
+
 const STATUS_CFG = {
   pending:   { bg: '#FEF9EE', text: '#92400E', border: '#FDE68A', label: 'Свободен'      },
   assigned:  { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', label: 'В работе'      },
@@ -213,7 +222,14 @@ function OrderRow({ order, action, onClick, dim, courierName }) {
           {order.extra_info}
         </div>
       )}
-      {order.payment_info && !isErrand && (
+      {order.accept_payment && !isErrand && (
+        <div style={{ fontSize: 9, fontWeight: 700, color: '#B45309', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginTop: 3 }}>
+          💰 Принять оплату{order.delivery_payment_method ? ` · ${DELIVERY_PAY_METHODS[order.delivery_payment_method]?.label || order.delivery_payment_method}` : ''}
+          {order.delivery_payment_method === 'cash' && !order.cash_confirmed_by && ' · ⏳ ждёт сдачи'}
+          {order.cash_confirmed_by && ' · ✓ наличные сданы'}
+        </div>
+      )}
+      {order.payment_info && !isErrand && !order.accept_payment && (
         <div style={{ fontSize: 9, color: '#C2410C', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginTop: 3 }}>
           💳 {order.payment_info}
         </div>
@@ -409,7 +425,7 @@ export function DeliveryNewRegistryScreen({ ctx }) {
         .select().single();
       if (regErr) throw regErr;
 
-      const orderRows = finalRows.map(r => ({ ...r, id: uid(), registry_id: reg.id, status: 'pending', created_at: new Date().toISOString() }));
+      const orderRows = finalRows.map(r => ({ ...r, id: uid(), registry_id: reg.id, status: 'pending', accept_payment: needsPayment(r.payment_info), created_at: new Date().toISOString() }));
       const { error: ordErr } = await supabase.from('delivery_orders').insert(orderRows);
       if (ordErr) throw ordErr;
 
@@ -697,6 +713,8 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
             db={db}
             currentUser={currentUser}
             canEdit={canDetail}
+            setDb={setDb}
+            showToast={showToast}
             onClose={() => setDetailOrder(null)}
             onAddressChange={async (newAddress) => {
               const oldAddress = detailOrder.address;
@@ -809,7 +827,14 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                   {order.extra_info}
                 </div>
               )}
-              {order.payment_info && !isErrand && (
+              {order.accept_payment && !isErrand && (
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#B45309', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginBottom: 4 }}>
+                  💰 Принять оплату{order.delivery_payment_method ? ` · ${DELIVERY_PAY_METHODS[order.delivery_payment_method]?.label}` : ''}
+                  {order.delivery_payment_method === 'cash' && !order.cash_confirmed_by && ' · ⏳ ждёт сдачи'}
+                  {order.cash_confirmed_by && ' · ✓ сданы'}
+                </div>
+              )}
+              {order.payment_info && !isErrand && !order.accept_payment && (
                 <div style={{ fontSize: 9, color: '#C2410C', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginBottom: 4 }}>
                   💳 {order.payment_info}
                 </div>
@@ -897,7 +922,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
   const [selected, setSelected] = useState(new Set());
   const [saving,  setSaving]  = useState(false);
   const [qForm,   setQForm]   = useState({
-    client: '', phone: '', address: '', city: 'Алматы', amount: '', payment_info: '', comment: '',
+    client: '', phone: '', address: '', city: 'Алматы', amount: '', payment_info: '', accept_payment: false, comment: '',
   });
   const [errandForm, setErrandForm] = useState({
     description: '', address: '', contact: '', phone: '', city: 'Алматы', comment: '',
@@ -970,6 +995,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
       city:         qForm.city.trim(),
       amount:       Number(qForm.amount) || 0,
       payment_info: qForm.payment_info.trim() || null,
+      accept_payment: qForm.accept_payment || needsPayment(qForm.payment_info),
       extra_info:   qForm.comment.trim(),
       status:       'pending',
       created_at:   now,
@@ -1155,6 +1181,14 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                   <option value="Не оплачен">Не оплачен</option>
                   <option value="Частично оплачен">Частично оплачен</option>
                 </select>
+              </div>
+              {/* Принять оплату */}
+              <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+                <div onClick={() => setQForm(f => ({ ...f, accept_payment: !f.accept_payment }))}
+                  style={{ width: 36, height: 20, borderRadius: 10, background: qForm.accept_payment ? '#297b8a' : '#CBD5E1', position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
+                  <div style={{ width: 16, height: 16, background: '#fff', borderRadius: '50%', position: 'absolute', top: 2, transition: 'transform .2s', transform: qForm.accept_payment ? 'translateX(18px)' : 'translateX(2px)', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: qForm.accept_payment ? '#297b8a' : '#64748b' }}>💰 Принять оплату при доставке</span>
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 {[['city', 'Город'], ['amount', 'Сумма, тг']].map(([field, label]) => (
@@ -1567,7 +1601,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
   const { db, navigate, currentUser, showToast, setDb, notify } = ctx;
   const order = (db.deliveryOrders || []).find(o => o.id === orderId);
 
-  const [cashOn,     setCashOn]     = useState(order?.cash_received   || false);
+  const [payMethod,  setPayMethod]  = useState(null);
   const [cashAmt,    setCashAmt]    = useState(order ? String(order.cash_amount || order.amount || '') : '');
   const [note,       setNote]       = useState(order?.courier_note    || '');
   const [failMode,   setFailMode]   = useState(false);
@@ -1577,17 +1611,16 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
   if (!order) return <div style={{ padding: 24, textAlign: 'center', color: 'var(--mc-muted)' }}>Заказ не найден</div>;
 
   const isDone = ['delivered', 'failed'].includes(order.status);
+  const requiresPay = order.accept_payment && !isDone;
 
   const finishRegistry = async (regId, updatedOrderId) => {
-    // Bug fix: query Supabase directly — local db.deliveryOrders may be stale
-    // or incomplete (vacuous truth: [].every() === true → registry closed prematurely).
     const { data: remoteOrders, error: fetchErr } = await supabase
       .from('delivery_orders')
       .select('id, status')
       .eq('registry_id', regId)
       .neq('id', updatedOrderId);
-    if (fetchErr) return; // can't confirm, leave registry open
-    if (!remoteOrders || remoteOrders.length === 0) return; // no other orders → nothing to check
+    if (fetchErr) return;
+    if (!remoteOrders || remoteOrders.length === 0) return;
     const allDone = remoteOrders.every(o => ['delivered', 'failed'].includes(o.status));
     if (!allDone) return;
     const now = new Date().toISOString();
@@ -1597,14 +1630,40 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
   };
 
   const markDelivered = async () => {
+    if (requiresPay && !payMethod) { showToast('Выберите способ оплаты', 'error'); return; }
     setSaving(true);
     const now = new Date().toISOString();
-    const upd = { status: 'delivered', cash_received: cashOn, cash_amount: cashOn ? (Number(cashAmt) || 0) : null, courier_note: note.trim() || null, delivered_at: now, delivered_by: currentUser.id };
+    const isCash = payMethod === 'cash';
+    const upd = {
+      status: 'delivered',
+      delivery_payment_method: requiresPay ? payMethod : null,
+      cash_received: isCash,
+      cash_amount: isCash ? (Number(cashAmt) || 0) : null,
+      courier_note: note.trim() || null,
+      delivered_at: now,
+      delivered_by: currentUser.id,
+    };
     const { error } = await supabase.from('delivery_orders').update(upd).eq('id', orderId);
     if (error) { showToast('Ошибка: ' + error.message, 'error'); setSaving(false); return; }
     setDb(d => ({ ...d, deliveryOrders: d.deliveryOrders.map(o => o.id === orderId ? { ...o, ...upd } : o) }));
 
-    // Авто-архив связанной заявки (если эта строка реестра привязана к заявке)
+    if (isCash && notify) {
+      const courierName = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim();
+      const amt = fmtNum(Number(cashAmt) || order.amount || 0);
+      const cashiers = (db.users || []).filter(u => u.active && u.role === 'cashier' && u.id !== currentUser.id);
+      const newNotifs = [];
+      for (const c of cashiers) {
+        const n = notify({
+          recipient_id: c.id,
+          title: '💵 Курьер принял наличные',
+          body: `${courierName} · ${order.client} · ${amt} тг — ожидает сдачи наличных`,
+          link_kind: 'delivery_cash', link_id: orderId,
+        });
+        if (n) newNotifs.push(n);
+      }
+      if (newNotifs.length) setDb(d => ({ ...d, notifications: [...newNotifs, ...(d.notifications || [])] }));
+    }
+
     if (order.source_order_id) {
       const src = (db.orders || []).find(o => o.id === order.source_order_id);
       if (src && src.status !== 'archived' && src.status !== 'cancelled') {
@@ -1612,7 +1671,6 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
         const srcUpd = { status: 'archived', delivered_at: now, log: newLog };
         await supabase.from('orders').update(srcUpd).eq('id', src.id);
         setDb(d => ({ ...d, orders: (d.orders || []).map(o => o.id === src.id ? { ...o, ...srcUpd } : o) }));
-        // Уведомить менеджера-автора заявки
         if (notify && src.created_by && src.created_by !== currentUser.id) {
           const clientName = src.client_type === 'individual' ? src.full_name : src.company_name;
           const notifObj = notify({
@@ -1621,7 +1679,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
             body: `${src.order_number} · ${clientName || ''} — доставлен и архивирован`,
             link_kind: 'order', link_id: src.id,
           });
-          setDb(d => ({ ...d, notifications: [notifObj, ...(d.notifications || [])] }));
+          if (notifObj) setDb(d => ({ ...d, notifications: [notifObj, ...(d.notifications || [])] }));
         }
       }
     }
@@ -1645,13 +1703,21 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
     setSaving(false);
   };
 
+  const canDeliver = !requiresPay || !!payMethod;
+
   return (
     <div style={{ background: 'var(--mc-bg)' }}>
       <ScreenHeader title={order.client} onBack={() => navigate({ name: 'courier_registry' })} />
       <div style={{ padding: 12 }}>
 
         <Card>
-          {order.payment_info && (
+          {order.accept_payment && (
+            <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '6px 10px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 13 }}>💰</span>
+              <span style={{ fontWeight: 700, fontSize: 12, color: '#B45309' }}>Принять оплату{order.payment_info ? ` · ${order.payment_info}` : ''}</span>
+            </div>
+          )}
+          {order.payment_info && !order.accept_payment && (
             <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8, padding: '6px 10px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 13 }}>💳</span>
               <span style={{ fontWeight: 700, fontSize: 12, color: '#C2410C' }}>{order.payment_info}</span>
@@ -1683,7 +1749,13 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
         {isDone ? (
           <div style={{ background: 'var(--mc-surface)', borderRadius: 12, padding: 16, textAlign: 'center', border: '1px solid var(--mc-border)' }}>
             {order.status === 'delivered'
-              ? <><CheckCircle2 size={36} color="#16a34a" style={{ margin: '0 auto 8px' }} /><div style={{ fontWeight: 700, color: '#16a34a', fontSize: 14 }}>Доставлен</div></>
+              ? <><CheckCircle2 size={36} color="#16a34a" style={{ margin: '0 auto 8px' }} /><div style={{ fontWeight: 700, color: '#16a34a', fontSize: 14 }}>Доставлен</div>
+                  {order.delivery_payment_method && (
+                    <div style={{ fontSize: 12, color: 'var(--mc-muted)', marginTop: 4 }}>
+                      {DELIVERY_PAY_METHODS[order.delivery_payment_method]?.icon} {DELIVERY_PAY_METHODS[order.delivery_payment_method]?.label}
+                      {order.delivery_payment_method === 'cash' && ` · ${fmtNum(order.cash_amount)} тг`}
+                    </div>
+                  )}</>
               : <><XCircle size={36} color="#dc2626" style={{ margin: '0 auto 8px' }} /><div style={{ fontWeight: 700, color: '#dc2626', fontSize: 14 }}>Не удалось доставить</div></>
             }
           </div>
@@ -1691,30 +1763,39 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
           <Card>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 10 }}>Отметить результат</div>
 
-            <div style={{ background: cashOn ? '#F0FDF4' : '#F5F7F8', border: `1px solid ${cashOn ? '#BBF7D0' : 'var(--mc-border)'}`, borderRadius: 10, padding: 10, marginBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: cashOn ? 10 : 0 }}>
-                <div onClick={() => setCashOn(v => !v)}
-                  style={{ width: 36, height: 20, borderRadius: 10, background: cashOn ? '#297b8a' : '#CBD5E1', position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
-                  <div style={{ width: 16, height: 16, background: '#fff', borderRadius: '50%', position: 'absolute', top: 2, transition: 'transform .2s', transform: cashOn ? 'translateX(18px)' : 'translateX(2px)', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+            {requiresPay && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#B45309', marginBottom: 6 }}>💰 Как оплатил клиент?</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {Object.entries(DELIVERY_PAY_METHODS).map(([key, { label, icon, color }]) => {
+                    const sel = payMethod === key;
+                    return (
+                      <button key={key} onClick={() => setPayMethod(key)}
+                        style={{ flex: 1, padding: '10px 4px', borderRadius: 10, border: `2px solid ${sel ? color : 'var(--mc-border)'}`,
+                          background: sel ? color + '12' : 'var(--mc-surface)', cursor: 'pointer', textAlign: 'center' }}>
+                        <div style={{ fontSize: 18, marginBottom: 2 }}>{icon}</div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: sel ? color : 'var(--mc-muted)' }}>{label}</div>
+                      </button>
+                    );
+                  })}
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, color: cashOn ? '#16a34a' : '#64748b' }}>💵 Получены наличные</span>
+                {payMethod === 'cash' && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 4 }}>Сумма наличных (тг)</div>
+                    <input value={cashAmt} onChange={e => setCashAmt(e.target.value)} type="number"
+                      style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-surface)', border: '1px solid #BBF7D0', borderRadius: 10, fontSize: 14, fontWeight: 700, color: '#16a34a', boxSizing: 'border-box' }} />
+                  </div>
+                )}
               </div>
-              {cashOn && (
-                <>
-                  <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 4 }}>Сумма наличных (тг)</div>
-                  <input value={cashAmt} onChange={e => setCashAmt(e.target.value)} type="number"
-                    style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-surface)', border: '1px solid #BBF7D0', borderRadius: 10, fontSize: 14, fontWeight: 700, color: '#16a34a' }} />
-                </>
-              )}
-            </div>
+            )}
 
             <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 4 }}>Комментарий (необязательно)</div>
             <input value={note} onChange={e => setNote(e.target.value)} placeholder="Подпись получена..."
-              style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-active-item)', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 11, marginBottom: 10, color: 'var(--mc-text)' }} />
+              style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-active-item)', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 11, marginBottom: 10, color: 'var(--mc-text)', boxSizing: 'border-box' }} />
 
-            <button onClick={markDelivered} disabled={saving}
-              style={{ width: '100%', padding: 12, background: saving ? '#CBD5E1' : '#16a34a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
-              {saving ? '⏳ Сохранение...' : '✓ Доставлен'}
+            <button onClick={markDelivered} disabled={saving || !canDeliver}
+              style={{ width: '100%', padding: 12, background: saving || !canDeliver ? '#CBD5E1' : '#16a34a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13, cursor: saving || !canDeliver ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
+              {saving ? '⏳ Сохранение...' : requiresPay && !payMethod ? '⬆ Выберите способ оплаты' : '✓ Доставлен'}
             </button>
             <button onClick={() => setFailMode(true)}
               style={{ width: '100%', padding: 10, background: 'none', border: 'none', color: '#dc2626', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
@@ -1726,7 +1807,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
             <div style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', marginBottom: 10 }}>✗ Не удалось доставить</div>
             <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 4 }}>Причина *</div>
             <input value={failReason} onChange={e => setFailReason(e.target.value)} placeholder="Дверь закрыта / неверный адрес / ..."
-              style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-active-item)', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 11, marginBottom: 10, color: 'var(--mc-text)' }} />
+              style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-active-item)', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 11, marginBottom: 10, color: 'var(--mc-text)', boxSizing: 'border-box' }} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setFailMode(false)}
                 style={{ flex: 1, padding: 10, background: 'var(--mc-active-item)', color: 'var(--mc-muted)', border: 'none', borderRadius: 10, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
@@ -1800,8 +1881,58 @@ export function CourierDeliveryWidget({ ctx }) {
   );
 }
 
+// ─── Блок сдачи наличных кассиру ─────────────────────────────────────────
+function CashHandoverBlock({ order, db, currentUser, setDb, showToast }) {
+  const [confirming, setConfirming] = useState(false);
+  const isCashier = currentUser.role === 'cashier' || currentUser.role === 'admin';
+  const confirmedBy = order.cash_confirmed_by ? db.users?.find(u => u.id === order.cash_confirmed_by) : null;
+  const courier = db.users?.find(u => u.id === order.delivered_by || u.id === order.courier_id);
+
+  const handleConfirm = async () => {
+    setConfirming(true);
+    const now = new Date().toISOString();
+    const upd = { cash_confirmed_by: currentUser.id, cash_confirmed_at: now };
+    const { error } = await supabase.from('delivery_orders').update(upd).eq('id', order.id);
+    if (error) { showToast('Ошибка: ' + error.message, 'error'); setConfirming(false); return; }
+    setDb(d => ({ ...d, deliveryOrders: d.deliveryOrders.map(o => o.id === order.id ? { ...o, ...upd } : o) }));
+    showToast('✓ Наличные приняты', 'success');
+    setConfirming(false);
+  };
+
+  if (order.cash_confirmed_by) {
+    return (
+      <div style={{ background: '#D1FAE5', borderRadius: 12, padding: '10px 12px', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#065F46', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>✓ Наличные сданы</div>
+        <div style={{ fontSize: 11, color: 'var(--mc-text)' }}>
+          {fmtNum(order.cash_amount)} тг · принял {confirmedBy ? `${confirmedBy.first_name} ${confirmedBy.last_name}` : '—'}
+        </div>
+        {order.cash_confirmed_at && (
+          <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginTop: 2 }}>
+            {new Date(order.cash_confirmed_at).toLocaleString('ru-KZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Almaty' })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: '#FEF3C7', borderRadius: 12, padding: '10px 12px', marginBottom: 12, border: '1px solid #FDE68A' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#B45309', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>⏳ Ожидает сдачи наличных</div>
+      <div style={{ fontSize: 11, color: 'var(--mc-text)', marginBottom: 2 }}>
+        💵 {fmtNum(order.cash_amount)} тг · курьер: {courier ? `${courier.first_name} ${courier.last_name}` : '—'}
+      </div>
+      {isCashier && (
+        <button onClick={handleConfirm} disabled={confirming}
+          style={{ marginTop: 8, width: '100%', padding: 10, background: confirming ? '#CBD5E1' : '#16a34a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: confirming ? 'not-allowed' : 'pointer' }}>
+          {confirming ? '⏳...' : '✓ Принял наличные'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Детали заявки реестра + смена адреса ────────────────────────────────
-function OrderDetailModal({ order, db, currentUser, canEdit, onClose, onAddressChange }) {
+function OrderDetailModal({ order, db, currentUser, canEdit, onClose, onAddressChange, setDb, showToast }) {
   const [editingAddress, setEditingAddress] = useState(false);
   const [newAddress,     setNewAddress]     = useState(order.address || '');
   const [saving,         setSaving]         = useState(false);
@@ -1924,9 +2055,17 @@ function OrderDetailModal({ order, db, currentUser, canEdit, onClose, onAddressC
             <div style={{ background: '#D1FAE5', borderRadius: 12, padding: '10px 12px', marginBottom: 12 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: '#065F46', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>✓ Доставлено</div>
               <Field label="Курьер"    value={courier ? `${courier.first_name} ${courier.last_name}` : '—'} />
+              {order.delivery_payment_method && (
+                <Field label="Оплата" value={`${DELIVERY_PAY_METHODS[order.delivery_payment_method]?.icon || ''} ${DELIVERY_PAY_METHODS[order.delivery_payment_method]?.label || order.delivery_payment_method}`} />
+              )}
               <Field label="Наличные"  value={order.cash_received ? `${fmtNum(order.cash_amount)} тг` : null} />
               <Field label="Время"     value={order.delivered_at ? new Date(order.delivered_at).toLocaleString('ru-KZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Almaty' }) : null} />
             </div>
+          )}
+
+          {/* Сдача наличных кассиру */}
+          {order.delivery_payment_method === 'cash' && order.status === 'delivered' && (
+            <CashHandoverBlock order={order} db={db} currentUser={currentUser} setDb={setDb} showToast={showToast} />
           )}
 
           {/* Не доставлено */}
