@@ -3356,7 +3356,7 @@ function App() {
     if (!isAdm && !hasPermission(db, currentUser, 'rental_clients')) return { error: 'Нет прав' };
     if (!data.name?.trim()) return { error: 'Укажите наименование' };
     const id = uid();
-    const row = { id, ...data, plan_kg: Number(data.plan_kg) || 0, plan_price_per_kg: Number(data.plan_price_per_kg) || 0, purchase_day: Number(data.purchase_day) || null, status: 'active', created_at: todayISO(), updated_at: todayISO() };
+    const row = { id, ...data, manager_id: data.manager_id || null, technician_id: data.technician_id || null, plan_kg: Number(data.plan_kg) || 0, plan_price_per_kg: Number(data.plan_price_per_kg) || 0, purchase_day: Number(data.purchase_day) || null, status: 'active', created_at: todayISO(), updated_at: todayISO() };
     setDb(d => ({ ...d, rentalClients: [row, ...(d.rentalClients || [])] }));
     return { ok: true, id };
   };
@@ -3368,7 +3368,7 @@ function App() {
     if (!existing) return { error: 'Не найден' };
     setDb(d => {
       const fresh = (d.rentalClients || []).find(c => c.id === clientId) || existing;
-      const updated = { ...fresh, ...data, plan_kg: Number(data.plan_kg) || 0, plan_price_per_kg: Number(data.plan_price_per_kg) || 0, purchase_day: Number(data.purchase_day) || null, updated_at: todayISO() };
+      const updated = { ...fresh, ...data, manager_id: data.manager_id || null, technician_id: data.technician_id || null, plan_kg: Number(data.plan_kg) || 0, plan_price_per_kg: Number(data.plan_price_per_kg) || 0, purchase_day: Number(data.purchase_day) || null, updated_at: todayISO() };
       return { ...d, rentalClients: (d.rentalClients || []).map(c => c.id === clientId ? updated : c) };
     });
     return { ok: true };
