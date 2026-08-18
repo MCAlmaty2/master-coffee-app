@@ -16042,7 +16042,7 @@ function AdminFeedbackScreen({ ctx }) {
 }
 
 function AdminReleaseNotesScreen({ ctx }) {
-  const { db, currentUser, goBack, setDb, showToast, notify } = ctx;
+  const { db, currentUser, goBack, setDb, showToast, notify, syncSnapshotRef } = ctx;
   const todayISOalmaty = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Almaty' }).format(new Date());
 
   const notes = (db.releaseNotes || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
