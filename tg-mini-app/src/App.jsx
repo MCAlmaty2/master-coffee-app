@@ -237,7 +237,7 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, but
     ...(link_id   != null ? { link_id }   : {}),
   };
   const tgs       = db?.telegramSettings;
-  const TG_DM_ALLOWED = new Set(['writeoff', 'gift', 'task', 'manager_task', 'hr', 'access', 'general', 'coffee_task', 'expense']);
+  const TG_DM_ALLOWED = new Set(['writeoff', 'gift', 'task', 'manager_task', 'hr', 'access', 'general', 'coffee_task', 'expense', 'release']);
   const category = link_kind || 'general';
   const prefs = recipient?.tg_notif_prefs || {};
   const categoryAllowed = prefs[category] !== false && TG_DM_ALLOWED.has(category);
