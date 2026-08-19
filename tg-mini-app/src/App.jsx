@@ -2951,6 +2951,28 @@ function App() {
     return { ok: true };
   };
 
+  const updateExpense = (expenseId, patch) => {
+    if (!hasPermission(db, currentUser, 'expense_approve') && !hasPermission(db, currentUser, 'expense_pay')) {
+      return { error: 'Нет прав на редактирование расхода' };
+    }
+    const req = (db.expenseRequests || []).find(r => r.id === expenseId);
+    if (!req) return { error: 'Заявка не найдена' };
+    if (req.status !== 'paid') return { error: 'Редактировать можно только выданные заявки' };
+    const updates = {};
+    if (patch.amount != null) updates.amount = Number(patch.amount);
+    if (patch.description != null) updates.description = patch.description.trim();
+    if (patch.category != null) updates.category = patch.category;
+    if (patch.receipt_urls != null) updates.receipt_urls = patch.receipt_urls;
+    updates.updated_at = new Date().toISOString();
+    setDb(d => ({
+      ...d,
+      expenseRequests: (d.expenseRequests || []).map(r =>
+        r.id === expenseId ? { ...r, ...updates } : r
+      ),
+    }));
+    return { ok: true };
+  };
+
   const updateBudgetPlan = (categoryId, newPlan) => {
     if (currentUser.role !== 'admin' && currentUser.role !== 'director') {
       return { error: 'Только админ или директор может менять план' };
@@ -3206,6 +3228,21 @@ function App() {
       });
       return { ...d, expenseRequests: updatedList, cashOperations: [cashOp, ...(d.cashOperations || [])], notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
     });
+    return { ok: true };
+  };
+
+  const updateCashOperation = (opId, patch) => {
+    if (!hasPermission(db, currentUser, 'expense_pay') && !hasPermission(db, currentUser, 'expense_approve')) {
+      return { error: 'Нет прав на редактирование операций кассы' };
+    }
+    const op = (db.cashOperations || []).find(o => o.id === opId);
+    if (!op) return { error: 'Операция не найдена' };
+    setDb(d => ({
+      ...d,
+      cashOperations: (d.cashOperations || []).map(o =>
+        o.id === opId ? { ...o, ...patch, updated_at: new Date().toISOString() } : o
+      ),
+    }));
     return { ok: true };
   };
 
@@ -4429,7 +4466,7 @@ function App() {
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createGift, approveGift, rejectGift, processGift, prepareGift, deliverGift, cancelGift,
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
-    createExpenseRequest, approveExpense, rejectExpense, updateExpenseCategory, payExpense, updateBudgetPlan, createBudgetCategory,
+    createExpenseRequest, approveExpense, rejectExpense, updateExpenseCategory, updateExpense, payExpense, updateCashOperation, updateBudgetPlan, createBudgetCategory,
     createDeferredClient, updateDeferredClient, createDeferredShipment, markDeferredShipmentPaid, deleteDeferredShipment,
     createRentalEquipment, updateRentalEquipment, deleteRentalEquipment,
     createRentalClient, updateRentalClient,

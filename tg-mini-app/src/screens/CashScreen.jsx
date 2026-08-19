@@ -45,12 +45,15 @@ function calcSafeBalance(ops) {
 }
 
 export default function CashScreen({ ctx }) {
-  const { navigate, currentUser, db, setDb } = ctx;
+  const { navigate, currentUser, db, setDb, showToast } = ctx;
+  const hasPerm = (p) => ctx.hasPermission?.(p);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingOp, setEditingOp] = useState(null);
   const [editingBalance, setEditingBalance] = useState(false);
   const [editedBills, setEditedBills] = useState({});
   const [expandedOp, setExpandedOp] = useState(null);
   const [filterType, setFilterType] = useState(null);
+  const canEditOps = hasPerm('expense_pay') || hasPerm('expense_approve');
 
   const ops = useMemo(() =>
     [...(db.cashOperations || [])].sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -68,6 +71,20 @@ export default function CashScreen({ ctx }) {
     };
     setDb(d => ({ ...d, cashOperations: [newOp, ...(d.cashOperations || [])] }));
     setShowAdd(false);
+  };
+
+  const handleEditOp = (opData) => {
+    const result = ctx.updateCashOperation(editingOp.id, {
+      type: opData.type,
+      bills: opData.bills,
+      total: opData.total,
+      description: opData.description,
+      category: opData.category,
+      person_name: opData.person_name,
+    });
+    if (result.error) { showToast(result.error, 'error'); return; }
+    setEditingOp(null);
+    showToast('Операция обновлена');
   };
 
   const filtered = filterType ? ops.filter(o => o.type === filterType) : ops;
@@ -295,8 +312,17 @@ export default function CashScreen({ ctx }) {
                           </div>
                         ))}
                       </div>
-                      <div className="mt-2 text-[11px]" style={{ color: 'var(--mc-muted)' }}>
-                        Провёл: {op.created_by_name} · {fmtDateFull(op.created_at)}
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="text-[11px]" style={{ color: 'var(--mc-muted)' }}>
+                          Провёл: {op.created_by_name} · {fmtDateFull(op.created_at)}
+                        </div>
+                        {canEditOps && (
+                          <button onClick={(e) => { e.stopPropagation(); setEditingOp(op); }}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg"
+                            style={{ background: '#3390EC15', color: '#3390EC' }}>
+                            <Pencil size={11} /> Изменить
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -309,11 +335,25 @@ export default function CashScreen({ ctx }) {
 
       {/* Add Operation Modal */}
       {showAdd && <AddOperationModal onClose={() => setShowAdd(false)} onAdd={handleAddOp} />}
+      {editingOp && (
+        <AddOperationModal
+          onClose={() => setEditingOp(null)}
+          onAdd={handleEditOp}
+          editMode
+          defaults={{
+            type: editingOp.type,
+            bills: editingOp.bills,
+            description: editingOp.description || '',
+            category: editingOp.category || '',
+            person: editingOp.person_name || '',
+          }}
+        />
+      )}
     </div>
   );
 }
 
-export function AddOperationModal({ onClose, onAdd, defaults, lockedType }) {
+export function AddOperationModal({ onClose, onAdd, defaults, lockedType, editMode }) {
   const [type, setType] = useState(defaults?.type || 'expense');
   const [bills, setBills] = useState(() => {
     const b = {};
@@ -336,7 +376,7 @@ export function AddOperationModal({ onClose, onAdd, defaults, lockedType }) {
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
       <div className="w-full max-w-lg rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto" style={{ background: 'var(--mc-surface)' }}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-bold" style={{ color: 'var(--mc-text)' }}>Новая операция</h2>
+          <h2 className="text-base font-bold" style={{ color: 'var(--mc-text)' }}>{editMode ? 'Редактирование' : 'Новая операция'}</h2>
           <button onClick={onClose} className="p-1"><X size={20} style={{ color: 'var(--mc-muted)' }} /></button>
         </div>
 
@@ -448,8 +488,8 @@ export function AddOperationModal({ onClose, onAdd, defaults, lockedType }) {
             onAdd({ type, bills: { ...bills }, total, description, category, person_name: person });
           }}
           className="w-full py-3 rounded-xl font-semibold text-white text-sm"
-          style={{ background: total > 0 ? meta.color : 'var(--mc-muted)', opacity: total > 0 ? 1 : 0.5 }}>
-          {meta.label}: {fmtMoney(total)}
+          style={{ background: total > 0 ? (editMode ? '#22C55E' : meta.color) : 'var(--mc-muted)', opacity: total > 0 ? 1 : 0.5 }}>
+          {editMode ? `Сохранить: ${fmtMoney(total)}` : `${meta.label}: ${fmtMoney(total)}`}
         </button>
       </div>
     </div>

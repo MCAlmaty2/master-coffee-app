@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import {
   Receipt, Plus, Search, ChevronRight, ChevronLeft, Check, X,
   CircleDot, CheckCircle2, XCircle, Banknote, Upload, Image, Trash2, Eye,
-  User, ExternalLink,
+  User, ExternalLink, Pencil,
 } from 'lucide-react';
 import { AddOperationModal } from './CashScreen';
 
@@ -278,6 +278,13 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
   const [showReject, setShowReject] = useState(false);
   const [showImage, setShowImage] = useState(null);
   const [showCashModal, setShowCashModal] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editAmount, setEditAmount] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editReceipts, setEditReceipts] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const editFileRef = useRef(null);
   const canEditCategory = hasPerm('expense_approve') || hasPerm('expense_pay');
   const categories = useMemo(() => {
     return (db.expenseCategories || []).filter(c => c.active).sort((a, b) => a.sort_order - b.sort_order).map(c => c.name);
@@ -294,6 +301,56 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
   const Icon = s.icon;
   const canApprove = hasPerm('expense_approve') && req.status === 'pending';
   const canPay = hasPerm('expense_pay') && req.status === 'approved';
+  const canEditPaid = req.status === 'paid' && (hasPerm('expense_pay') || hasPerm('expense_approve'));
+
+  const startEditing = () => {
+    setEditAmount(String(req.amount));
+    setEditDesc(req.description || '');
+    setEditCategory(req.category || '');
+    setEditReceipts([...(req.receipt_urls || [])]);
+    setEditing(true);
+  };
+
+  const handleEditUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const urls = [];
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      for (const file of files) {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('requestNumber', req.request_number || 'edit');
+        const res = await fetch(`${supabaseUrl}/functions/v1/upload-receipt`, {
+          method: 'POST', body: form,
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Upload failed');
+        urls.push(result.url);
+      }
+      setEditReceipts(prev => [...prev, ...urls]);
+    } catch (err) {
+      showToast('Ошибка загрузки: ' + err.message, 'error');
+    } finally {
+      setUploading(false);
+      if (editFileRef.current) editFileRef.current.value = '';
+    }
+  };
+
+  const saveEdit = () => {
+    if (!Number(editAmount) || Number(editAmount) <= 0) { showToast('Укажите корректную сумму', 'error'); return; }
+    if (!editDesc.trim()) { showToast('Укажите описание', 'error'); return; }
+    const result = ctx.updateExpense(expenseId, {
+      amount: editAmount,
+      description: editDesc,
+      category: editCategory,
+      receipt_urls: editReceipts,
+    });
+    if (result.error) { showToast(result.error, 'error'); return; }
+    setEditing(false);
+    showToast('Расход обновлён');
+  };
 
   const handleApprove = () => {
     const result = ctx.approveExpense(expenseId);
@@ -319,10 +376,10 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
   return (
     <div className="min-h-screen" style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)' }}>
       <div className="sticky top-0 z-20 px-4 pt-3 pb-2 flex items-center gap-3" style={{ background: 'var(--mc-bg)' }}>
-        <button onClick={() => navigate({ name: 'expenses' })} className="flex items-center gap-1 text-sm" style={{ color: '#3390EC' }}>
-          <ChevronLeft size={18} /> Назад
+        <button onClick={() => { if (editing) { setEditing(false); return; } navigate({ name: 'expenses' }); }} className="flex items-center gap-1 text-sm" style={{ color: '#3390EC' }}>
+          <ChevronLeft size={18} /> {editing ? 'Отмена' : 'Назад'}
         </button>
-        <h1 className="text-lg font-bold flex-1 text-center">{req.request_number}</h1>
+        <h1 className="text-lg font-bold flex-1 text-center">{editing ? 'Редактирование' : req.request_number}</h1>
         <div style={{ width: 60 }} />
       </div>
 
@@ -330,87 +387,150 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
         <div className="rounded-2xl p-4" style={{ background: s.bg }}>
           <div className="flex items-center gap-3">
             <Icon size={24} style={{ color: s.color }} />
-            <div>
+            <div className="flex-1">
               <div className="font-bold" style={{ color: s.color }}>{s.label}</div>
               <div className="text-xs mt-0.5" style={{ color: s.color + 'cc' }}>{fmtDateTime(req.created_at)}</div>
             </div>
+            {canEditPaid && !editing && (
+              <button onClick={startEditing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                style={{ background: 'rgba(255,255,255,0.7)', color: s.color }}>
+                <Pencil size={13} /> Изменить
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
-          <Row label="Сумма" value={fmtMoney(req.amount)} bold />
-          {canEditCategory ? (
-            <div className="flex items-center justify-between py-1" style={{ borderBottom: '1px solid var(--mc-border)' }}>
-              <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>Категория</span>
-              <select
-                value={req.category || ''}
-                onChange={e => {
-                  const res = ctx.updateExpenseCategory(expenseId, e.target.value);
-                  if (res.error) showToast(res.error, 'error');
-                  else showToast('Категория изменена');
-                }}
-                className="text-sm font-semibold text-right rounded-lg px-2 py-1 outline-none"
-                style={{ color: 'var(--mc-text)', background: 'var(--mc-bg)', border: '1px solid var(--mc-border)', maxWidth: '60%' }}
-              >
-                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          ) : (
-            <Row label="Категория" value={req.category} />
-          )}
-          <Row label="Описание" value={req.description} />
-          <Row label="Подал(а)" value={req.requester_name} />
-          <Row label="Дата" value={fmtDateTime(req.created_at)} />
-          {req.approved_by_name && <Row label={req.status === 'rejected' ? 'Отклонил(а)' : 'Одобрил(а)'} value={`${req.approved_by_name} · ${fmtDateTime(req.approved_at)}`} />}
-          {req.reject_reason && <Row label="Причина" value={req.reject_reason} />}
-          {req.paid_by_name && <Row label="Выдал(а)" value={`${req.paid_by_name} · ${fmtDateTime(req.paid_at)}`} />}
-        </div>
-
-        {(req.receipt_urls || []).length > 0 && (
-          <div className="rounded-2xl p-4" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
-            <div className="text-xs font-semibold mb-2" style={{ color: 'var(--mc-muted)' }}>Документы ({req.receipt_urls.length})</div>
-            <div className="space-y-2">
-              {req.receipt_urls.map((url, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <button onClick={() => setShowImage(url)} className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0" style={{ border: '1px solid var(--mc-border)' }}>
-                    <img src={url} alt="" className="w-full h-full object-cover" />
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs truncate" style={{ color: 'var(--mc-muted)' }}>Документ {i + 1}</div>
-                    <a href={url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 mt-1 text-xs font-semibold no-underline"
-                      style={{ color: '#3390EC' }}
-                      onClick={e => e.stopPropagation()}>
-                      <ExternalLink size={14} /> Открыть документ
-                    </a>
+        {editing ? (
+          <>
+            <div className="rounded-2xl p-4 space-y-4" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
+              <div>
+                <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Сумма (₸)</div>
+                <input type="number" inputMode="numeric" value={editAmount} onChange={e => setEditAmount(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
+                  style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }} />
+              </div>
+              <div>
+                <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Категория</div>
+                <select value={editCategory} onChange={e => setEditCategory(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
+                  style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}>
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Описание</div>
+                <textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={3}
+                  className="w-full px-3 py-2.5 rounded-lg outline-none text-sm resize-none"
+                  style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }} />
+              </div>
+              <div>
+                <div className="text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Документы</div>
+                <input ref={editFileRef} type="file" accept="image/*" multiple onChange={handleEditUpload} className="hidden" />
+                {editReceipts.length > 0 && (
+                  <div className="flex gap-2 mb-2 flex-wrap">
+                    {editReceipts.map((url, i) => (
+                      <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden" style={{ border: '1px solid var(--mc-border)' }}>
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                        <button onClick={() => setEditReceipts(prev => prev.filter((_, j) => j !== i))}
+                          className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full flex items-center justify-center"
+                          style={{ background: 'rgba(0,0,0,0.6)' }}>
+                          <X size={10} color="#fff" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              ))}
+                )}
+                <button onClick={() => editFileRef.current?.click()} disabled={uploading}
+                  className="w-full py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2"
+                  style={{ background: 'var(--mc-bg)', color: '#3390EC', border: '1px dashed var(--mc-border)' }}>
+                  {uploading ? 'Загрузка…' : <><Upload size={14} /> Добавить фото</>}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-
-        {canApprove && (
-          <div className="space-y-2">
-            <button onClick={handleApprove}
+            <button onClick={saveEdit}
               className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
               style={{ background: '#22C55E', color: '#fff' }}>
-              <Check size={18} /> Одобрить
+              <Check size={18} /> Сохранить изменения
             </button>
-            <button onClick={() => setShowReject(true)}
-              className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-              style={{ background: '#EF4444', color: '#fff' }}>
-              <XCircle size={18} /> Отклонить
-            </button>
-          </div>
-        )}
+          </>
+        ) : (
+          <>
+            <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
+              <Row label="Сумма" value={fmtMoney(req.amount)} bold />
+              {canEditCategory ? (
+                <div className="flex items-center justify-between py-1" style={{ borderBottom: '1px solid var(--mc-border)' }}>
+                  <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>Категория</span>
+                  <select
+                    value={req.category || ''}
+                    onChange={e => {
+                      const res = ctx.updateExpenseCategory(expenseId, e.target.value);
+                      if (res.error) showToast(res.error, 'error');
+                      else showToast('Категория изменена');
+                    }}
+                    className="text-sm font-semibold text-right rounded-lg px-2 py-1 outline-none"
+                    style={{ color: 'var(--mc-text)', background: 'var(--mc-bg)', border: '1px solid var(--mc-border)', maxWidth: '60%' }}
+                  >
+                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              ) : (
+                <Row label="Категория" value={req.category} />
+              )}
+              <Row label="Описание" value={req.description} />
+              <Row label="Подал(а)" value={req.requester_name} />
+              <Row label="Дата" value={fmtDateTime(req.created_at)} />
+              {req.approved_by_name && <Row label={req.status === 'rejected' ? 'Отклонил(а)' : 'Одобрил(а)'} value={`${req.approved_by_name} · ${fmtDateTime(req.approved_at)}`} />}
+              {req.reject_reason && <Row label="Причина" value={req.reject_reason} />}
+              {req.paid_by_name && <Row label="Выдал(а)" value={`${req.paid_by_name} · ${fmtDateTime(req.paid_at)}`} />}
+            </div>
 
-        {canPay && (
-          <button onClick={() => setShowCashModal(true)}
-            className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-            style={{ background: '#3390EC', color: '#fff' }}>
-            <Banknote size={18} /> Выдать деньги из кассы
-          </button>
+            {(req.receipt_urls || []).length > 0 && (
+              <div className="rounded-2xl p-4" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
+                <div className="text-xs font-semibold mb-2" style={{ color: 'var(--mc-muted)' }}>Документы ({req.receipt_urls.length})</div>
+                <div className="space-y-2">
+                  {req.receipt_urls.map((url, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <button onClick={() => setShowImage(url)} className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0" style={{ border: '1px solid var(--mc-border)' }}>
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs truncate" style={{ color: 'var(--mc-muted)' }}>Документ {i + 1}</div>
+                        <a href={url} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 mt-1 text-xs font-semibold no-underline"
+                          style={{ color: '#3390EC' }}
+                          onClick={e => e.stopPropagation()}>
+                          <ExternalLink size={14} /> Открыть документ
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {canApprove && (
+              <div className="space-y-2">
+                <button onClick={handleApprove}
+                  className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                  style={{ background: '#22C55E', color: '#fff' }}>
+                  <Check size={18} /> Одобрить
+                </button>
+                <button onClick={() => setShowReject(true)}
+                  className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                  style={{ background: '#EF4444', color: '#fff' }}>
+                  <XCircle size={18} /> Отклонить
+                </button>
+              </div>
+            )}
+
+            {canPay && (
+              <button onClick={() => setShowCashModal(true)}
+                className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                style={{ background: '#3390EC', color: '#fff' }}>
+                <Banknote size={18} /> Выдать деньги из кассы
+              </button>
+            )}
+          </>
         )}
 
         {showCashModal && (
