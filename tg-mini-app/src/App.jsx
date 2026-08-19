@@ -3240,7 +3240,7 @@ function App() {
     setDb(d => ({
       ...d,
       cashOperations: (d.cashOperations || []).map(o =>
-        o.id === opId ? { ...o, ...patch, updated_at: new Date().toISOString() } : o
+        o.id === opId ? { ...o, ...patch } : o
       ),
     }));
     return { ok: true };
