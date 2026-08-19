@@ -28,8 +28,12 @@ const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID)
 
 const SHIFT_LABEL = { morning: '☀️ Утренний', evening: '🌙 Вечерний' };
 
-const PAYMENT_NEEDS_COLLECTION = ['наличные при доставке', 'не оплачен', 'частично оплачен'];
-const needsPayment = (info) => info && PAYMENT_NEEDS_COLLECTION.includes(info.toLowerCase().trim());
+const PAYMENT_KEYWORDS = ['принять оплату', 'не оплачен', 'при получении', 'наличные при доставке', 'частично оплачен'];
+const needsPayment = (info) => {
+  if (!info) return false;
+  const lower = info.toLowerCase().trim();
+  return PAYMENT_KEYWORDS.some(kw => lower.includes(kw));
+};
 
 const DELIVERY_PAY_METHODS = {
   cash:           { label: 'Наличные',       icon: '💵', color: '#16a34a' },
