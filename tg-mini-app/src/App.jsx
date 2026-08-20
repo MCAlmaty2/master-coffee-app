@@ -5495,13 +5495,13 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
                   className="w-full flex items-center justify-between px-2 mb-1"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 8px' }}
                 >
-                  <span className="text-[10px] uppercase font-bold" style={{ color: hasActive ? 'var(--mc-text)' : '#A8A8AE', letterSpacing: '0.1em' }}>
+                  <span className="text-[10px] uppercase font-bold" style={{ color: hasActive ? 'var(--mc-text)' : 'var(--mc-muted)', letterSpacing: '0.1em' }}>
                     {group.title}
                   </span>
-                  <ChevronDown size={12} style={{ color: '#A8A8AE', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }} />
+                  <ChevronDown size={12} style={{ color: 'var(--mc-muted)', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }} />
                 </button>
               ) : (
-                <div className="text-[10px] uppercase font-bold mb-1 px-2" style={{ color: '#A8A8AE', letterSpacing: '0.1em' }}>
+                <div className="text-[10px] uppercase font-bold mb-1 px-2" style={{ color: 'var(--mc-muted)', letterSpacing: '0.1em' }}>
                   {group.title}
                 </div>
               )}
@@ -5599,13 +5599,13 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
                       className="w-full flex items-center justify-between px-2 mb-1"
                       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 8px' }}
                     >
-                      <span className="text-[10px] uppercase font-bold" style={{ color: hasActive ? 'var(--mc-text)' : '#A8A8AE', letterSpacing: '0.1em' }}>
+                      <span className="text-[10px] uppercase font-bold" style={{ color: hasActive ? 'var(--mc-text)' : 'var(--mc-muted)', letterSpacing: '0.1em' }}>
                         {group.title}
                       </span>
-                      <ChevronDown size={12} style={{ color: '#A8A8AE', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }} />
+                      <ChevronDown size={12} style={{ color: 'var(--mc-muted)', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }} />
                     </button>
                   ) : (
-                    <div className="text-[10px] uppercase font-bold mb-1 px-2" style={{ color: '#A8A8AE', letterSpacing: '0.1em' }}>
+                    <div className="text-[10px] uppercase font-bold mb-1 px-2" style={{ color: 'var(--mc-muted)', letterSpacing: '0.1em' }}>
                       {group.title}
                     </div>
                   )}
@@ -6616,13 +6616,13 @@ function DashboardHome({ ctx, title }) {
       {/* Личные настройки уведомлений */}
       <button onClick={() => navigate({ name: 'my_notifications' })}
         className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-3"
-        style={{ background: 'white', border: '1px solid var(--mc-border)' }}>
+        style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
         <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--mc-active-item)' }}>
-          <Bell size={16} style={{ color: '#A8A8AE' }} />
+          <Bell size={16} style={{ color: 'var(--mc-muted)' }} />
         </div>
         <div className="flex-1 min-w-0 text-left">
           <div className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>Мои уведомления</div>
-          <div className="text-[11px]" style={{ color: '#64748B' }}>Какие сообщения получать в Telegram</div>
+          <div className="text-[11px]" style={{ color: 'var(--mc-muted)' }}>Какие сообщения получать в Telegram</div>
         </div>
         <ChevronRight size={16} style={{ color: 'var(--mc-muted)' }} />
       </button>
@@ -6630,13 +6630,13 @@ function DashboardHome({ ctx, title }) {
       {/* Настроить главный экран */}
       <button onClick={() => navigate({ name: 'home_customize' })}
         className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-3"
-        style={{ background: 'white', border: '1px solid var(--mc-border)' }}>
+        style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
         <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--mc-active-item)' }}>
-          <Settings size={16} style={{ color: '#A8A8AE' }} />
+          <Settings size={16} style={{ color: 'var(--mc-muted)' }} />
         </div>
         <div className="flex-1 min-w-0 text-left">
           <div className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>Настроить главный экран</div>
-          <div className="text-[11px]" style={{ color: '#64748B' }}>Скрыть лишние блоки и плитки</div>
+          <div className="text-[11px]" style={{ color: 'var(--mc-muted)' }}>Скрыть лишние блоки и плитки</div>
         </div>
         <ChevronRight size={16} style={{ color: 'var(--mc-muted)' }} />
       </button>
@@ -6650,7 +6650,7 @@ function DashboardHome({ ctx, title }) {
       {stats.pendingUsers > 0 && stats.isAdmin && (
         <button onClick={() => navigate({ name: 'admin_requests' })}
           className="w-full text-left rounded-xl p-4 mb-4 flex items-center gap-3 transition hover:shadow-md"
-          style={{ border: '1px solid #FBBF24', background: '#FFFBEB' }}>
+          style={{ border: '1px solid var(--mc-warning-border)', background: 'var(--mc-warning-bg)' }}>
           <div className="w-10 h-10 rounded-full flex items-center justify-center text-white" style={{ background: '#FBBF24' }}>
             <Bell size={18} />
           </div>
@@ -6658,7 +6658,7 @@ function DashboardHome({ ctx, title }) {
             <div className="font-semibold" style={{ color: 'var(--mc-text)' }}>{stats.pendingUsers} {stats.pendingUsers === 1 ? 'запрос' : 'запросов'} на доступ</div>
             <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Назначить роль</div>
           </div>
-          <ChevronRight size={18} style={{ color: '#A8A8AE' }} />
+          <ChevronRight size={18} style={{ color: 'var(--mc-muted)' }} />
         </button>
       )}
 
@@ -6672,7 +6672,7 @@ function DashboardHome({ ctx, title }) {
             <button
               onClick={() => navigate({ name: 'warehouse' })}
               className="rounded-xl p-3 text-left transition hover:shadow-md"
-              style={{ background: stats.warehouse.toAssemble > 0 ? '#FEF3C7' : 'white', border: '1.5px solid ' + (stats.warehouse.toAssemble > 0 ? '#F59E0B' : 'var(--mc-border)') }}
+              style={{ background: stats.warehouse.toAssemble > 0 ? 'var(--mc-warning-bg)' : 'var(--mc-surface)', border: '1.5px solid ' + (stats.warehouse.toAssemble > 0 ? '#F59E0B' : 'var(--mc-border)') }}
             >
               <div className="text-2xl font-bold" style={{ color: '#F59E0B' }}>{stats.warehouse.toAssemble}</div>
               <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>На сборке</div>
@@ -6681,7 +6681,7 @@ function DashboardHome({ ctx, title }) {
             <button
               onClick={() => navigate({ name: 'warehouse' })}
               className="rounded-xl p-3 text-left transition hover:shadow-md"
-              style={{ background: stats.warehouse.readyPickup > 0 ? '#DCFCE7' : 'white', border: '1.5px solid ' + (stats.warehouse.readyPickup > 0 ? '#22C55E' : 'var(--mc-border)') }}
+              style={{ background: stats.warehouse.readyPickup > 0 ? 'var(--mc-success-bg)' : 'var(--mc-surface)', border: '1.5px solid ' + (stats.warehouse.readyPickup > 0 ? '#22C55E' : 'var(--mc-border)') }}
             >
               <div className="text-2xl font-bold" style={{ color: '#22C55E' }}>{stats.warehouse.readyPickup}</div>
               <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>Готовы</div>
@@ -6691,7 +6691,7 @@ function DashboardHome({ ctx, title }) {
               <button
                 onClick={() => navigate({ name: 'warehouse' })}
                 className="rounded-xl p-3 text-left transition hover:shadow-md"
-                style={{ background: '#EDE9FE', border: '1.5px solid #7C3AED' }}
+                style={{ background: 'var(--mc-purple-bg)', border: '1.5px solid var(--mc-purple-border)' }}
               >
                 <div className="text-2xl font-bold" style={{ color: '#7C3AED' }}>{stats.warehouse.writeOffsToAssemble}</div>
                 <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>Списания</div>
@@ -6702,7 +6702,7 @@ function DashboardHome({ ctx, title }) {
               <button
                 onClick={() => navigate({ name: 'warehouse' })}
                 className="rounded-xl p-3 text-left transition hover:shadow-md"
-                style={{ background: '#DCFCE7', border: '1.5px solid #16A34A' }}
+                style={{ background: 'var(--mc-success-bg)', border: '1.5px solid #16A34A' }}
               >
                 <div className="text-2xl font-bold" style={{ color: '#16A34A' }}>{stats.warehouse.writeOffsToDeliver}</div>
                 <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>Списания</div>
@@ -7307,9 +7307,9 @@ function StatusBadge({ status }) {
 
 function Empty({ icon: Icon = Inbox, title, subtitle }) {
   return (
-    <div className="rounded-xl bg-white py-14 px-6 text-center" style={{ border: '1px solid var(--mc-border)' }}>
+    <div className="rounded-xl py-14 px-6 text-center" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
       <div className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-4" style={{ background: 'var(--mc-active-item)' }}>
-        <Icon size={22} style={{ color: '#A8A8AE' }} />
+        <Icon size={22} style={{ color: 'var(--mc-muted)' }} />
       </div>
       <div className="font-semibold mb-1" style={{ color: 'var(--mc-text)' }}>{title}</div>
       {subtitle && <div className="text-sm max-w-md mx-auto" style={{ color: 'var(--mc-muted)' }}>{subtitle}</div>}
@@ -8072,7 +8072,7 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
 
 function Card({ title, children }) {
   return (
-    <div className="bg-white rounded-xl p-4" style={{ border: '1px solid var(--mc-border)' }}>
+    <div className="rounded-xl p-4" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
       {title && <div className="text-[11px] uppercase font-bold mb-3" style={{ color: 'var(--mc-muted)', letterSpacing: '0.08em' }}>{title}</div>}
       {children}
     </div>
@@ -15600,7 +15600,7 @@ function NotificationsScreen({ ctx }) {
               </button>
             )}
             {read.length > 0 && (
-              <button onClick={clearReadNotifications} className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }} title="Удалить прочитанные">
+              <button onClick={clearReadNotifications} className="text-xs px-3 py-2 rounded-lg" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }} title="Удалить прочитанные">
                 <Trash2 size={14} />
               </button>
             )}
@@ -15610,11 +15610,11 @@ function NotificationsScreen({ ctx }) {
 
       <div className="flex gap-1.5 mb-4">
         <button onClick={() => setShowRead(false)} className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
-          style={{ background: !showRead  ? '#297b8a' : 'var(--mc-active-item)', color: !showRead ? 'white' : '#64748B' }}>
+          style={{ background: !showRead  ? '#297b8a' : 'var(--mc-active-item)', color: !showRead ? 'white' : 'var(--mc-muted)' }}>
           Новые ({unread.length})
         </button>
         <button onClick={() => setShowRead(true)} className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold"
-          style={{ background: showRead  ? '#297b8a' : 'var(--mc-active-item)', color: showRead ? 'white' : '#64748B' }}>
+          style={{ background: showRead  ? '#297b8a' : 'var(--mc-active-item)', color: showRead ? 'white' : 'var(--mc-muted)' }}>
           Все ({all.length})
         </button>
       </div>
@@ -15637,11 +15637,11 @@ function NotificationsScreen({ ctx }) {
                 className="w-full text-left rounded-xl p-4 flex items-start gap-3 transition-colors hover:opacity-90"
                 style={{
                   border: '1px solid var(--mc-border)',
-                  background: isUnread ? '#F0F9FF' : 'white',
+                  background: isUnread ? 'var(--mc-info-bg)' : 'var(--mc-surface)',
                   opacity: isUnread ? 1 : 0.7,
                 }}
               >
-                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: isUnread ? '#3390EC' : 'var(--mc-active-item)', color: isUnread ? 'white' : '#64748B' }}>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: isUnread ? '#3390EC' : 'var(--mc-active-item)', color: isUnread ? 'white' : 'var(--mc-muted)' }}>
                   <Bell size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -15650,7 +15650,7 @@ function NotificationsScreen({ ctx }) {
                     {isUnread && <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#3390EC' }} />}
                   </div>
                   <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>{n.body}</div>
-                  <div className="text-xs mt-1 flex items-center justify-between" style={{ color: '#A8A8AE' }}>
+                  <div className="text-xs mt-1 flex items-center justify-between" style={{ color: 'var(--mc-muted)' }}>
                     <span>{fmtDateTime(n.at)}</span>
                     {hasLink && <span style={{ color: '#3390EC' }}>Открыть →</span>}
                   </div>
