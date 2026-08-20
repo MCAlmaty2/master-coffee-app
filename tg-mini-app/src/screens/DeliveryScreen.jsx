@@ -38,7 +38,7 @@ const needsPayment = (info) => {
 const DELIVERY_PAY_METHODS = {
   cash:           { label: 'Наличные',       icon: '💵', color: '#16a34a' },
   remote_invoice: { label: 'Удалённый счёт', icon: '📄', color: '#2563EB' },
-  card_qr:        { label: 'Карта / QR',     icon: '💳', color: '#7C3AED' },
+  card_qr:        { label: 'Карта / QR',     icon: '💳', color: 'var(--mc-purple-text)' },
 };
 
 const STATUS_CFG = {
@@ -554,7 +554,7 @@ export function DeliveryNewRegistryScreen({ ctx }) {
               </table>
             </div>
             <button onClick={handleCreate} disabled={loading || finalCount === 0}
-              style={{ width: '100%', padding: 12, background: (loading || finalCount === 0) ? '#CBD5E1' : '#297b8a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer' }}>
+              style={{ width: '100%', padding: 12, background: (loading || finalCount === 0) ? 'var(--mc-border)' : '#297b8a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer' }}>
               {loading ? '⏳ Создание...' : `✓ Создать реестр (${finalCount} заказов)`}
             </button>
           </Card>
@@ -903,7 +903,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                     <button
                       onClick={() => handleClose(order.id)}
                       disabled={closingSaving || !closeComment.trim()}
-                      style={{ flex: 1, padding: 8, background: closingSaving || !closeComment.trim() ? '#CBD5E1' : '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: closingSaving || !closeComment.trim() ? 'not-allowed' : 'pointer' }}>
+                      style={{ flex: 1, padding: 8, background: closingSaving || !closeComment.trim() ? 'var(--mc-border)' : '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: closingSaving || !closeComment.trim() ? 'not-allowed' : 'pointer' }}>
                       {closingSaving ? '...' : '🔒 Закрыть заказ'}
                     </button>
                   </div>
@@ -1137,7 +1137,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                 disabled={selected.size === 0 || saving}
                 style={{ width: '100%', padding: 12, borderRadius: 12, border: 'none',
                   fontSize: 13, fontWeight: 700, cursor: selected.size === 0 || saving ? 'not-allowed' : 'pointer',
-                  background: selected.size === 0 || saving ? '#CBD5E1' : '#297b8a', color: '#fff' }}>
+                  background: selected.size === 0 || saving ? 'var(--mc-border)' : '#297b8a', color: '#fff' }}>
                 {saving ? '⏳ Добавляем…'
                   : selected.size === 0 ? 'Выберите заявки'
                   : `✅ Добавить ${selected.size} ${selected.size === 1 ? 'заявку' : 'заявки'} в реестр`}
@@ -1189,7 +1189,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
               {/* Принять оплату */}
               <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
                 <div onClick={() => setQForm(f => ({ ...f, accept_payment: !f.accept_payment }))}
-                  style={{ width: 36, height: 20, borderRadius: 10, background: qForm.accept_payment ? '#297b8a' : '#CBD5E1', position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
+                  style={{ width: 36, height: 20, borderRadius: 10, background: qForm.accept_payment ? '#297b8a' : 'var(--mc-border)', position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
                   <div style={{ width: 16, height: 16, background: '#fff', borderRadius: '50%', position: 'absolute', top: 2, transition: 'transform .2s', transform: qForm.accept_payment ? 'translateX(18px)' : 'translateX(2px)', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, color: qForm.accept_payment ? '#297b8a' : '#64748b' }}>💰 Принять оплату при доставке</span>
@@ -1232,7 +1232,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                 disabled={saving}
                 style={{ width: '100%', padding: 12, borderRadius: 12, border: 'none',
                   fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
-                  background: saving ? '#CBD5E1' : '#297b8a', color: '#fff' }}>
+                  background: saving ? 'var(--mc-border)' : '#297b8a', color: '#fff' }}>
                 {saving ? '⏳ Создаём…' : '➕ Создать и добавить в реестр'}
               </button>
             </div>
@@ -1315,7 +1315,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                 disabled={saving}
                 style={{ width: '100%', padding: 12, borderRadius: 12, border: 'none',
                   fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
-                  background: saving ? '#CBD5E1' : '#7C3AED', color: '#fff' }}>
+                  background: saving ? 'var(--mc-border)' : '#7C3AED', color: '#fff' }}>
                 {saving ? '⏳ Создаём…' : '📋 Добавить поручение в реестр'}
               </button>
             </div>
@@ -1769,7 +1769,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
 
             {requiresPay && (
               <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#B45309', marginBottom: 6 }}>💰 Как оплатил клиент?</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-warning-text)', marginBottom: 6 }}>💰 Как оплатил клиент?</div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {Object.entries(DELIVERY_PAY_METHODS).map(([key, { label, icon, color }]) => {
                     const sel = payMethod === key;
@@ -1798,7 +1798,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
               style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-active-item)', border: '1px solid var(--mc-border)', borderRadius: 10, fontSize: 11, marginBottom: 10, color: 'var(--mc-text)', boxSizing: 'border-box' }} />
 
             <button onClick={markDelivered} disabled={saving || !canDeliver}
-              style={{ width: '100%', padding: 12, background: saving || !canDeliver ? '#CBD5E1' : '#16a34a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13, cursor: saving || !canDeliver ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
+              style={{ width: '100%', padding: 12, background: saving || !canDeliver ? 'var(--mc-border)' : '#16a34a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13, cursor: saving || !canDeliver ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
               {saving ? '⏳ Сохранение...' : requiresPay && !payMethod ? '⬆ Выберите способ оплаты' : '✓ Доставлен'}
             </button>
             <button onClick={() => setFailMode(true)}
@@ -1818,7 +1818,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
                 Отмена
               </button>
               <button onClick={markFailed} disabled={saving}
-                style={{ flex: 1, padding: 10, background: saving ? '#CBD5E1' : '#dc2626', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                style={{ flex: 1, padding: 10, background: saving ? 'var(--mc-border)' : '#dc2626', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: saving ? 'not-allowed' : 'pointer' }}>
                 {saving ? '...' : 'Сохранить'}
               </button>
             </div>
@@ -1927,7 +1927,7 @@ function CashHandoverBlock({ order, db, currentUser, setDb, showToast }) {
       </div>
       {isCashier && (
         <button onClick={handleConfirm} disabled={confirming}
-          style={{ marginTop: 8, width: '100%', padding: 10, background: confirming ? '#CBD5E1' : '#16a34a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: confirming ? 'not-allowed' : 'pointer' }}>
+          style={{ marginTop: 8, width: '100%', padding: 10, background: confirming ? 'var(--mc-border)' : '#16a34a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: confirming ? 'not-allowed' : 'pointer' }}>
           {confirming ? '⏳...' : '✓ Принял наличные'}
         </button>
       )}
@@ -1999,7 +1999,7 @@ function OrderDetailModal({ order, db, currentUser, canEdit, onClose, onAddressC
                     Отмена
                   </button>
                   <button onClick={handleSave} disabled={saving}
-                    style={{ flex: 1, padding: 8, background: saving ? '#CBD5E1' : '#297b8a', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                    style={{ flex: 1, padding: 8, background: saving ? 'var(--mc-border)' : '#297b8a', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>
                     {saving ? '...' : '💾 Сохранить'}
                   </button>
                 </div>

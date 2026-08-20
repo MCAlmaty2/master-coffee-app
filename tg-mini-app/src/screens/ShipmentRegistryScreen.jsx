@@ -742,7 +742,7 @@ export function ShipmentRegistryHomeTile({ ctx }) {
 
 /* ── CSS helpers ───────────────────────────────────────────── */
 const th = (align = 'left') => ({
-  background: '#1e293b', color: '#e2e8f0', padding: '9px 10px',
+  background: '#1e293b', color: 'var(--mc-border)', padding: '9px 10px',
   textAlign: align, fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap',
 });
 const td = (align = 'left', color = 'var(--mc-text)') => ({

@@ -460,7 +460,7 @@ export function CoffeeShipmentsScreen({ ctx }) {
       <div style={{ overflowX: 'auto', marginBottom: 20 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
-            <tr style={{ background: '#F8FAFC' }}>
+            <tr style={{ background: 'var(--mc-surface-2)' }}>
               <Th>№</Th>
               <Th>Дата</Th>
               <Th>Сумма</Th>

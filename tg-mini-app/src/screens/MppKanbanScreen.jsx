@@ -19,7 +19,7 @@ function fmtDate(iso) {
 }
 
 const STAGES = [
-  { key: 'new_lead',      label: 'Новый лид',       color: '#94A3B8', emoji: '🆕' },
+  { key: 'new_lead',      label: 'Новый лид',       color: 'var(--mc-muted)', emoji: '🆕' },
   { key: 'first_contact', label: 'Первый контакт',  color: '#3B82F6', emoji: '📞' },
   { key: 'negotiation',   label: 'Переговоры',       color: '#F59E0B', emoji: '🤝' },
   { key: 'proposal',      label: 'КП отправлено',    color: '#8B5CF6', emoji: '📄' },
@@ -398,17 +398,17 @@ function DealDetailScreen({ ctx, dealId, canManage }) {
             <div className="flex items-center gap-2"><User size={14} style={{ color: 'var(--mc-muted)' }} /><span style={{ color: 'var(--mc-text)' }}>{deal.client_name || '—'}</span></div>
             {deal.client_company && <div className="flex items-center gap-2"><Building2 size={14} style={{ color: 'var(--mc-muted)' }} /><span style={{ color: 'var(--mc-text)' }}>{deal.client_company}</span></div>}
             {deal.client_phone && <div className="flex items-center gap-2"><Phone size={14} style={{ color: 'var(--mc-muted)' }} /><a href={`tel:${deal.client_phone}`} style={{ color: '#3B82F6' }}>{deal.client_phone}</a></div>}
-            {deal.amount > 0 && <div className="font-bold" style={{ color: '#7C3AED' }}>Сумма: {fmtMoney(deal.amount)}</div>}
+            {deal.amount > 0 && <div className="font-bold" style={{ color: 'var(--mc-purple-text)' }}>Сумма: {fmtMoney(deal.amount)}</div>}
           </div>
           {deal.notes && <div className="mt-3 pt-3 text-xs" style={{ borderTop: '1px solid var(--mc-border)', color: 'var(--mc-muted)' }}>{deal.notes}</div>}
         </div>
 
         {/* Next action */}
         {deal.next_action && (
-          <div className="rounded-xl p-4" style={{ background: '#FEF3C7', border: '1px solid #F59E0B40' }}>
-            <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: '#92400E' }}>Следующее действие</div>
-            <div className="text-sm font-semibold" style={{ color: '#92400E' }}>{deal.next_action}</div>
-            {deal.next_action_date && <div className="text-xs mt-0.5" style={{ color: '#B45309' }}>{fmtDate(deal.next_action_date)}</div>}
+          <div className="rounded-xl p-4" style={{ background: 'var(--mc-warning-bg)', border: '1px solid #F59E0B40' }}>
+            <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--mc-warning-text)' }}>Следующее действие</div>
+            <div className="text-sm font-semibold" style={{ color: 'var(--mc-warning-text)' }}>{deal.next_action}</div>
+            {deal.next_action_date && <div className="text-xs mt-0.5" style={{ color: 'var(--mc-warning-text)' }}>{fmtDate(deal.next_action_date)}</div>}
           </div>
         )}
 
@@ -431,7 +431,7 @@ function DealDetailScreen({ ctx, dealId, canManage }) {
               </div>
             </div>
           ))}
-          {productsTotal > 0 && <div className="text-right text-xs font-bold mt-2" style={{ color: '#7C3AED' }}>Итого: {fmtMoney(productsTotal)}</div>}
+          {productsTotal > 0 && <div className="text-right text-xs font-bold mt-2" style={{ color: 'var(--mc-purple-text)' }}>Итого: {fmtMoney(productsTotal)}</div>}
         </div>
 
         {/* Action buttons */}
@@ -504,7 +504,7 @@ function DealDetailScreen({ ctx, dealId, canManage }) {
 
         {canManage && (
           <button onClick={handleDelete} className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold"
-            style={{ background: '#FEE2E2', color: '#991B1B' }}><Trash2 size={14} /> Удалить сделку</button>
+            style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}><Trash2 size={14} /> Удалить сделку</button>
         )}
       </div>
 
@@ -667,7 +667,7 @@ function ProductPickerModal({ products, onClose, onAdd }) {
                 <div className="text-sm font-medium truncate" style={{ color: 'var(--mc-text)' }}>{p.name}</div>
                 {p.category && <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>{p.category}</div>}
               </div>
-              <div className="text-xs font-bold ml-2" style={{ color: '#7C3AED' }}>{fmtMoney(p.price || 0)}</div>
+              <div className="text-xs font-bold ml-2" style={{ color: 'var(--mc-purple-text)' }}>{fmtMoney(p.price || 0)}</div>
             </div>
           ))}
         </div>

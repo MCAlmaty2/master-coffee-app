@@ -421,9 +421,9 @@ const ROLES = {
   barista:        { label: 'Бариста',                short: 'Бариста',      color: '#0EA5E9' },
   technician:     { label: 'Техник',                 short: 'Техник',       color: '#16A34A' },
   courier:        { label: 'Курьер',                 short: 'Курьер',       color: '#0891B2' },
-  coffee_manager:        { label: 'Управляющий кофейнями',    short: 'Кофейня',    color: '#92400E' },
+  coffee_manager:        { label: 'Управляющий кофейнями',    short: 'Кофейня',    color: 'var(--mc-warning-text)' },
   deputy_coffee_manager: { label: 'Зам. управляющего кофеен', short: 'Зам.кофе',   color: '#A16207' },
-  chef_barista:          { label: 'Шеф-Бариста Алматы',       short: 'Шеф-Бар',   color: '#B45309' },
+  chef_barista:          { label: 'Шеф-Бариста Алматы',       short: 'Шеф-Бар',   color: 'var(--mc-warning-text)' },
   chef_cook:             { label: 'Шеф-повар',                short: 'Шеф-пов',   color: '#15803D' },
   pending:        { label: 'Ожидает подтверждения',  short: 'Ожидает',      color: '#A8A8AE' },
 };
@@ -4650,7 +4650,7 @@ function ErrorsPanel({ errors, onDismiss, onDismissAll, isAdmin, navigate }) {
     <div
       className="fixed bottom-3 right-3 z-50 rounded-xl overflow-hidden flex flex-col"
       style={{
-        background: '#FEF2F2',
+        background: 'var(--mc-danger-bg)',
         border: '1px solid #FCA5A5',
         boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
         width: 360,
@@ -4676,20 +4676,20 @@ function ErrorsPanel({ errors, onDismiss, onDismissAll, isAdmin, navigate }) {
               <div key={e.id} className="px-3 py-2 border-b" style={{ borderColor: '#FCA5A5' }}>
                 <div className="flex items-start gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold" style={{ color: '#991B1B' }}>
+                    <div className="text-xs font-semibold" style={{ color: 'var(--mc-danger-text)' }}>
                       {e.kind === 'sync' && e.source && <span className="font-mono">[{e.source}]</span>}{' '}
                       {new Date(e.at).toLocaleTimeString('ru-RU')}
                     </div>
                     <div className="text-sm mt-0.5 break-words" style={{ color: '#7F1D1D' }}>{e.message}</div>
                   </div>
-                  <button onClick={() => onDismiss(e.id)} className="p-1 flex-shrink-0" style={{ color: '#991B1B' }} title="Закрыть">
+                  <button onClick={() => onDismiss(e.id)} className="p-1 flex-shrink-0" style={{ color: 'var(--mc-danger-text)' }} title="Закрыть">
                     <X size={14} />
                   </button>
                 </div>
               </div>
             ))}
           </div>
-          <div className="flex items-center gap-2 px-3 py-2" style={{ background: '#FEE2E2', borderTop: '1px solid #FCA5A5' }}>
+          <div className="flex items-center gap-2 px-3 py-2" style={{ background: 'var(--mc-danger-bg)', borderTop: '1px solid #FCA5A5' }}>
             <button onClick={onDismissAll} className="text-xs font-semibold px-3 py-1 rounded" style={{ background: 'var(--mc-surface)', color: '#7F1D1D' }}>
               Закрыть все
             </button>
@@ -4801,18 +4801,18 @@ function IntroSplash({ onContinue }) {
             MASTER
           </div>
           <div className="font-medium tracking-widest uppercase"
-               style={{ fontSize: 13, color: '#64748b', letterSpacing: '0.35em', marginTop: 3 }}>
+               style={{ fontSize: 13, color: 'var(--mc-muted)', letterSpacing: '0.35em', marginTop: 3 }}>
             COFFEE ROASTERS
           </div>
         </div>
 
-        <div style={{ width: 40, height: 1, background: '#e2e8f0', margin: '20px auto 20px' }} />
+        <div style={{ width: 40, height: 1, background: 'var(--mc-border)', margin: '20px auto 20px' }} />
 
-        <p className="text-center text-sm" style={{ color: '#94a3b8', lineHeight: 1.6 }}>
+        <p className="text-center text-sm" style={{ color: 'var(--mc-muted)', lineHeight: 1.6 }}>
           Операционная система<br />для команды и логистики
         </p>
 
-        <p className="text-xs splash-hint mt-8 mb-3" style={{ color: '#94a3b8' }}>
+        <p className="text-xs splash-hint mt-8 mb-3" style={{ color: 'var(--mc-muted)' }}>
           Проведите вправо, чтобы войти
         </p>
 
@@ -4882,7 +4882,7 @@ function BootSplash({ title, subtitle, isError }) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center px-6" style={{ background: '#FFFFFF' }}>
         <div className="text-center max-w-sm">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-6" style={{ background: '#FEE2E2' }}>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-6" style={{ background: 'var(--mc-danger-bg)' }}>
             <XCircle size={36} style={{ color: '#EB5757' }} />
           </div>
           <h1 className="display-font text-2xl mb-2" style={{ color: 'var(--mc-text)' }}>{title}</h1>
@@ -5007,7 +5007,7 @@ function TelegramAuthScreen({ ctx }) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center px-6" style={{ background: '#FFFFFF' }}>
         <div className="text-center max-w-sm">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6" style={{ background: '#FEF3C7' }}>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6" style={{ background: 'var(--mc-warning-bg)' }}>
             <CircleDot size={36} style={{ color: '#F59E0B' }} />
           </div>
           <h1 className="display-font text-2xl mb-2" style={{ color: 'var(--mc-text)' }}>Ожидайте подтверждения</h1>
@@ -5019,7 +5019,7 @@ function TelegramAuthScreen({ ctx }) {
             Telegram ID: <span className="mono-font">{pendingTgUser.telegram_id}</span>
           </div>
           {adminsCount === 0 && (
-            <div className="rounded-lg p-3 text-xs mt-3 text-left" style={{ background: '#FFFBEB', border: '1px solid #FBBF24', color: '#92400E' }}>
+            <div className="rounded-lg p-3 text-xs mt-3 text-left" style={{ background: 'var(--mc-warning-bg)', border: '1px solid #FBBF24', color: 'var(--mc-warning-text)' }}>
               <strong>Внимание:</strong> в системе пока нет администратора. Откройте Supabase → Table Editor → users,
               найдите запись с этим Telegram ID и поставьте role = admin и active = true. Подробнее в файле supabase/SETUP.md.
             </div>
@@ -5055,7 +5055,7 @@ function TelegramAuthScreen({ ctx }) {
   return (
     <div className="min-h-screen w-full flex items-center justify-center px-6" style={{ background: '#FFFFFF' }}>
       <div className="text-center max-w-sm">
-        <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6" style={{ background: '#FEE2E2' }}>
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6" style={{ background: 'var(--mc-danger-bg)' }}>
           <AlertCircle size={36} style={{ color: '#EB5757' }} />
         </div>
         <h1 className="display-font text-2xl mb-2" style={{ color: 'var(--mc-text)' }}>Не удалось получить данные Telegram</h1>
@@ -5144,7 +5144,7 @@ function PinLoginScreen({ hasUrlToken, loginViaPin }) {
           <div className="font-black tracking-widest uppercase"
                style={{ fontSize: 22, color: '#297b8a', letterSpacing: '0.18em', lineHeight: 1 }}>MASTER</div>
           <div className="font-medium tracking-widest uppercase"
-               style={{ fontSize: 11, color: '#94a3b8', letterSpacing: '0.35em', marginTop: 2 }}>COFFEE ROASTERS</div>
+               style={{ fontSize: 11, color: 'var(--mc-muted)', letterSpacing: '0.35em', marginTop: 2 }}>COFFEE ROASTERS</div>
           <div className="text-sm mt-2" style={{ color: 'var(--mc-muted)' }}>Управление закупками и операциями</div>
         </div>
 
@@ -5186,7 +5186,7 @@ function PinLoginScreen({ hasUrlToken, loginViaPin }) {
           {/* Ошибка */}
           {error && (
             <div className="text-center text-sm mb-4 rounded-lg py-2 px-3"
-                 style={{ background: '#FEF2F2', color: '#EB5757' }}>
+                 style={{ background: 'var(--mc-danger-bg)', color: '#EB5757' }}>
               {error}
             </div>
           )}
@@ -5194,7 +5194,7 @@ function PinLoginScreen({ hasUrlToken, loginViaPin }) {
           {/* Ссылка устарела */}
           {hasUrlToken && !error && (
             <div className="text-center text-xs mb-4 rounded-lg py-2 px-3"
-                 style={{ background: '#FEF2F2', color: '#EB5757' }}>
+                 style={{ background: 'var(--mc-danger-bg)', color: '#EB5757' }}>
               Ссылка недействительна — войдите по PIN или получите новую в Telegram
             </div>
           )}
@@ -5709,7 +5709,7 @@ function ThemeToggle({ theme, toggleTheme }) {
       </span>
       <div style={{
         width: 36, height: 20, borderRadius: 10,
-        background: isDark ? '#297b8a' : '#cbd5e1',
+        background: isDark ? '#297b8a' : 'var(--mc-border)',
         position: 'relative', transition: 'background 0.2s', flexShrink: 0,
       }}>
         <div style={{
@@ -5808,18 +5808,18 @@ class ScreenErrorBoundary extends React.Component {
         <div className="p-6">
           <div className="bg-white rounded-xl p-5" style={{ border: '1px solid #FCA5A5' }}>
             <div className="flex items-start gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#FEE2E2' }}>
+              <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--mc-danger-bg)' }}>
                 <AlertCircle size={20} style={{ color: '#EB5757' }} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-bold text-base mb-1" style={{ color: '#991B1B' }}>Ошибка на этом экране</div>
+                <div className="font-bold text-base mb-1" style={{ color: 'var(--mc-danger-text)' }}>Ошибка на этом экране</div>
                 <div className="text-sm break-words" style={{ color: '#7F1D1D' }}>{msg}</div>
               </div>
             </div>
             {stack && (
               <details className="mt-3 text-xs" style={{ color: '#7F1D1D' }}>
                 <summary className="cursor-pointer mb-1">Подробности (для разработчика)</summary>
-                <pre className="mono-font p-2 rounded whitespace-pre-wrap" style={{ background: '#FEF2F2', fontSize: 11 }}>{stack}</pre>
+                <pre className="mono-font p-2 rounded whitespace-pre-wrap" style={{ background: 'var(--mc-danger-bg)', fontSize: 11 }}>{stack}</pre>
               </details>
             )}
             <div className="flex gap-2 mt-4">
@@ -5840,7 +5840,7 @@ class ScreenErrorBoundary extends React.Component {
               <button
                 onClick={handleReportError}
                 className="px-4 py-2.5 rounded-lg font-semibold"
-                style={{ background: '#FEE2E2', color: '#991B1B' }}
+                style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}
                 title="Отправить отчёт об ошибке"
               >
                 <AlertTriangle size={16} />
@@ -6088,7 +6088,7 @@ function OpenInBrowserButton({ ctx }) {
       onClick={handleOpen}
       disabled={loading}
       className="w-full flex items-center gap-3 rounded-xl px-4 py-3 mb-5 text-left transition hover:shadow-sm"
-      style={{ background: '#F0F9FF', border: '1px solid #BAE6FD' }}
+      style={{ background: 'var(--mc-info-bg)', border: '1px solid #BAE6FD' }}
     >
       <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#0EA5E9' }}>
         <Monitor size={16} className="text-white" />
@@ -6139,7 +6139,7 @@ function MyPinButton({ ctx }) {
 
   return (
     <div className="rounded-xl mb-3 overflow-hidden transition"
-         style={{ background: hasPinSet ? '#F0FDF4' : 'white', border: `1px solid ${hasPinSet ? '#BBF7D0' : 'var(--mc-border)'}` }}>
+         style={{ background: hasPinSet ? '#F0FDF4' : 'white', border: `1px solid ${hasPinSet ? 'var(--mc-success-border)' : 'var(--mc-border)'}` }}>
       <button onClick={() => { setOpen(v => !v); setError(''); setPin(''); }}
               className="w-full flex items-center gap-3 px-4 py-3 text-left">
         <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -6171,7 +6171,7 @@ function MyPinButton({ ctx }) {
               placeholder="••••"
               disabled={loading}
               className="w-full px-3 py-2.5 rounded-lg text-center font-bold outline-none mb-2"
-              style={{ fontSize: 22, letterSpacing: '0.35em', border: '2px solid var(--mc-border)', background: '#F8FAFC', boxSizing: 'border-box' }}
+              style={{ fontSize: 22, letterSpacing: '0.35em', border: '2px solid var(--mc-border)', background: 'var(--mc-surface-2)', boxSizing: 'border-box' }}
             />
             <button onClick={handleSave} disabled={loading || pin.length !== 4}
                     className="w-full py-2.5 rounded-lg font-semibold text-white text-sm transition"
@@ -6466,7 +6466,7 @@ function DashboardHome({ ctx, title }) {
       key: 'mpp_kanban', base: 'tk', icon: Monitor, label: 'Воронка МПП',
       value: activeDeals.length,
       hint: activeDeals.length > 0 ? 'активных сделок' : 'нет сделок',
-      color: '#7C3AED',
+      color: 'var(--mc-purple-text)',
       go: () => navigate({ name: 'mpp_kanban' }),
     });
   }
@@ -6517,7 +6517,7 @@ function DashboardHome({ ctx, title }) {
       key: 'coffee_tasks', base: 'coffeeshop', icon: ListTodo, label: 'Задачник',
       value: todayTasks.length - doneTasks,
       hint: todayTasks.length > 0 ? `${doneTasks}/${todayTasks.length} выполнено` : 'задач на сегодня',
-      color: '#B45309',
+      color: 'var(--mc-warning-text)',
       go: () => navigate({ name: 'coffee_tasks' }),
       highlight: todayTasks.length - doneTasks > 0,
     });
@@ -6530,7 +6530,7 @@ function DashboardHome({ ctx, title }) {
       key: 'coffee_staff', base: 'coffeeshop', icon: Users, label: 'Сотрудники кофеен',
       value: coffeeStaff.length,
       hint: 'человек',
-      color: '#92400E',
+      color: 'var(--mc-warning-text)',
       go: () => navigate({ name: 'admin_users' }),
     });
   }
@@ -6693,7 +6693,7 @@ function DashboardHome({ ctx, title }) {
                 className="rounded-xl p-3 text-left transition hover:shadow-md"
                 style={{ background: 'var(--mc-purple-bg)', border: '1.5px solid var(--mc-purple-border)' }}
               >
-                <div className="text-2xl font-bold" style={{ color: '#7C3AED' }}>{stats.warehouse.writeOffsToAssemble}</div>
+                <div className="text-2xl font-bold" style={{ color: 'var(--mc-purple-text)' }}>{stats.warehouse.writeOffsToAssemble}</div>
                 <div className="text-xs font-semibold" style={{ color: 'var(--mc-text)' }}>Списания</div>
                 <div className="text-[10px]" style={{ color: 'var(--mc-muted)' }}>к сборке</div>
               </button>
@@ -6914,8 +6914,8 @@ function WarehouseHome({ ctx }) {
         <div className="mb-6">
           <h2 className="display-font text-xl mb-3" style={{ color: 'var(--mc-text)' }}>
             Списания
-            {writeoffsToAssemble.length > 0 && <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: '#EDE9FE', color: '#7C3AED' }}>к сборке: {writeoffsToAssemble.length}</span>}
-            {writeoffsToDeliver.length > 0  && <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: '#DCFCE7', color: '#16A34A' }}>к выдаче: {writeoffsToDeliver.length}</span>}
+            {writeoffsToAssemble.length > 0 && <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: 'var(--mc-purple-bg)', color: 'var(--mc-purple-text)' }}>к сборке: {writeoffsToAssemble.length}</span>}
+            {writeoffsToDeliver.length > 0  && <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: 'var(--mc-success-bg)', color: '#16A34A' }}>к выдаче: {writeoffsToDeliver.length}</span>}
           </h2>
           <div className="space-y-2 mb-4">
             {[...writeoffsToAssemble, ...writeoffsToDeliver].map(wo => (
@@ -6923,7 +6923,7 @@ function WarehouseHome({ ctx }) {
                 key={wo.id}
                 onClick={() => navigate({ name: 'writeoff_detail', writeOffId: wo.id })}
                 className="w-full text-left rounded-xl p-4 bg-white"
-                style={{ border: `1.5px solid ${wo.status === 'invoiced' ? '#C4B5FD' : '#86EFAC'}` }}
+                style={{ border: `1.5px solid ${wo.status === 'invoiced' ? 'var(--mc-purple-border)' : '#86EFAC'}` }}
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold mono-font text-sm" style={{ color: '#3390EC' }}>{wo.number}</span>
@@ -6984,7 +6984,7 @@ function WarehouseHome({ ctx }) {
         <>
           <h2 className="display-font text-xl mb-3" style={{ color: 'var(--mc-text)' }}>
             На сборке
-            <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: '#FEF3C7', color: '#D97706' }}>
+            <span className="ml-2 text-sm font-semibold px-2 py-0.5 rounded-full" style={{ background: 'var(--mc-warning-bg)', color: '#D97706' }}>
               {allShipped.length}
             </span>
           </h2>
@@ -7048,7 +7048,7 @@ function WarehouseHome({ ctx }) {
             </div>
             <SiteInput label="Код от клиента" value={enteredCode} onChange={v => setEnteredCode(v.replace(/\D/g, '').slice(0, 4))} placeholder="4 цифры" />
             {enteredCode.length === 4 && enteredCode !== pickupModal.pickup_code && (
-              <div className="text-sm flex items-center gap-2 p-3 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+              <div className="text-sm flex items-center gap-2 p-3 rounded-lg" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
                 <XCircle size={14} /> Код не совпадает
               </div>
             )}
@@ -7268,7 +7268,7 @@ function OrderCard({ order, ctx }) {
         <div className="flex items-center gap-2 min-w-0 flex-wrap">
           {order.client_type === 'individual' ? <User size={15} style={{ color: 'var(--mc-muted)' }} /> : <Building2 size={15} style={{ color: 'var(--mc-muted)' }} />}
           <span className="font-bold mono-font text-sm" style={{ color: '#3390EC' }}>№{order.order_number}</span>
-          {order.kind === 'quick' && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#FEF3C7', color: '#92400E' }}>QUICK</span>}
+          {order.kind === 'quick' && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)' }}>QUICK</span>}
         </div>
         <StatusBadge status={order.status} />
       </div>
@@ -7383,7 +7383,7 @@ function AdminDeleteButton({ ctx, kind, id, label, onDeleted }) {
     <button
       onClick={handle}
       className="w-full mt-3 py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2"
-      style={{ background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA' }}
+      style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)', border: '1px solid #FECACA' }}
     >
       <Trash2 size={14} /> Удалить навсегда (только админ)
     </button>
@@ -7587,7 +7587,7 @@ function OrderDetailScreen({ ctx, orderId }) {
           {order.invoice_pdf && (
             <Card>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: '#EDE9FE', color: '#8B5CF6' }}><FileText size={18} /></div>
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'var(--mc-purple-bg)', color: '#8B5CF6' }}><FileText size={18} /></div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>{order.invoice_pdf.name}</div>
                   <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>{order.invoice_pdf.size_kb} КБ</div>
@@ -7647,7 +7647,7 @@ function OrderDetailScreen({ ctx, orderId }) {
                 showToast(`Откат: статус → ${STATUS[r.to]?.label || r.to}`);
               }}
               className="w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
-              style={{ background: '#FFF7ED', color: '#C2410C', border: '1px solid #FED7AA' }}
+              style={{ background: 'var(--mc-orange-bg)', color: 'var(--mc-orange-text)', border: '1px solid #FED7AA' }}
             >
               <ArrowLeftRight size={14} /> Отменить последнее действие
             </button>
@@ -7670,7 +7670,7 @@ function OrderDetailScreen({ ctx, orderId }) {
               <div className="text-xs font-bold uppercase mb-1" style={{ color: '#15803D', letterSpacing: '0.08em' }}>
                 💰 Подтверждение оплаты
               </div>
-              <div className="text-sm mb-3" style={{ color: '#166534' }}>
+              <div className="text-sm mb-3" style={{ color: 'var(--mc-success-text)' }}>
                 Счёт выставлен клиенту. После подтверждения оплаты менеджер оформит отгрузку.
                 {b2bPickupException && (
                   <span className="block mt-1 text-xs" style={{ color: '#15803D', opacity: 0.8 }}>
@@ -7678,7 +7678,7 @@ function OrderDetailScreen({ ctx, orderId }) {
                   </span>
                 )}
               </div>
-              <div className="text-sm font-bold mb-3" style={{ color: '#166534' }}>
+              <div className="text-sm font-bold mb-3" style={{ color: 'var(--mc-success-text)' }}>
                 Сумма: {fmtNum(order.total_amount)} ₸
               </div>
               <button
@@ -7698,7 +7698,7 @@ function OrderDetailScreen({ ctx, orderId }) {
               <button
                 onClick={() => setStatusModal({ to: 'cancelled' })}
                 className="w-full py-3 rounded-lg font-semibold"
-                style={{ background: '#FEE2E2', color: '#991B1B' }}
+                style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}
               >
                 <X size={16} className="inline mr-1" /> Отменить заявку
                 {['shipped', 'ready'].includes(order.status) && <span className="text-xs ml-2 opacity-70">(только админ)</span>}
@@ -7772,7 +7772,7 @@ function OrderDetailScreen({ ctx, orderId }) {
 function DeliveryRegistryStatus({ deliveryRow, db }) {
   const courier = db.users?.find(u => u.id === (deliveryRow.delivered_by || deliveryRow.courier_id));
   const ST = {
-    pending:   { label: 'Ждёт назначения', color: '#64748b', bg: 'var(--mc-active-item)' },
+    pending:   { label: 'Ждёт назначения', color: 'var(--mc-muted)', bg: 'var(--mc-active-item)' },
     assigned:  { label: 'У курьера',        color: '#d97706', bg: '#FEF3C7' },
     delivered: { label: '✓ Доставлен',      color: '#16a34a', bg: '#D1FAE5' },
     failed:    { label: 'Не доставлен',     color: '#dc2626', bg: '#FEE2E2' },
@@ -7972,7 +7972,7 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
           <div>
             <label className="text-xs font-semibold mb-2 block" style={{ color: 'var(--mc-muted)' }}>Прикрепите PDF счёта (обязательно для юр. лица)</label>
             {pdfFile ? (
-              <div className="flex items-center gap-2 p-3 rounded-lg" style={{ background: '#EDE9FE' }}>
+              <div className="flex items-center gap-2 p-3 rounded-lg" style={{ background: 'var(--mc-purple-bg)' }}>
                 <FileText size={18} style={{ color: '#8B5CF6' }} />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold truncate">{pdfFile.name}</div>
@@ -8031,12 +8031,12 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
               По заявке: {fmtNum(order.total_amount)} ₸
             </div>
             {shortfall > 0 && (
-              <div className="text-xs mt-2 p-2 rounded-lg" style={{ background: '#FEF3C7', color: '#92400E' }}>
+              <div className="text-xs mt-2 p-2 rounded-lg" style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)' }}>
                 ⚠ Недоплата {fmtNum(shortfall)} ₸ — менеджеру уйдёт уведомление
               </div>
             )}
             {shortfall < 0 && (
-              <div className="text-xs mt-2 p-2 rounded-lg" style={{ background: '#EFF6FF', color: '#1D4ED8' }}>
+              <div className="text-xs mt-2 p-2 rounded-lg" style={{ background: 'var(--mc-info-bg)', color: 'var(--mc-info-text)' }}>
                 Переплата {fmtNum(-shortfall)} ₸
               </div>
             )}
@@ -8254,7 +8254,7 @@ function CreateOrderScreen({ ctx }) {
               <button
                 onClick={() => setShowClientPicker(true)}
                 className="w-full flex items-center gap-2 py-2 px-3 rounded-lg text-sm font-semibold"
-                style={{ background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', cursor: 'pointer' }}>
+                style={{ background: 'var(--mc-info-bg)', color: 'var(--mc-info-text)', border: '1px solid #BFDBFE', cursor: 'pointer' }}>
                 <Users size={14} /> Выбрать из базы клиентов
               </button>
               {form.client_type === 'individual' ? (
@@ -9334,7 +9334,7 @@ function CreateQuickScreen({ ctx }) {
             </div>
 
             {errors.items && (
-              <div className="text-xs mb-2 px-2 py-1.5 rounded-lg" style={{ color: '#EB5757', background: '#FEF2F2' }}>
+              <div className="text-xs mb-2 px-2 py-1.5 rounded-lg" style={{ color: '#EB5757', background: 'var(--mc-danger-bg)' }}>
                 {errors.items}
               </div>
             )}
@@ -9863,14 +9863,14 @@ function AdminUsersScreen({ ctx }) {
         title={isCoffeeStaffManager ? 'Сотрудники кофеен' : 'Пользователи'}
         subtitle={`${activeUsers.length} активных${inactiveUsers.length ? `, ${inactiveUsers.length} отключённых` : ''}`}
         action={isAdmin ? (
-          <button onClick={resetDB} className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B', border: '1px solid #FCA5A5' }}>
+          <button onClick={resetDB} className="text-xs px-3 py-2 rounded-lg" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)', border: '1px solid #FCA5A5' }}>
             Сбросить локальные данные
           </button>
         ) : null}
       />
 
       {isAdmin && (
-        <div className="rounded-xl p-3 mb-4 text-xs" style={{ background: '#E7F3FE', color: '#1E40AF' }}>
+        <div className="rounded-xl p-3 mb-4 text-xs" style={{ background: '#E7F3FE', color: 'var(--mc-info-text)' }}>
           💡 Пользователи добавляются автоматически при первом входе через Telegram.
           Новые запросы появятся в разделе <strong>«Запросы доступа»</strong>.
         </div>
@@ -9969,7 +9969,7 @@ function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActi
           ) : (
             <span className="text-[10px] font-semibold rounded-full px-2 py-1" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>без роли</span>
           )}
-          {!user.active && <span className="text-[10px] font-semibold rounded-full px-2 py-1" style={{ background: '#FEE2E2', color: '#991B1B' }}>отключён</span>}
+          {!user.active && <span className="text-[10px] font-semibold rounded-full px-2 py-1" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>отключён</span>}
           <button onClick={() => setOpen(v => !v)} className="p-1" style={{ color: 'var(--mc-muted)' }}>
             <ChevronDown size={16} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
           </button>
@@ -10075,7 +10075,7 @@ function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActi
                       }}
                       disabled={pinLoading}
                       className="text-[11px] font-semibold px-2.5 py-1 rounded-lg"
-                      style={{ background: '#FEE2E2', color: '#EB5757' }}
+                      style={{ background: 'var(--mc-danger-bg)', color: '#EB5757' }}
                     >
                       Сбросить
                     </button>
@@ -10228,7 +10228,7 @@ function ApproveModal({ user, db, onClose, onApprove }) {
             ))}
           </div>
         </div>
-        <div className="text-xs p-3 rounded-lg" style={{ background: '#E7F3FE', color: '#1E40AF' }}>
+        <div className="text-xs p-3 rounded-lg" style={{ background: '#E7F3FE', color: 'var(--mc-info-text)' }}>
           После одобрения пользователь сможет зайти в приложение через того же Telegram-бота — никаких паролей не нужно.
         </div>
         <div className="flex gap-2">
@@ -10251,10 +10251,10 @@ function AdminTransferScreen({ ctx }) {
       <PageHeader title="Передать роль администратора" subtitle="Необратимое действие" onBack={goBack} />
       {step === 1 && (
         <>
-          <div className="rounded-xl p-4 mb-4" style={{ background: '#FEF2F2', border: '1px solid #FCA5A5' }}>
+          <div className="rounded-xl p-4 mb-4" style={{ background: 'var(--mc-danger-bg)', border: '1px solid #FCA5A5' }}>
             <div className="flex items-start gap-2">
               <AlertCircle size={18} style={{ color: '#EB5757', marginTop: 2, flexShrink: 0 }} />
-              <div className="text-sm" style={{ color: '#991B1B' }}>
+              <div className="text-sm" style={{ color: 'var(--mc-danger-text)' }}>
                 После подтверждения вы потеряете права администратора. Их получит выбранный пользователь. Откатить операцию сможет только новый администратор.
               </div>
             </div>
@@ -10284,8 +10284,8 @@ function AdminTransferScreen({ ctx }) {
         const target = db.users.find(u => u.id === selectedId);
         return (
           <>
-            <div className="rounded-xl p-5 mb-4" style={{ background: '#FEF2F2', border: '1px solid #FCA5A5' }}>
-              <div className="font-bold text-lg mb-3" style={{ color: '#991B1B' }}>Подтвердите передачу</div>
+            <div className="rounded-xl p-5 mb-4" style={{ background: 'var(--mc-danger-bg)', border: '1px solid #FCA5A5' }}>
+              <div className="font-bold text-lg mb-3" style={{ color: 'var(--mc-danger-text)' }}>Подтвердите передачу</div>
               <div className="text-sm mb-3" style={{ color: 'var(--mc-text)' }}>
                 Вы передаёте права администратора пользователю <strong>{target.first_name} {target.last_name}</strong> ({target.email}).
               </div>
@@ -10540,12 +10540,12 @@ function CreateTaskScreen({ ctx }) {
                 })}
               </div>
               {isInstall && (
-                <div className="mt-2 text-xs p-2.5 rounded-lg" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                <div className="mt-2 text-xs p-2.5 rounded-lg" style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)' }}>
                   ⚙️ Для установки оборудования дата и время обязательны — клиент ждёт в конкретный час.
                 </div>
               )}
               {isTasting && (
-                <div className="mt-2 text-xs p-2.5 rounded-lg" style={{ background: '#F0FDF4', color: '#166534' }}>
+                <div className="mt-2 text-xs p-2.5 rounded-lg" style={{ background: '#F0FDF4', color: 'var(--mc-success-text)' }}>
                   🍵 Для дегустации дата и время обязательны. Отдел автоматически — Бариста.
                 </div>
               )}
@@ -10624,7 +10624,7 @@ function CreateTaskScreen({ ctx }) {
                 <div>
                   <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--mc-muted)' }}>Исполнитель</label>
                   {assignees.length === 0 ? (
-                    <div className="text-sm p-3 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+                    <div className="text-sm p-3 rounded-lg" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
                       Нет активных пользователей с ролью «{ROLES[form.department]?.label}». Попросите Admin создать пользователя или назначить роль.
                     </div>
                   ) : (
@@ -10902,18 +10902,18 @@ function CreateTaskScreen({ ctx }) {
                   </div>
                   <button onClick={() => update({ training_prepaid: !form.training_prepaid })}
                     className="w-12 h-7 rounded-full flex items-center px-0.5 transition-colors"
-                    style={{ background: form.training_prepaid ? '#22C55E' : '#CBD5E1' }}>
+                    style={{ background: form.training_prepaid ? '#22C55E' : 'var(--mc-border)' }}>
                     <div className="w-6 h-6 rounded-full bg-white shadow transition-transform"
                       style={{ transform: form.training_prepaid ? 'translateX(20px)' : 'translateX(0)' }} />
                   </button>
                 </div>
                 {!form.training_prepaid && courseInfo?.days === 1 && (
-                  <div className="text-xs p-2.5 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+                  <div className="text-xs p-2.5 rounded-lg" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
                     ⚠️ Однодневный курс требует полной предоплаты до начала занятия.
                   </div>
                 )}
                 {!form.training_prepaid && courseInfo?.days > 1 && (
-                  <div className="text-xs p-2.5 rounded-lg" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                  <div className="text-xs p-2.5 rounded-lg" style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)' }}>
                     💰 Предоплату нужно собрать до первого занятия. После первого урока — доплата остатка.
                   </div>
                 )}
@@ -11199,7 +11199,7 @@ function TaskDetailScreen({ ctx, taskId }) {
                 goBack();
               }}
               className="w-full py-2.5 rounded-lg font-semibold text-sm mt-2 flex items-center justify-center gap-2"
-              style={{ background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA' }}
+              style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)', border: '1px solid #FECACA' }}
             >
               <Trash2 size={14} /> Удалить задачу
             </button>
@@ -11493,7 +11493,7 @@ function DuplicateTaskModal({ task, db, onClose, onCreate }) {
         )}
 
         <button onClick={handleCreate} disabled={!date || saving}
-          style={{ width: '100%', padding: 13, background: !date || saving ? '#CBD5E1' : '#297b8a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: !date || saving ? 'not-allowed' : 'pointer' }}>
+          style={{ width: '100%', padding: 13, background: !date || saving ? 'var(--mc-border)' : '#297b8a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: !date || saving ? 'not-allowed' : 'pointer' }}>
           {saving ? '⏳ Создаём…' : '📋 Создать дубль'}
         </button>
       </div>
@@ -11574,7 +11574,7 @@ function StartTaskModal({ task, onClose, onStart }) {
             ))}
           </div>
         </div>
-        <div className="text-xs p-3 rounded-lg" style={{ background: '#FFFBEB', color: '#92400E' }}>
+        <div className="text-xs p-3 rounded-lg" style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)' }}>
           Закрыть задачу можно будет только в день визита.
         </div>
         <div className="flex gap-2">
@@ -11658,7 +11658,7 @@ function CompleteTaskModal({ task, onClose, onComplete }) {
         <FieldRow label="Дата визита" value={fmtDate(task.visit_date)} />
         <FieldRow label="Сегодня" value={fmtDate(today)} />
         {!dateMatches && (
-          <div className="text-sm flex items-start gap-2 p-3 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+          <div className="text-sm flex items-start gap-2 p-3 rounded-lg" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
             <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
             Закрыть задачу можно только в день визита. Сегодняшняя дата устройства не совпадает.
           </div>
@@ -11865,7 +11865,7 @@ function AdminRolesScreen({ ctx }) {
 
           <Card title={`Права (${draft.permissions.length} из ${Object.keys(PERMISSIONS).length})`}>
             {isAdmin ? (
-              <div className="text-sm p-3 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+              <div className="text-sm p-3 rounded-lg" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
                 У роли «Администратор» всегда все права. Изменить нельзя.
               </div>
             ) : (
@@ -11908,7 +11908,7 @@ function AdminRolesScreen({ ctx }) {
                       <div className="text-sm font-semibold truncate" style={{ color: 'var(--mc-text)' }}>{u.first_name} {u.last_name}</div>
                       <div className="text-xs truncate" style={{ color: 'var(--mc-muted)' }}>{u.email}</div>
                     </div>
-                    {!u.active && <span className="text-[10px] font-semibold rounded-full px-2 py-0.5" style={{ background: '#FEE2E2', color: '#991B1B' }}>отключён</span>}
+                    {!u.active && <span className="text-[10px] font-semibold rounded-full px-2 py-0.5" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>отключён</span>}
                   </div>
                 ))}
               </div>
@@ -11936,7 +11936,7 @@ function AdminRolesScreen({ ctx }) {
               </>
             )}
             {isSystem && !isAdmin && (
-              <button onClick={resetToDefault} className="px-4 py-2.5 rounded-lg font-semibold text-sm ml-auto" style={{ background: '#FFFBEB', color: '#92400E' }}>
+              <button onClick={resetToDefault} className="px-4 py-2.5 rounded-lg font-semibold text-sm ml-auto" style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)' }}>
                 Сбросить права к дефолту
               </button>
             )}
@@ -11945,7 +11945,7 @@ function AdminRolesScreen({ ctx }) {
                 onClick={handleDelete}
                 disabled={usersWithRole.length > 0}
                 className="px-4 py-2.5 rounded-lg font-semibold text-sm ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: '#FEE2E2', color: '#991B1B' }}
+                style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}
                 title={usersWithRole.length > 0 ? 'Сначала переназначьте пользователей' : ''}
               >
                 <Trash2 size={13} className="inline -mt-0.5 mr-1" /> Удалить роль
@@ -12110,7 +12110,7 @@ function CreateRoleModal({ onClose, onCreate }) {
             ))}
           </div>
         </div>
-        {error && <div className="text-sm p-3 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>{error}</div>}
+        {error && <div className="text-sm p-3 rounded-lg" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>{error}</div>}
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
           <button onClick={handleCreate} className="flex-1 py-2.5 rounded-lg font-semibold text-white" style={{ background: '#297b8a' }}>Создать роль</button>
@@ -12321,7 +12321,7 @@ function CreateWriteOffScreen({ ctx }) {
                         {it.name ? (
                           <span className="truncate" style={{ color: 'var(--mc-text)' }}>
                             {it.name} <span style={{ color: 'var(--mc-muted)' }}>({it.unit})</span>
-                            {it.category === 'Запчасти' && <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#FEF3C7', color: '#92400E' }}>ЗАПЧАСТЬ</span>}
+                            {it.category === 'Запчасти' && <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)' }}>ЗАПЧАСТЬ</span>}
                           </span>
                         ) : (
                           <span style={{ color: '#A8A8AE' }}>Выбрать из базы…</span>
@@ -12691,7 +12691,7 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
               <button onClick={() => setApproveOpen(true)} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#3390EC' }}>
                 <CheckCircle2 size={16} className="inline mr-1" /> Одобрить
               </button>
-              <button onClick={() => setRejectOpen(true)} className="w-full py-2.5 rounded-lg font-semibold" style={{ background: '#FEE2E2', color: '#991B1B' }}>
+              <button onClick={() => setRejectOpen(true)} className="w-full py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
                 <XCircle size={14} className="inline mr-1" /> Отклонить
               </button>
             </div>
@@ -12786,7 +12786,7 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
             <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
               Товары из заявки <strong style={{ color: 'var(--mc-text)' }}>{wo.number}</strong> собраны и готовы к выдаче?
             </div>
-            <div className="text-sm p-3 rounded-lg" style={{ background: '#EDE9FE', color: '#5B21B6' }}>
+            <div className="text-sm p-3 rounded-lg" style={{ background: 'var(--mc-purple-bg)', color: 'var(--mc-purple-text)' }}>
               После подтверждения будет сгенерирован 4-значный код выдачи. Заявитель получит уведомление с кодом.
             </div>
             <div className="flex gap-2">
@@ -12998,7 +12998,7 @@ function CompleteWriteOffModal({ onClose, onComplete }) {
             className="w-full px-3 py-2.5 rounded-lg outline-none text-lg font-bold"
             style={{ border: `1px solid ${validTotal || !docTotal ? 'var(--mc-border)' : '#EB5757'}`, color: 'var(--mc-text)' }}
           />
-          <div className="text-[11px] mt-1" style={{ color: '#64748B' }}>
+          <div className="text-[11px] mt-1" style={{ color: 'var(--mc-muted)' }}>
             Итоговая сумма документа списания из 1С
           </div>
         </div>
@@ -13211,7 +13211,7 @@ function ContractCard({ contract, ctx }) {
             <span className="font-bold mono-font text-xs" style={{ color: '#22C55E' }}>· {contract.contract_no}</span>
           )}
           {contract.revisions.length > 0 && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: '#FEF3C7', color: '#92400E' }}>
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)' }}>
               v{contract.revisions.length + 1}
             </span>
           )}
@@ -13594,7 +13594,7 @@ function ContractDetailScreen({ ctx, contractId }) {
           {/* Текст для юриста — показываем когда заявка взята в работу или подписана */}
           {(cr.status === 'in_progress' || cr.status === 'signed') && (
             <Card title="📋 Текст для юриста">
-              <div className="text-xs mb-3 rounded-lg px-3 py-2" style={{ background: '#E7F3FE', color: '#1E40AF' }}>
+              <div className="text-xs mb-3 rounded-lg px-3 py-2" style={{ background: '#E7F3FE', color: 'var(--mc-info-text)' }}>
                 Скопируйте и отправьте юристу во внешний мессенджер
               </div>
               <div
@@ -13660,7 +13660,7 @@ function ContractDetailScreen({ ctx, contractId }) {
 
           {cr.rejection_comment && (
             <Card title="Причина отклонения">
-              <div className="text-sm whitespace-pre-wrap" style={{ color: '#991B1B' }}>{cr.rejection_comment}</div>
+              <div className="text-sm whitespace-pre-wrap" style={{ color: 'var(--mc-danger-text)' }}>{cr.rejection_comment}</div>
             </Card>
           )}
 
@@ -13718,7 +13718,7 @@ function ContractDetailScreen({ ctx, contractId }) {
           )}
 
           {canRevise && (
-            <button onClick={() => setReviseOpen(true)} className="w-full py-3 rounded-lg font-semibold" style={{ background: '#FEF3C7', color: '#92400E' }}>
+            <button onClick={() => setReviseOpen(true)} className="w-full py-3 rounded-lg font-semibold" style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)' }}>
               <FileText size={14} className="inline -mt-0.5 mr-1" /> Добавить правку / версию
             </button>
           )}
@@ -13730,7 +13730,7 @@ function ContractDetailScreen({ ctx, contractId }) {
           )}
 
           {canReject && (
-            <button onClick={() => setRejectOpen(true)} className="w-full py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#FEE2E2', color: '#991B1B' }}>
+            <button onClick={() => setRejectOpen(true)} className="w-full py-2.5 rounded-lg font-semibold text-sm" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
               <XCircle size={13} className="inline -mt-0.5 mr-1" /> Отклонить заявку
             </button>
           )}
@@ -14099,10 +14099,10 @@ function AdminTelegramScreen({ ctx }) {
 
       {/* Статус подключения */}
       {isConfigured ? (
-        <div className="rounded-xl p-3 mb-4 flex items-center justify-between gap-3" style={{ background: '#D1FAE5', border: '1px solid #6EE7B7' }}>
+        <div className="rounded-xl p-3 mb-4 flex items-center justify-between gap-3" style={{ background: 'var(--mc-success-bg)', border: '1px solid #6EE7B7' }}>
           <div className="flex items-center gap-2">
-            <CheckCircle2 size={18} style={{ color: '#065F46', flexShrink: 0 }} />
-            <span className="text-sm font-semibold" style={{ color: '#065F46' }}>Бот подключён — уведомления отправляются</span>
+            <CheckCircle2 size={18} style={{ color: 'var(--mc-success-text)', flexShrink: 0 }} />
+            <span className="text-sm font-semibold" style={{ color: 'var(--mc-success-text)' }}>Бот подключён — уведомления отправляются</span>
           </div>
           <button
             onClick={handleTest}
@@ -14114,10 +14114,10 @@ function AdminTelegramScreen({ ctx }) {
           </button>
         </div>
       ) : (
-        <div className="rounded-xl p-4 mb-4" style={{ background: '#FFFBEB', border: '1px solid #FBBF24' }}>
+        <div className="rounded-xl p-4 mb-4" style={{ background: 'var(--mc-warning-bg)', border: '1px solid #FBBF24' }}>
           <div className="flex items-start gap-2">
-            <AlertCircle size={18} style={{ color: '#92400E', marginTop: 2, flexShrink: 0 }} />
-            <div className="text-sm" style={{ color: '#92400E' }}>
+            <AlertCircle size={18} style={{ color: 'var(--mc-warning-text)', marginTop: 2, flexShrink: 0 }} />
+            <div className="text-sm" style={{ color: 'var(--mc-warning-text)' }}>
               Заполните <strong>Bot Token</strong> и <strong>ID группы</strong> — уведомления начнут отправляться сразу.
             </div>
           </div>
@@ -14164,7 +14164,7 @@ function AdminTelegramScreen({ ctx }) {
                 <li>Каждому сотруднику попросить открыть бота в Telegram и нажать /start, чтобы привязка стала возможной. Потом в разделе «Пользователи» админу нужно ввести их Telegram ID (узнать можно через @userinfobot).</li>
               </ol>
             </div>
-            <div className="p-3 rounded-lg" style={{ background: '#FFFBEB', color: '#92400E' }}>
+            <div className="p-3 rounded-lg" style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)' }}>
               <strong>Без бэкенда</strong> мы не проверяем подпись Telegram (HMAC), поэтому привязка делается только админом вручную через telegram_id. Это безопасно: посторонний без записи в БД не залогинится. Когда подключим Supabase + бот-сервер — подпись будет проверяться автоматически.
             </div>
           </div>
@@ -14193,7 +14193,7 @@ function AdminTelegramScreen({ ctx }) {
                       <button
                         onClick={() => toggleEnabled(key)}
                         className="flex-shrink-0 w-9 h-5 rounded-full relative transition-colors"
-                        style={{ background: enabled ? '#297b8a' : '#CBD5E1' }}
+                        style={{ background: enabled ? '#297b8a' : 'var(--mc-border)' }}
                         title={enabled ? 'Отключить уведомление' : 'Включить уведомление'}
                       >
                         <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all" style={{ left: enabled ? '18px' : '2px' }} />
@@ -14235,7 +14235,7 @@ function AdminTelegramScreen({ ctx }) {
                             <button
                               onClick={() => resetTemplate(key)}
                               className="text-[10px] px-2 py-0.5 rounded"
-                              style={{ color: 'var(--mc-muted)', background: '#F1F5F9' }}
+                              style={{ color: 'var(--mc-muted)', background: 'var(--mc-surface-2)' }}
                             >
                               Сбросить к дефолту
                             </button>
@@ -14269,7 +14269,7 @@ function AdminTelegramScreen({ ctx }) {
                           </div>
                         )}
                         {!enabled && (
-                          <div className="text-[10px] px-2 py-1 rounded" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+                          <div className="text-[10px] px-2 py-1 rounded" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
                             Уведомление отключено — сообщение не будет отправлено
                           </div>
                         )}
@@ -14417,7 +14417,7 @@ function GrindListScreen({ ctx }) {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="mono-font text-xs font-bold" style={{ color: 'var(--mc-text)' }}>{g.number}</span>
                   <GrindStatusBadge status={g.status} />
-                  {g.order_1c && <span className="text-xs" style={{ color: '#94a3b8' }}>{g.order_1c}</span>}
+                  {g.order_1c && <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>{g.order_1c}</span>}
                 </div>
                 <ChevronRight size={16} style={{ color: '#A8A8AE', flexShrink: 0, marginTop: 2 }} />
               </div>
@@ -14764,7 +14764,7 @@ function CreateGrindScreen({ ctx }) {
                         <div className="pt-0.5">
                           {canGrind ? (
                             <div className="w-5 h-5 rounded border-2 flex items-center justify-center"
-                              style={{ borderColor: it.checked ? '#297b8a' : '#CBD5E1', background: it.checked ? '#297b8a' : 'white' }}>
+                              style={{ borderColor: it.checked ? '#297b8a' : 'var(--mc-border)', background: it.checked ? '#297b8a' : 'white' }}>
                               {it.checked && <Check size={14} color="white" />}
                             </div>
                           ) : (
@@ -14858,7 +14858,7 @@ function CreateGrindScreen({ ctx }) {
                           </div>
                           <button onClick={() => removeParsedItem(idx)}
                             className="w-full py-1.5 rounded-md text-xs font-semibold"
-                            style={{ background: '#FEE2E2', color: '#DC2626' }}>Удалить позицию</button>
+                            style={{ background: 'var(--mc-danger-bg)', color: '#DC2626' }}>Удалить позицию</button>
                         </div>
                       )}
                     </div>
@@ -15056,7 +15056,7 @@ function GrindDetailScreen({ ctx, grindId }) {
             </button>
           )}
           {canCancel && (
-            <button onClick={() => setCancelModal(true)} className="w-full py-2.5 rounded-lg font-semibold" style={{ background: '#FEE2E2', color: '#991B1B' }}>
+            <button onClick={() => setCancelModal(true)} className="w-full py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
               Отменить заявку
             </button>
           )}
@@ -15232,7 +15232,7 @@ function AdminProductsScreen({ ctx }) {
                   <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                     {p.cat === 'Запчасти' && !p.price ? '—' : `${fmtNum(p.price)} ₸`} / {p.unit}
                   </span>
-                  {p.ntin && <span className="text-[10px] rounded-full px-2 py-0.5 font-medium" style={{ background: '#EFF6FF', color: '#3B82F6' }}>НКТ</span>}
+                  {p.ntin && <span className="text-[10px] rounded-full px-2 py-0.5 font-medium" style={{ background: 'var(--mc-info-bg)', color: '#3B82F6' }}>НКТ</span>}
                 </div>
               </div>
               {/* Действия */}
@@ -15370,15 +15370,15 @@ function ProductImportModal({ onImport, onClose, showToast }) {
         />
 
         {text.trim() && (
-          <div className="rounded-lg p-3 text-sm" style={{ background: '#F0F9FF', border: '1px solid #93C5FD' }}>
-            <div className="font-semibold mb-1" style={{ color: '#1E40AF' }}>
+          <div className="rounded-lg p-3 text-sm" style={{ background: 'var(--mc-info-bg)', border: '1px solid #93C5FD' }}>
+            <div className="font-semibold mb-1" style={{ color: 'var(--mc-info-text)' }}>
               К импорту: {parsed.rows.length} {parsed.rows.length === 1 ? 'товар' : 'товаров'}
               {parsed.errors.length > 0 && <span className="ml-2" style={{ color: '#DC2626' }}>· Ошибок: {parsed.errors.length}</span>}
             </div>
             {parsed.errors.length > 0 && (
               <details>
                 <summary className="cursor-pointer text-xs" style={{ color: '#DC2626' }}>Показать ошибки</summary>
-                <div className="text-xs mt-1 space-y-0.5" style={{ color: '#991B1B' }}>
+                <div className="text-xs mt-1 space-y-0.5" style={{ color: 'var(--mc-danger-text)' }}>
                   {parsed.errors.slice(0, 10).map((err, i) => <div key={i}>· {err}</div>)}
                   {parsed.errors.length > 10 && <div>... и ещё {parsed.errors.length - 10}</div>}
                 </div>
@@ -15815,7 +15815,7 @@ function FeedbackScreen({ ctx }) {
                           const cAuthor = db.users.find(u => u.id === c.author_id);
                           const isAdmin = cAuthor?.role === 'admin';
                           return (
-                            <div key={i} className="p-2 rounded-lg text-xs" style={{ background: isAdmin ? '#F0F9FA' : '#FEF9EE', border: `1px solid ${isAdmin ? '#b0dce5' : '#FDE68A'}` }}>
+                            <div key={i} className="p-2 rounded-lg text-xs" style={{ background: isAdmin ? '#F0F9FA' : '#FEF9EE', border: `1px solid ${isAdmin ? '#b0dce5' : 'var(--mc-warning-border)'}` }}>
                               <span className="font-bold" style={{ color: isAdmin ? '#297b8a' : '#92400E' }}>
                                 {cAuthor ? `${cAuthor.first_name}` : '—'}:
                               </span>{' '}
@@ -15850,7 +15850,7 @@ function FeedbackScreen({ ctx }) {
                           <button onClick={() => disputeFeedback(fb)}
                             disabled={!(replyDraft[fb.id] || '').trim()}
                             className="flex-1 py-2 rounded-lg font-bold text-xs disabled:opacity-40"
-                            style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }}>
+                            style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)', border: '1px solid #FDE68A' }}>
                             🔄 Не решено
                           </button>
                         </div>
@@ -15877,7 +15877,7 @@ const FB_STATUS = {
   done:                    { label: 'Выполнено',   color: '#22C55E', bg: '#DCFCE7' },
   rejected:                { label: 'Отклонено',   color: '#EB5757', bg: '#FEE2E2' },
   awaiting_confirmation:   { label: 'Ожидает подтверждения', color: '#8B5CF6', bg: '#F3E8FF' },
-  archived:                { label: 'Архив',       color: '#94a3b8', bg: '#F1F5F9' },
+  archived:                { label: 'Архив',       color: 'var(--mc-muted)', bg: '#F1F5F9' },
 };
 
 function AdminFeedbackScreen({ ctx }) {
@@ -16014,7 +16014,7 @@ function AdminFeedbackScreen({ ctx }) {
                           const cAuthor = db.users.find(u => u.id === c.author_id);
                           const isAdminComment = cAuthor?.role === 'admin';
                           return (
-                            <div key={i} className="p-2 rounded-lg text-xs" style={{ background: isAdminComment ? '#F0F9FA' : '#FEF9EE', border: `1px solid ${isAdminComment ? '#b0dce5' : '#FDE68A'}` }}>
+                            <div key={i} className="p-2 rounded-lg text-xs" style={{ background: isAdminComment ? '#F0F9FA' : '#FEF9EE', border: `1px solid ${isAdminComment ? '#b0dce5' : 'var(--mc-warning-border)'}` }}>
                               <span className="font-bold" style={{ color: isAdminComment ? '#297b8a' : '#92400E' }}>
                                 {cAuthor ? cAuthor.first_name : '—'}:
                               </span>{' '}
@@ -16416,7 +16416,7 @@ function AdminErrorReportsScreen({ ctx }) {
               🧪 Тест записи
             </button>
             {counts.resolved > 0 && (
-              <button onClick={clearResolved} className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+              <button onClick={clearResolved} className="text-xs px-3 py-2 rounded-lg" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
                 <Trash2 size={12} className="inline mr-1" /> Очистить решённые
               </button>
             )}
@@ -16425,10 +16425,10 @@ function AdminErrorReportsScreen({ ctx }) {
       />
 
       {loadError && (
-        <div className="rounded-xl p-4 mb-4" style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}>
-          <div className="text-sm font-semibold mb-1" style={{ color: '#991B1B' }}>⚠️ Журнал ошибок не работает</div>
+        <div className="rounded-xl p-4 mb-4" style={{ background: 'var(--mc-danger-bg)', border: '1px solid #FECACA' }}>
+          <div className="text-sm font-semibold mb-1" style={{ color: 'var(--mc-danger-text)' }}>⚠️ Журнал ошибок не работает</div>
           <div className="text-sm" style={{ color: '#7F1D1D' }}>{loadError}</div>
-          <div className="text-xs mt-2" style={{ color: '#991B1B' }}>
+          <div className="text-xs mt-2" style={{ color: 'var(--mc-danger-text)' }}>
             Пока эта проблема не починена — сотрудники видят ошибки только у себя на экране, к тебе они не доходят.
           </div>
         </div>
@@ -16496,7 +16496,7 @@ function AdminErrorReportsScreen({ ctx }) {
                         Решено
                       </button>
                     )}
-                    <button onClick={() => deleteOne(r.id)} className="text-xs px-2 py-1 rounded" style={{ background: '#FEF2F2', color: '#991B1B' }}>
+                    <button onClick={() => deleteOne(r.id)} className="text-xs px-2 py-1 rounded" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
                       <Trash2 size={12} />
                     </button>
                   </div>
@@ -16599,7 +16599,7 @@ function AdminServiceScreen({ ctx }) {
         <button
           onClick={handleWipeTest}
           className="w-full py-2.5 rounded-lg font-semibold"
-          style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FBBF24' }}
+          style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)', border: '1px solid #FBBF24' }}
         >
           🔍 Найти и удалить тестовые записи
         </button>
@@ -16622,7 +16622,7 @@ function AdminServiceScreen({ ctx }) {
                 onClick={() => handleWipe(t.kind, t.label)}
                 disabled={t.count === 0}
                 className="px-3 py-1.5 rounded-lg font-semibold text-sm disabled:opacity-30"
-                style={{ background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA' }}
+                style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)', border: '1px solid #FECACA' }}
               >
                 Удалить все
               </button>
@@ -16631,7 +16631,7 @@ function AdminServiceScreen({ ctx }) {
         </div>
       </div>
 
-      <div className="mt-4 rounded-xl p-4 text-xs" style={{ background: '#FEF2F2', color: '#7F1D1D', border: '1px solid #FECACA' }}>
+      <div className="mt-4 rounded-xl p-4 text-xs" style={{ background: 'var(--mc-danger-bg)', color: '#7F1D1D', border: '1px solid #FECACA' }}>
         ⚠️ Каждая операция требует подтверждения вводом фразы. Удалённые записи восстановить нельзя — Supabase удаляет их безвозвратно.
       </div>
     </div>

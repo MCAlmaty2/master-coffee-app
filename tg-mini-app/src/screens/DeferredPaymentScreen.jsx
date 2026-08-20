@@ -158,7 +158,7 @@ function ClientListScreen({ ctx }) {
                 <div className="flex items-start justify-between gap-3 mb-1">
                   <div className="font-bold text-sm" style={{ color: 'var(--mc-text)' }}>{c.name}</div>
                   {stats.overdue > 0 && (
-                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: '#FEE2E2', color: '#EB5757' }}>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: 'var(--mc-danger-bg)', color: '#EB5757' }}>
                       {stats.overdue} просроч.
                     </span>
                   )}
@@ -256,7 +256,7 @@ function ClientDetailScreen({ ctx, clientId }) {
             )}
             <button onClick={() => setShowBulkImport(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold"
-              style={{ background: '#EDE9FE', color: '#7C3AED', border: '1px solid #C4B5FD' }}>
+              style={{ background: 'var(--mc-purple-bg)', color: 'var(--mc-purple-text)', border: '1px solid #C4B5FD' }}>
               <ClipboardPaste size={14} /> Импорт
             </button>
             <button onClick={() => navigate({ name: 'deferred_shipment_create', clientId })}
@@ -283,9 +283,9 @@ function ClientDetailScreen({ ctx, clientId }) {
 
       {/* Сводка */}
       {overdueCount > 0 && (
-        <div className="mt-3 p-3 rounded-xl flex items-center gap-3" style={{ background: '#FEE2E2', border: '1px solid #FECACA' }}>
+        <div className="mt-3 p-3 rounded-xl flex items-center gap-3" style={{ background: 'var(--mc-danger-bg)', border: '1px solid #FECACA' }}>
           <AlertTriangle size={20} style={{ color: '#EB5757' }} />
-          <div className="text-sm font-semibold" style={{ color: '#991B1B' }}>
+          <div className="text-sm font-semibold" style={{ color: 'var(--mc-danger-text)' }}>
             Просрочено: {overdueCount} отгрузок
           </div>
         </div>
@@ -310,7 +310,7 @@ function ClientDetailScreen({ ctx, clientId }) {
             const remaining = Number(s.amount) - paidAmt;
             return (
               <div key={s.id} className="rounded-xl p-4"
-                style={{ background: 'var(--mc-surface)', border: `1px solid ${status === 'overdue' ? '#FECACA' : status === 'partial' ? '#C4B5FD' : 'var(--mc-border)'}` }}>
+                style={{ background: 'var(--mc-surface)', border: `1px solid ${status === 'overdue' ? 'var(--mc-danger-border)' : status === 'partial' ? 'var(--mc-purple-border)' : 'var(--mc-border)'}` }}>
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div>
                     <div className="font-bold text-base" style={{ color: 'var(--mc-text)' }}>
@@ -328,7 +328,7 @@ function ClientDetailScreen({ ctx, clientId }) {
                   </span>
                 </div>
                 {paidAmt > 0 && status !== 'paid' && (
-                  <div className="mb-2 p-2 rounded-lg text-xs" style={{ background: '#EDE9FE', border: '1px solid #C4B5FD' }}>
+                  <div className="mb-2 p-2 rounded-lg text-xs" style={{ background: 'var(--mc-purple-bg)', border: '1px solid #C4B5FD' }}>
                     <div className="flex justify-between">
                       <span style={{ color: '#6D28D9' }}>Оплачено: <b>{fmtNum(paidAmt)} ₸</b></span>
                       <span style={{ color: '#EB5757' }}>Остаток: <b>{fmtNum(remaining)} ₸</b></span>
@@ -354,7 +354,7 @@ function ClientDetailScreen({ ctx, clientId }) {
                     </button>
                     {canManageClients && (
                       <button onClick={() => handleDelete(s.id)}
-                        className="px-3 py-2 rounded-lg" style={{ color: '#EB5757', background: '#FEE2E2' }}>
+                        className="px-3 py-2 rounded-lg" style={{ color: '#EB5757', background: 'var(--mc-danger-bg)' }}>
                         <Trash2 size={14} />
                       </button>
                     )}
@@ -375,7 +375,7 @@ function ClientDetailScreen({ ctx, clientId }) {
           <Modal title="Внести оплату" onClose={() => setShowPayModal(null)}>
             <div className="space-y-3">
               {modalShipment && (
-                <div className="p-3 rounded-lg text-sm" style={{ background: '#F3F4F6' }}>
+                <div className="p-3 rounded-lg text-sm" style={{ background: 'var(--mc-neutral-bg)' }}>
                   <div className="flex justify-between mb-1">
                     <span style={{ color: 'var(--mc-muted)' }}>Сумма отгрузки:</span>
                     <b>{fmtNum(modalShipment.amount)} ₸</b>
@@ -511,7 +511,7 @@ function BulkImportModal({ client, onClose, onCreate, showToast }) {
     <Modal title="Массовый импорт отгрузок" onClose={onClose}>
       {step === 'input' ? (
         <div className="space-y-3">
-          <div className="p-3 rounded-lg text-xs" style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1E40AF' }}>
+          <div className="p-3 rounded-lg text-xs" style={{ background: 'var(--mc-info-bg)', border: '1px solid #BFDBFE', color: 'var(--mc-info-text)' }}>
             <b>Клиент:</b> {client.name} (отсрочка {client.default_days} дн.)
             <div className="mt-1">Вставьте из 1С / Excel. Формат: <b>Номер</b> TAB <b>Дата</b> TAB <b>Сумма</b> [TAB Комментарий]</div>
           </div>
@@ -526,7 +526,7 @@ function BulkImportModal({ client, onClose, onCreate, showToast }) {
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="p-3 rounded-lg text-sm flex justify-between" style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', color: '#166534' }}>
+          <div className="p-3 rounded-lg text-sm flex justify-between" style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', color: 'var(--mc-success-text)' }}>
             <span>Отгрузок: <b>{parsed.length}</b></span>
             <span>Итого: <b>{fmtNum(totalSum)} ₸</b></span>
           </div>
@@ -722,9 +722,9 @@ function ShipmentFormScreen({ ctx, clientId }) {
                 className={inputCls} style={inputBorder(errors.days)} />
             </Field>
             {dueDate && (
-              <div className="p-3 rounded-lg text-center" style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
-                <div className="text-xs font-semibold mb-0.5" style={{ color: '#1D4ED8' }}>Расчётная дата оплаты</div>
-                <div className="text-lg font-bold" style={{ color: '#1E40AF' }}>{fmtDate(dueDate)}</div>
+              <div className="p-3 rounded-lg text-center" style={{ background: 'var(--mc-info-bg)', border: '1px solid #BFDBFE' }}>
+                <div className="text-xs font-semibold mb-0.5" style={{ color: 'var(--mc-info-text)' }}>Расчётная дата оплаты</div>
+                <div className="text-lg font-bold" style={{ color: 'var(--mc-info-text)' }}>{fmtDate(dueDate)}</div>
               </div>
             )}
             <Field label="Комментарий (необязательно)">
@@ -767,7 +767,7 @@ const Card = ({ title, children }) => (
 
 const Empty = ({ title, subtitle }) => (
   <div className="flex flex-col items-center justify-center py-16 text-center">
-    <Calendar size={48} style={{ color: '#D1D5DB', marginBottom: 12 }} />
+    <Calendar size={48} style={{ color: 'var(--mc-border)', marginBottom: 12 }} />
     <div className="font-semibold mb-1" style={{ color: '#9CA3AF' }}>{title}</div>
     {subtitle && <div className="text-sm" style={{ color: '#9CA3AF' }}>{subtitle}</div>}
   </div>

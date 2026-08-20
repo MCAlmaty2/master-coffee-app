@@ -110,13 +110,47 @@ body {
   background-color: var(--mc-bg);
 }
 
-/* Dark mode: ключевые Tailwind-классы */
-[data-theme="dark"] .bg-white { background-color: var(--mc-surface) !important; }
-[data-theme="dark"] .bg-gray-50 { background-color: var(--mc-surface-2) !important; }
+/* Dark mode: Tailwind-классы → CSS-переменные */
+[data-theme="dark"] .bg-white       { background-color: var(--mc-surface) !important; }
+[data-theme="dark"] .bg-gray-50,
+[data-theme="dark"] .bg-slate-50    { background-color: var(--mc-surface-2) !important; }
+[data-theme="dark"] .bg-gray-100,
+[data-theme="dark"] .bg-slate-100   { background-color: var(--mc-active-item) !important; }
+[data-theme="dark"] .bg-gray-200    { background-color: var(--mc-border) !important; }
+
+[data-theme="dark"] .border-gray-100,
+[data-theme="dark"] .border-slate-100 { border-color: var(--mc-border-light) !important; }
 [data-theme="dark"] .border-gray-200,
-[data-theme="dark"] .border-e5e7eb { border-color: var(--mc-border) !important; }
+[data-theme="dark"] .border-gray-300,
+[data-theme="dark"] .border-slate-200,
+[data-theme="dark"] .border-slate-300,
+[data-theme="dark"] .border-e5e7eb  { border-color: var(--mc-border) !important; }
+
+[data-theme="dark"] .text-gray-400,
 [data-theme="dark"] .text-gray-500,
-[data-theme="dark"] .text-slate-500 { color: var(--mc-muted) !important; }
+[data-theme="dark"] .text-gray-600,
+[data-theme="dark"] .text-slate-400,
+[data-theme="dark"] .text-slate-500,
+[data-theme="dark"] .text-slate-600 { color: var(--mc-muted) !important; }
+[data-theme="dark"] .text-gray-700,
+[data-theme="dark"] .text-gray-800,
+[data-theme="dark"] .text-gray-900,
+[data-theme="dark"] .text-slate-700,
+[data-theme="dark"] .text-slate-800,
+[data-theme="dark"] .text-slate-900 { color: var(--mc-text) !important; }
+
+[data-theme="dark"] .divide-gray-100 > :not(:first-child),
+[data-theme="dark"] .divide-gray-200 > :not(:first-child) { border-color: var(--mc-border) !important; }
+
+[data-theme="dark"] .ring-gray-200,
+[data-theme="dark"] .ring-gray-300 { --tw-ring-color: var(--mc-border) !important; }
+
+[data-theme="dark"] .shadow-sm,
+[data-theme="dark"] .shadow-md,
+[data-theme="dark"] .shadow-lg { --tw-shadow-color: rgba(0,0,0,.4) !important; }
+
+[data-theme="dark"] .hover\:bg-gray-50:hover,
+[data-theme="dark"] .hover\:bg-gray-100:hover { background-color: var(--mc-active-item) !important; }
 
 /* Убираем синий flash при тапе на мобильных */
 * {

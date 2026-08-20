@@ -411,7 +411,7 @@ function MonthlyView({ month, draftFacts, draftPlans, canEdit, editingPlan, kpi,
 
       {/* Подсказка режима плана */}
       {editingPlan && (
-        <div style={{ background: '#fffbeb', border: '1px solid #d97706', borderRadius: 10, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#92400e' }}>
+        <div style={{ background: 'var(--mc-warning-bg)', border: '1px solid #d97706', borderRadius: 10, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: 'var(--mc-warning-text)' }}>
           ✏️ <strong>Режим редактирования плана</strong> — кликните ячейку «План» чтобы изменить. Не забудьте сохранить.
         </div>
       )}
@@ -435,7 +435,7 @@ function MonthlyView({ month, draftFacts, draftPlans, canEdit, editingPlan, kpi,
               <th style={{ ...th('center'), background: editingPlan ? '#92400e' : '#1e293b', fontSize: 10, color: editingPlan ? '#fef9c3' : '#94a3b8' }}>
                 Месяц {editingPlan && '✏️'}
               </th>
-              <th style={{ ...th('center'), background: '#1e293b', fontSize: 10, color: '#94a3b8' }}>Нед.</th>
+              <th style={{ ...th('center'), background: '#1e293b', fontSize: 10, color: 'var(--mc-muted)' }}>Нед.</th>
               {month.weeks.map(w => (
                 <th key={w} style={{ ...th('center'), background: '#0c4a6e', fontSize: 9, color: '#7dd3fc', whiteSpace: 'nowrap' }}>{w}</th>
               ))}
@@ -528,7 +528,7 @@ function AnnualView({ salesReports, monthsList }) {
             <th style={{ ...th('center'), background: '#0f172a' }}></th>
             {MONTHS.map(m => (
               <React.Fragment key={m.key}>
-                <th style={{ ...th('center'), background: '#1e293b', fontSize: 9, color: '#94a3b8' }}>П</th>
+                <th style={{ ...th('center'), background: '#1e293b', fontSize: 9, color: 'var(--mc-muted)' }}>П</th>
                 <th style={{ ...th('center'), background: '#0c4a6e', fontSize: 9, color: '#7dd3fc' }}>Ф%</th>
               </React.Fragment>
             ))}
@@ -747,7 +747,7 @@ export function SalesReportHomeTile({ ctx }) {
 ───────────────────────────────────────────────────────────── */
 const th = (align = 'center') => ({
   background: '#1e293b',
-  color: '#e2e8f0',
+  color: 'var(--mc-border)',
   padding: '9px 10px',
   textAlign: align,
   fontWeight: 600,

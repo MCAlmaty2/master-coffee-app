@@ -14,14 +14,14 @@ const MT_STATUS = {
   new:         { label: 'Новый',     color: '#3390EC', bg: '#E7F3FE' },
   in_progress: { label: 'В работе',  color: '#F59E0B', bg: '#FEF3C7' },
   done:        { label: 'Решён',     color: '#22C55E', bg: '#DCFCE7' },
-  cancelled:   { label: 'Отменён',   color: '#94a3b8', bg: '#F1F5F9' },
+  cancelled:   { label: 'Отменён',   color: 'var(--mc-muted)', bg: '#F1F5F9' },
 };
 const MT_STATUS_ORDER = ['new', 'in_progress', 'done', 'cancelled'];
 
 const PRIORITY = {
   high:   { label: '🔴 Высокий', color: '#dc2626' },
   normal: { label: '🟡 Обычный', color: '#d97706' },
-  low:    { label: '⚪ Низкий',  color: '#64748b' },
+  low:    { label: '⚪ Низкий',  color: 'var(--mc-muted)' },
 };
 
 const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID)

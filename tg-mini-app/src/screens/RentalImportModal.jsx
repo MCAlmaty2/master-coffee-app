@@ -87,7 +87,7 @@ export function EquipmentImportModal({ onClose, onCreate }) {
       {toast && <div className="mb-3 p-2.5 rounded-lg text-xs font-semibold" style={{ background: toast.startsWith('Ошибка') ? '#FEE2E2' : '#DCFCE7', color: toast.startsWith('Ошибка') ? '#991B1B' : '#166534' }}>{toast}</div>}
       {step === 'input' ? (
         <div className="space-y-3">
-          <div className="p-3 rounded-lg text-xs" style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1E40AF' }}>
+          <div className="p-3 rounded-lg text-xs" style={{ background: 'var(--mc-info-bg)', border: '1px solid #BFDBFE', color: 'var(--mc-info-text)' }}>
             Вставьте из Excel / Google Sheets. Формат:<br />
             <b>Вид</b> TAB <b>Модель</b> TAB <b>Серийный номер</b> [TAB <b>Стоимость</b>] [TAB <b>Примечание</b>]
           </div>
@@ -102,7 +102,7 @@ export function EquipmentImportModal({ onClose, onCreate }) {
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="p-3 rounded-lg text-sm" style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', color: '#166534' }}>
+          <div className="p-3 rounded-lg text-sm" style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', color: 'var(--mc-success-text)' }}>
             Единиц оборудования: <b>{parsed.length}</b>
           </div>
           <div className="max-h-60 overflow-y-auto space-y-1.5">

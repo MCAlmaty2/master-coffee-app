@@ -691,7 +691,7 @@ function Card({ title, children }) {
 function Empty({ icon: Ic = Gift, title, subtitle }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <Ic size={48} style={{ color: '#D1D5DB', marginBottom: 12 }} />
+      <Ic size={48} style={{ color: 'var(--mc-border)', marginBottom: 12 }} />
       <div className="font-semibold mb-1" style={{ color: '#9CA3AF' }}>{title}</div>
       {subtitle && <div className="text-sm" style={{ color: '#9CA3AF' }}>{subtitle}</div>}
     </div>

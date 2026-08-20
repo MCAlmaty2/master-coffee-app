@@ -400,7 +400,7 @@ export default function HRCalendarScreen({ ctx }) {
           {isActive && (
             <span style={{
               display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600,
-              padding: '2px 8px', borderRadius: 6, background: '#dcfce7', color: '#15803d',
+              padding: '2px 8px', borderRadius: 6, background: 'var(--mc-success-bg)', color: '#15803d',
             }}>
               В отпуске · осталось {daysUntil(v.end_date) + 1} дн.
             </span>
@@ -408,7 +408,7 @@ export default function HRCalendarScreen({ ctx }) {
           {!isActive && d1 > 0 && (
             <span style={{
               display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600,
-              padding: '2px 8px', borderRadius: 6, background: '#dbeafe', color: '#1d4ed8',
+              padding: '2px 8px', borderRadius: 6, background: '#dbeafe', color: 'var(--mc-info-text)',
             }}>
               Через {d1} дн.
             </span>

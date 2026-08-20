@@ -220,7 +220,7 @@ export function DailyRevenueScreen({ ctx }) {
 
 /* ── CSS helpers ───────────────────────────────────────────── */
 const thS = (align = 'left') => ({
-  background: '#1e293b', color: '#e2e8f0', padding: '8px 10px',
+  background: '#1e293b', color: 'var(--mc-border)', padding: '8px 10px',
   textAlign: align, fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap',
 });
 const tdS = (align = 'left', color = 'var(--mc-text)') => ({

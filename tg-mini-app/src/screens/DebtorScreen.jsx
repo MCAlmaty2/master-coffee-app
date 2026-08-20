@@ -178,10 +178,10 @@ export default function DebtorScreen({ ctx }) {
         </button>
         <div className="flex-1">
           <div className="font-semibold" style={{ color: 'var(--mc-text)' }}>Дебиторка</div>
-          {weekLabel && <div className="text-xs" style={{ color: '#64748B' }}>Данные на {weekLabel}</div>}
+          {weekLabel && <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Данные на {weekLabel}</div>}
         </div>
         {isAdmin && (
-          <button onClick={() => setShowModal(true)} className="p-2 rounded-lg" style={{ color: '#64748B' }}>
+          <button onClick={() => setShowModal(true)} className="p-2 rounded-lg" style={{ color: 'var(--mc-muted)' }}>
             <Settings size={18} />
           </button>
         )}
@@ -195,13 +195,13 @@ export default function DebtorScreen({ ctx }) {
           <div className="rounded-xl p-4 w-full max-w-md" style={{ background: 'var(--mc-surface)' }}>
             <div className="flex items-center justify-between mb-3">
               <div className="font-semibold" style={{ color: 'var(--mc-text)' }}>Настройки дебиторки</div>
-              <button onClick={() => setShowModal(false)}><X size={18} style={{ color: '#64748B' }} /></button>
+              <button onClick={() => setShowModal(false)}><X size={18} style={{ color: 'var(--mc-muted)' }} /></button>
             </div>
 
             {/* Auto sync info */}
             <div className="mb-4 rounded-lg p-3" style={{ background: 'var(--mc-bg)', border: '1px solid var(--mc-border)' }}>
               <div className="text-xs font-medium mb-1" style={{ color: 'var(--mc-text)' }}>Авто-синхронизация (Apps Script)</div>
-              <div className="text-xs space-y-0.5" style={{ color: '#64748B' }}>
+              <div className="text-xs space-y-0.5" style={{ color: 'var(--mc-muted)' }}>
                 <p>Данные подтягиваются из Google таблицы автоматически каждые 10 минут.</p>
                 <p>Листы: <code className="px-1 rounded" style={{ background: 'var(--mc-surface)' }}>ТОО ДД.ММ</code>,{' '}
                   <code className="px-1 rounded" style={{ background: 'var(--mc-surface)' }}>MCR ДД.ММ</code>,{' '}
@@ -213,14 +213,14 @@ export default function DebtorScreen({ ctx }) {
             {/* Divider */}
             <div className="flex items-center gap-3 mb-4">
               <div className="flex-1 border-t" style={{ borderColor: 'var(--mc-border)' }} />
-              <div className="text-xs" style={{ color: '#94A3B8' }}>или вручную</div>
+              <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>или вручную</div>
               <div className="flex-1 border-t" style={{ borderColor: 'var(--mc-border)' }} />
             </div>
 
             {/* File upload */}
             <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--mc-text)' }}>Загрузить .xlsx файл</div>
             <label className="block rounded-xl p-5 text-center cursor-pointer border-2 border-dashed"
-              style={{ borderColor: 'var(--mc-border)', color: '#64748B' }}>
+              style={{ borderColor: 'var(--mc-border)', color: 'var(--mc-muted)' }}>
               <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile}
                 className="hidden" disabled={uploading} />
               {uploading ? (
@@ -265,13 +265,13 @@ export default function DebtorScreen({ ctx }) {
       {loading && (
         <div className="p-8 text-center">
           <Loader2 size={28} className="animate-spin mx-auto" style={{ color: '#297B8A' }} />
-          <div className="text-sm mt-2" style={{ color: '#64748B' }}>Загрузка данных...</div>
+          <div className="text-sm mt-2" style={{ color: 'var(--mc-muted)' }}>Загрузка данных...</div>
         </div>
       )}
 
       {/* Empty state */}
       {!loading && !hasData && (
-        <div className="p-6 text-center" style={{ color: '#64748B' }}>
+        <div className="p-6 text-center" style={{ color: 'var(--mc-muted)' }}>
           <FileSpreadsheet size={40} className="mx-auto mb-3 opacity-40" />
           <div className="text-sm">Данных ещё нет</div>
           {isAdmin && (
@@ -288,17 +288,17 @@ export default function DebtorScreen({ ctx }) {
           <div className="px-4 pt-3 pb-2">
             <div className="rounded-xl p-3"
               style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
-              <div className="text-xs" style={{ color: '#64748B' }}>Фактическая задолженность · {activeBU}</div>
+              <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Фактическая задолженность · {activeBU}</div>
               <div className="text-xl font-bold mt-1"
                 style={{ color: totalDebt > 0 ? '#DC2626' : '#16A34A' }}>
                 {fmtMoney(totalDebt)} ₸
               </div>
               <div className="flex items-center gap-3 mt-1">
-                <span className="text-xs" style={{ color: '#64748B' }}>
+                <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                   {filtered.length} {filtered.length === 1 ? 'клиент' : 'клиентов'}
                 </span>
                 {totalSverka !== totalDebt && (
-                  <span className="text-xs" style={{ color: '#94A3B8' }}>
+                  <span className="text-xs" style={{ color: 'var(--mc-muted)' }}>
                     Сверка: {fmtMoney(totalSverka)} ₸
                   </span>
                 )}
@@ -323,7 +323,7 @@ export default function DebtorScreen({ ctx }) {
 
           <div className="px-4 pb-2">
             <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#94A3B8' }} />
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--mc-muted)' }} />
               <input
                 className="w-full pl-9 pr-3 py-2 rounded-lg text-sm"
                 style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', color: 'var(--mc-text)' }}
@@ -336,7 +336,7 @@ export default function DebtorScreen({ ctx }) {
 
           <div className="px-4 pb-20">
             {filtered.length === 0 ? (
-              <div className="text-center py-8 text-sm" style={{ color: '#64748B' }}>
+              <div className="text-center py-8 text-sm" style={{ color: 'var(--mc-muted)' }}>
                 {search ? 'Ничего не найдено' : 'Нет данных'}
               </div>
             ) : (
@@ -356,14 +356,14 @@ export default function DebtorScreen({ ctx }) {
                           {debt > 0 ? fmtMoney(debt) + ' ₸' : 'Закрыто'}
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs" style={{ color: '#64748B' }}>
+                      <div className="flex items-center gap-3 mt-1 text-xs" style={{ color: 'var(--mc-muted)' }}>
                         {sverka !== debt && <span>Сверка: {fmtMoney(sverka)} ₸</span>}
                         {paid > 0 && (
                           <span style={{ color: '#16A34A' }}>Оплачено: {fmtMoney(paid)} ₸</span>
                         )}
                       </div>
                       {r.comment && (
-                        <div className="text-xs mt-1 truncate" style={{ color: '#64748B' }}>{r.comment}</div>
+                        <div className="text-xs mt-1 truncate" style={{ color: 'var(--mc-muted)' }}>{r.comment}</div>
                       )}
                     </div>
                   );

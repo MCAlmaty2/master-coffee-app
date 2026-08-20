@@ -48,7 +48,7 @@ function SHeader({ title, subtitle, onBack, action }) {
 function TypeBadge({ type }) {
   const legal = type === 'legal';
   return (
-    <span style={{ background: legal ? '#EFF6FF' : '#F0FDF4', color: legal ? '#1D4ED8' : '#16a34a', border: `1px solid ${legal ? '#BFDBFE' : '#BBF7D0'}`, borderRadius: 8, padding: '2px 8px', fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap' }}>
+    <span style={{ background: legal ? '#EFF6FF' : '#F0FDF4', color: legal ? '#1D4ED8' : '#16a34a', border: `1px solid ${legal ? 'var(--mc-info-border)' : 'var(--mc-success-border)'}`, borderRadius: 8, padding: '2px 8px', fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap' }}>
       {legal ? '🏢 Юр. лицо' : '👤 Физ. лицо'}
     </span>
   );
@@ -368,10 +368,10 @@ export function ClientDetailScreen({ ctx, clientId }) {
 }
 
 const ORDER_STATUS = {
-  new:       { label: 'Новая',     bg: '#EFF6FF', color: '#1D4ED8' },
+  new:       { label: 'Новая',     bg: '#EFF6FF', color: 'var(--mc-info-text)' },
   paid:      { label: 'Оплачена',  bg: '#F0FDF4', color: '#16a34a' },
   shipped:   { label: 'Отгружена', bg: '#FEF3C7', color: '#D97706' },
-  delivered: { label: 'Доставлена',bg: '#D1FAE5', color: '#065F46' },
+  delivered: { label: 'Доставлена',bg: '#D1FAE5', color: 'var(--mc-success-text)' },
   cancelled: { label: 'Отменена',  bg: '#FEF2F2', color: '#DC2626' },
 };
 
@@ -537,7 +537,7 @@ export function ClientEditScreen({ ctx, clientId }) {
               const items = [...form.preferred_items]; items[i] = { ...items[i], price: e.target.value }; upd({ preferred_items: items });
             }} placeholder="Цена" style={{ width: 80, padding: '7px 9px', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 12, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', fontFamily: 'inherit' }} />
             <button onClick={() => upd({ preferred_items: form.preferred_items.filter((_, j) => j !== i) })}
-              style={{ padding: 6, background: '#FEE2E2', border: 'none', borderRadius: 7, cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
+              style={{ padding: 6, background: 'var(--mc-danger-bg)', border: 'none', borderRadius: 7, cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
               <X size={13} />
             </button>
           </div>
@@ -582,7 +582,7 @@ export function ClientEditScreen({ ctx, clientId }) {
               style={{ padding: '7px 8px', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 12, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', fontFamily: 'inherit' }}
             />
             <button onClick={() => upd({ addresses: (form.addresses || []).filter((_, j) => j !== i) })}
-              style={{ padding: 6, background: '#FEE2E2', border: 'none', borderRadius: 7, cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
+              style={{ padding: 6, background: 'var(--mc-danger-bg)', border: 'none', borderRadius: 7, cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
               <X size={13} />
             </button>
           </div>

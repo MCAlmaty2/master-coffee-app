@@ -425,7 +425,7 @@ function WeekView({ tasks, completions, userId, onToggle, isCompleted }) {
           const done = isToday ? dayT.filter(isCompleted).length : 0;
           const pct = dayT.length ? Math.round(done / dayT.length * 100) : 0;
           return (
-            <div key={dow} className="rounded-xl overflow-hidden" style={{ background: 'white', border: '1px solid var(--mc-border)' }}>
+            <div key={dow} className="rounded-xl overflow-hidden" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
               <div className="flex items-center gap-1 px-2.5 py-2" style={{ background: isToday ? '#EBF5FF' : 'transparent', borderBottom: '1px solid var(--mc-border)' }}>
                 <span className="text-[11px] font-bold uppercase" style={{ color: isToday ? '#3390EC' : 'var(--mc-muted)', letterSpacing: '.06em' }}>{DOW_SHORT[dow]}</span>
                 <span className="text-[11px]" style={{ color: isToday ? '#3390EC' : 'var(--mc-muted)', opacity: 0.7 }}>{dt}</span>
@@ -498,10 +498,10 @@ function MonthView({ tasks, completions, userId, isCompleted, onToggle }) {
       {/* Навигация по месяцам */}
       <div className="flex items-center justify-between mb-3">
         <button onClick={() => navMonth(-1)} className="px-3 py-1.5 rounded-lg text-sm"
-          style={{ border: '1px solid var(--mc-border)', background: 'white', color: 'var(--mc-text)' }}>←</button>
+          style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)', color: 'var(--mc-text)' }}>←</button>
         <span className="text-base font-semibold" style={{ color: 'var(--mc-text)' }}>{MONTHS_RU[m]} {y}</span>
         <button onClick={() => navMonth(1)} className="px-3 py-1.5 rounded-lg text-sm"
-          style={{ border: '1px solid var(--mc-border)', background: 'white', color: 'var(--mc-text)' }}>→</button>
+          style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)', color: 'var(--mc-text)' }}>→</button>
       </div>
       {/* Дни недели */}
       <div className="grid grid-cols-7 gap-[3px] mb-[3px]">
@@ -519,7 +519,7 @@ function MonthView({ tasks, completions, userId, isCompleted, onToggle }) {
           );
           const bc = c.isT ? '#3390EC' : c.allDone ? '#22C55E' : c.hasDl ? '#D85A30' : 'var(--mc-border)';
           return (
-            <div key={i} className="min-h-[66px] rounded-lg p-1.5" style={{ background: 'white', border: `${c.isT ? 2 : 1}px solid ${bc}` }}>
+            <div key={i} className="min-h-[66px] rounded-lg p-1.5" style={{ background: 'var(--mc-surface)', border: `${c.isT ? 2 : 1}px solid ${bc}` }}>
               <div className="text-[11px] font-semibold mb-0.5" style={{ color: c.isT ? '#3390EC' : c.hasDl ? '#D85A30' : 'var(--mc-muted)' }}>{c.num}</div>
               <div className="flex flex-wrap gap-[2px]">
                 {c.wd.map(t => {
@@ -529,7 +529,7 @@ function MonthView({ tasks, completions, userId, isCompleted, onToggle }) {
                 })}
               </div>
               {c.ml.length > 0 && <div className="text-[9px] mt-0.5 leading-tight" style={{ color: '#D85A30' }}>{c.ml.map(t => t.title.split(' ')[0]).join(', ')}</div>}
-              {c.allDone && <div className="text-[9px] font-semibold mt-0.5" style={{ color: '#166534' }}>✓ готово</div>}
+              {c.allDone && <div className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--mc-success-text)' }}>✓ готово</div>}
             </div>
           );
         })}
@@ -599,7 +599,7 @@ function ManageView({ tasks, allTasks, role, onDelete, onEdit, isAdmin, schedule
           {grouped[freq].map(t => {
             const tt = TASK_TYPES[t.task_type] || TASK_TYPES.custom;
             return (
-              <div key={t.id} className="flex items-center gap-3 px-4 py-3 rounded-xl mb-2" style={{ background: 'white', border: '1px solid var(--mc-border)', borderLeft: `4px solid ${tt.color}` }}>
+              <div key={t.id} className="flex items-center gap-3 px-4 py-3 rounded-xl mb-2" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderLeft: `4px solid ${tt.color}` }}>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium" style={{ color: 'var(--mc-text)' }}>{t.title}</div>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -739,7 +739,7 @@ function TaskViewModal({ task, done, onClose, onToggle }) {
 }
 
 const inputCls = 'w-full px-3 py-2.5 rounded-lg text-sm';
-const inputStyle = { border: '1px solid var(--mc-border)', background: 'white', color: 'var(--mc-text)' };
+const inputStyle = { border: '1px solid var(--mc-border)', background: 'var(--mc-surface)', color: 'var(--mc-text)' };
 function FormField({ label, children }) {
   return <div><label className="block text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>{label}</label>{children}</div>;
 }
@@ -879,7 +879,7 @@ function TaskFormModal({ role, isAdmin, scheduleRoles, db, onClose, onSave, curr
               <span className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>Задача активна</span>
               <button onClick={() => update({ active: !form.active })}
                 className="w-11 h-6 rounded-full flex items-center px-0.5 transition-colors"
-                style={{ background: form.active ? '#22C55E' : '#CBD5E1' }}>
+                style={{ background: form.active ? '#22C55E' : 'var(--mc-border)' }}>
                 <div className="w-5 h-5 rounded-full bg-white shadow transition-transform"
                   style={{ transform: form.active ? 'translateX(20px)' : 'translateX(0)' }} />
               </button>
@@ -993,7 +993,7 @@ export function ScheduleHomeBanner({ ctx }) {
               );
             })}
             {pending.length > 5 && (
-              <div className="text-[10px] text-center pt-1" style={{ color: '#B45309' }}>
+              <div className="text-[10px] text-center pt-1" style={{ color: 'var(--mc-warning-text)' }}>
                 и ещё {pending.length - 5}...
               </div>
             )}
