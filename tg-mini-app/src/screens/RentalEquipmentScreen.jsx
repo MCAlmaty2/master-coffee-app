@@ -16,10 +16,10 @@ const todayStr = () => { const d = new Date(); d.setMinutes(d.getMinutes() + 300
 const monthNow = () => todayStr().slice(0, 7);
 
 const EQ_STATUS = {
-  in_office:   { label: 'В офисе',    color: '#3B82F6', bg: '#DBEAFE' },
-  rented:      { label: 'В аренде',   color: '#22C55E', bg: '#DCFCE7' },
-  in_repair:   { label: 'В ремонте',  color: '#F59E0B', bg: '#FEF3C7' },
-  written_off: { label: 'Списано',    color: '#6B7280', bg: '#F3F4F6' },
+  in_office:   { label: 'В офисе',    color: '#3B82F6', bg: 'var(--mc-info-bg)' },
+  rented:      { label: 'В аренде',   color: '#22C55E', bg: 'var(--mc-success-bg)' },
+  in_repair:   { label: 'В ремонте',  color: '#F59E0B', bg: 'var(--mc-warning-bg)' },
+  written_off: { label: 'Списано',    color: 'var(--mc-neutral-text)', bg: 'var(--mc-neutral-bg)' },
 };
 const MOVE_TYPES = {
   to_client:   { label: 'Передача клиенту', icon: Truck },
@@ -132,7 +132,7 @@ function EquipmentListTab({ ctx }) {
           <Search size={14} className="absolute left-2.5 top-2.5" style={{ color: 'var(--mc-muted)' }} />
           <input className={inputCls + ' pl-8'} style={inputBorder()} placeholder="Поиск..." value={q} onChange={e => setQ(e.target.value)} />
         </div>
-        {canManage && <button onClick={() => setShowImport(true)} className="rounded-xl px-3 py-2 text-sm font-semibold" style={{ background: '#EDE9FE', color: '#7C3AED', border: '1px solid #C4B5FD' }}><ClipboardPaste size={16} /></button>}
+        {canManage && <button onClick={() => setShowImport(true)} className="rounded-xl px-3 py-2 text-sm font-semibold" style={{ background: 'var(--mc-purple-bg)', color: 'var(--mc-purple-text)', border: '1px solid var(--mc-purple-border)' }}><ClipboardPaste size={16} /></button>}
         {canManage && <button onClick={() => ctx.navigate({ name: 'rental_equipment_form' })} className="rounded-xl px-4 py-2 text-sm font-semibold text-white" style={{ background: '#3B82F6' }}><Plus size={16} /></button>}
       </div>
       <Tabs items={[{ id: 'all', label: 'Все', count: counts.all }, ...Object.entries(EQ_STATUS).map(([k, v]) => ({ id: k, label: v.label, count: counts[k] }))]} value={filter} onChange={setFilter} />
@@ -230,9 +230,9 @@ function EquipmentDetailScreen({ ctx, equipmentId }) {
       </div>
       {canManage && (
         <div className="flex gap-2 mb-4">
-          <button onClick={() => ctx.navigate({ name: 'rental_equipment_form', equipmentId })} className="flex-1 py-2 rounded-xl text-sm font-semibold" style={{ background: '#EFF6FF', color: '#3B82F6', border: '1px solid #BFDBFE' }}><Edit3 size={14} className="inline mr-1" />Изменить</button>
-          <button onClick={() => ctx.navigate({ name: 'rental_movement_form', equipmentId })} className="flex-1 py-2 rounded-xl text-sm font-semibold" style={{ background: '#F0FDF4', color: '#22C55E', border: '1px solid #BBF7D0' }}><ArrowLeftRight size={14} className="inline mr-1" />Перемещение</button>
-          <button onClick={handleDelete} className="py-2 px-3 rounded-xl text-sm" style={{ background: '#FEF2F2', color: '#EF4444', border: '1px solid #FECACA' }}><Trash2 size={14} /></button>
+          <button onClick={() => ctx.navigate({ name: 'rental_equipment_form', equipmentId })} className="flex-1 py-2 rounded-xl text-sm font-semibold" style={{ background: 'var(--mc-info-bg)', color: 'var(--mc-info-text)', border: '1px solid var(--mc-info-border)' }}><Edit3 size={14} className="inline mr-1" />Изменить</button>
+          <button onClick={() => ctx.navigate({ name: 'rental_movement_form', equipmentId })} className="flex-1 py-2 rounded-xl text-sm font-semibold" style={{ background: 'var(--mc-success-bg)', color: '#22C55E', border: '1px solid var(--mc-success-border)' }}><ArrowLeftRight size={14} className="inline mr-1" />Перемещение</button>
+          <button onClick={handleDelete} className="py-2 px-3 rounded-xl text-sm" style={{ background: 'var(--mc-danger-bg)', color: '#EF4444', border: '1px solid var(--mc-danger-border)' }}><Trash2 size={14} /></button>
         </div>
       )}
       <h3 className="font-semibold text-sm mb-2">История перемещений</h3>
@@ -342,7 +342,7 @@ function ClientsListTab({ ctx }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {eqCount(c.id) > 0 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#DCFCE7', color: '#22C55E' }}><Package size={10} className="inline mr-0.5" />{eqCount(c.id)}</span>}
+              {eqCount(c.id) > 0 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'var(--mc-success-bg)', color: '#22C55E' }}><Package size={10} className="inline mr-0.5" />{eqCount(c.id)}</span>}
               <ChevronRight size={16} style={{ color: 'var(--mc-muted)' }} />
             </div>
           </div>
@@ -430,7 +430,7 @@ function RentalClientDetailScreen({ ctx, clientId }) {
       <button onClick={() => ctx.navigate({ name: 'rental_home' })} className="flex items-center gap-1 mb-4 text-sm font-medium" style={{ color: '#3B82F6' }}><ChevronLeft size={16} />Назад</button>
       <div className="flex justify-between items-start mb-3">
         <h2 className="text-lg font-bold">{client.name}</h2>
-        {canManage && <button onClick={() => ctx.navigate({ name: 'rental_client_form', clientId })} className="text-xs font-semibold px-3 py-1.5 rounded-lg" style={{ background: '#EFF6FF', color: '#3B82F6' }}><Edit3 size={12} className="inline mr-1" />Изменить</button>}
+        {canManage && <button onClick={() => ctx.navigate({ name: 'rental_client_form', clientId })} className="text-xs font-semibold px-3 py-1.5 rounded-lg" style={{ background: 'var(--mc-info-bg)', color: 'var(--mc-info-text)' }}><Edit3 size={12} className="inline mr-1" />Изменить</button>}
       </div>
       <div className="rounded-xl p-3 mb-3 text-xs" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
         {client.address && <div className="mb-1"><MapPin size={10} className="inline mr-1" />{client.address}</div>}
@@ -521,11 +521,11 @@ function PurchasesTab({ ctx }) {
           <div key={c.id} className="rounded-xl p-3 mb-2" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
             <div className="flex justify-between items-center mb-1">
               <span className="font-semibold text-sm">{c.name}</span>
-              {!isEd && <button onClick={() => startEdit(c.id)} className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ background: '#EFF6FF', color: '#3B82F6' }}><Edit3 size={12} className="inline mr-0.5" />{p ? 'Изменить' : 'Внести'}</button>}
+              {!isEd && <button onClick={() => startEdit(c.id)} className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ background: 'var(--mc-info-bg)', color: 'var(--mc-info-text)' }}><Edit3 size={12} className="inline mr-0.5" />{p ? 'Изменить' : 'Внести'}</button>}
             </div>
             {planKg > 0 && <div className="text-xs mb-1" style={{ color: 'var(--mc-muted)' }}>План: {planKg} кг · Факт: {fact} кг ({pct}%)</div>}
             {planKg > 0 && (
-              <div className="w-full h-1.5 rounded-full mb-1" style={{ background: '#E5E7EB' }}>
+              <div className="w-full h-1.5 rounded-full mb-1" style={{ background: 'var(--mc-progress-track)' }}>
                 <div className="h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%`, background: ok ? '#22C55E' : '#F59E0B' }} />
               </div>
             )}
@@ -636,13 +636,13 @@ function RevisionFormScreen({ ctx }) {
           {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </>}
-      <button onClick={loadChecklist} className="w-full py-2 rounded-xl text-xs font-semibold mt-3 mb-3" style={{ background: '#EFF6FF', color: '#3B82F6', border: '1px solid #BFDBFE' }}><ClipboardList size={14} className="inline mr-1" />Загрузить список оборудования</button>
+      <button onClick={loadChecklist} className="w-full py-2 rounded-xl text-xs font-semibold mt-3 mb-3" style={{ background: 'var(--mc-info-bg)', color: 'var(--mc-info-text)', border: '1px solid var(--mc-info-border)' }}><ClipboardList size={14} className="inline mr-1" />Загрузить список оборудования</button>
       {checklist.map((item, i) => (
         <div key={i} className="rounded-xl p-2.5 mb-1.5" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
           <div className="flex justify-between items-center text-xs">
             <span className="font-medium">{item.label}</span>
             <button onClick={() => toggleFound(i)} className="px-2 py-1 rounded-full text-xs font-semibold"
-              style={{ background: item.found ? '#DCFCE7' : '#FEE2E2', color: item.found ? '#22C55E' : '#EF4444' }}>{item.found ? 'Найдено' : 'Нет'}</button>
+              style={{ background: item.found ? 'var(--mc-success-bg)' : 'var(--mc-danger-bg)', color: item.found ? '#22C55E' : '#EF4444' }}>{item.found ? 'Найдено' : 'Нет'}</button>
           </div>
           {item.found && (
             <div className="flex gap-1 mt-1">
@@ -730,7 +730,7 @@ function ReportTab({ ctx }) {
       <div className="rounded-xl p-3 mb-3" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
         <div className="text-xs font-medium mb-1">Закуп за месяц</div>
         <div className="text-sm">Факт: <b>{stats.totalKg} кг</b> из {stats.planKg} кг плана ({stats.fulfillPct}%)</div>
-        <div className="w-full h-2 rounded-full mt-1 mb-1" style={{ background: '#E5E7EB' }}>
+        <div className="w-full h-2 rounded-full mt-1 mb-1" style={{ background: 'var(--mc-progress-track)' }}>
           <div className="h-full rounded-full" style={{ width: `${Math.min(stats.fulfillPct, 100)}%`, background: stats.fulfillPct >= 100 ? '#22C55E' : '#F59E0B' }} />
         </div>
         <div className="text-sm">Сумма: <b>{fmtNum(stats.totalAmt)} тг</b></div>
@@ -738,7 +738,7 @@ function ReportTab({ ctx }) {
       {underperformers.length > 0 && <>
         <h3 className="font-semibold text-sm mb-2" style={{ color: '#F59E0B' }}><AlertTriangle size={14} className="inline mr-1" />Недовыполнение плана ({underperformers.length})</h3>
         {underperformers.map(c => (
-          <div key={c.id} className="rounded-xl p-2.5 mb-1.5 text-xs" style={{ background: '#FEF3C7', border: '1px solid #FDE68A' }}>
+          <div key={c.id} className="rounded-xl p-2.5 mb-1.5 text-xs" style={{ background: 'var(--mc-warning-bg)', border: '1px solid var(--mc-warning-border)' }}>
             <div className="flex justify-between"><span className="font-semibold">{c.name}</span><span>{c.pct}%</span></div>
             <div>Факт: {c.fact} кг / План: {c.plan_kg} кг</div>
           </div>

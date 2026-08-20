@@ -319,7 +319,7 @@ export default function CashScreen({ ctx }) {
                         {canEditOps && (
                           <button onClick={(e) => { e.stopPropagation(); setEditingOp(op); }}
                             className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg"
-                            style={{ background: '#3390EC15', color: '#3390EC' }}>
+                            style={{ background: 'var(--mc-info-bg)', color: '#3390EC' }}>
                             <Pencil size={11} /> Изменить
                           </button>
                         )}

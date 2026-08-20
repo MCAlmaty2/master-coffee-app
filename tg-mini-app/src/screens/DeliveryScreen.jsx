@@ -42,10 +42,10 @@ const DELIVERY_PAY_METHODS = {
 };
 
 const STATUS_CFG = {
-  pending:   { bg: '#FEF9EE', text: '#92400E', border: '#FDE68A', label: 'Свободен'      },
-  assigned:  { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', label: 'В работе'      },
-  delivered: { bg: '#D1FAE5', text: '#065F46', border: '#6EE7B7', label: '✓ Доставлен'   },
-  failed:    { bg: '#FEE2E2', text: '#991B1B', border: '#FCA5A5', label: '✗ Не доставлен' },
+  pending:   { bg: 'var(--mc-warning-bg)',  text: 'var(--mc-warning-text)',  border: 'var(--mc-warning-border)',  label: 'Свободен'      },
+  assigned:  { bg: 'var(--mc-info-bg)',     text: 'var(--mc-info-text)',     border: 'var(--mc-info-border)',     label: 'В работе'      },
+  delivered: { bg: 'var(--mc-success-bg)',   text: 'var(--mc-success-text)',  border: 'var(--mc-success-border)',  label: '✓ Доставлен'   },
+  failed:    { bg: 'var(--mc-danger-bg)',    text: 'var(--mc-danger-text)',   border: 'var(--mc-danger-border)',   label: '✗ Не доставлен' },
 };
 
 // 1C column headers → DB field names
@@ -210,31 +210,31 @@ function OrderRow({ order, action, onClick, dim, courierName }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, marginRight: 6 }}>
           {isErrand && (
-            <span style={{ background: '#EDE9FE', color: '#7C3AED', fontSize: 8, fontWeight: 800,
+            <span style={{ background: 'var(--mc-purple-bg)', color: 'var(--mc-purple-text)', fontSize: 8, fontWeight: 800,
               padding: '2px 6px', borderRadius: 5, flexShrink: 0 }}>📋 Поручение</span>
           )}
           <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--mc-text)' }}>{order.client}</div>
         </div>
         {courierName
-          ? <span style={{ background: '#EFF6FF', color: '#1D4ED8', borderRadius: 8, padding: '2px 7px', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{courierName}</span>
+          ? <span style={{ background: 'var(--mc-info-bg)', color: 'var(--mc-info-text)', borderRadius: 8, padding: '2px 7px', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{courierName}</span>
           : <StatusBadge status={order.status} />
         }
       </div>
       <div style={{ fontSize: 9, color: 'var(--mc-muted)' }}>📍 {[order.city, order.address].filter(Boolean).join(' · ')}</div>
       {order.extra_info && isErrand && (
-        <div style={{ fontSize: 10, color: '#5B21B6', background: '#F5F3FF', borderRadius: 6, padding: '3px 7px', marginTop: 3 }}>
+        <div style={{ fontSize: 10, color: 'var(--mc-purple-text)', background: 'var(--mc-purple-bg)', borderRadius: 6, padding: '3px 7px', marginTop: 3 }}>
           {order.extra_info}
         </div>
       )}
       {order.accept_payment && !isErrand && (
-        <div style={{ fontSize: 9, fontWeight: 700, color: '#B45309', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginTop: 3 }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mc-warning-text)', background: 'var(--mc-warning-bg)', border: '1px solid var(--mc-warning-border)', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginTop: 3 }}>
           💰 Принять оплату{order.delivery_payment_method ? ` · ${DELIVERY_PAY_METHODS[order.delivery_payment_method]?.label || order.delivery_payment_method}` : ''}
           {order.delivery_payment_method === 'cash' && !order.cash_confirmed_by && ' · ⏳ ждёт сдачи'}
           {order.cash_confirmed_by && ' · ✓ наличные сданы'}
         </div>
       )}
       {order.payment_info && !isErrand && !order.accept_payment && (
-        <div style={{ fontSize: 9, color: '#C2410C', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginTop: 3 }}>
+        <div style={{ fontSize: 9, color: 'var(--mc-orange-text)', background: 'var(--mc-orange-bg)', border: '1px solid var(--mc-orange-border)', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginTop: 3 }}>
           💳 {order.payment_info}
         </div>
       )}
@@ -355,9 +355,9 @@ function RegistryCard({ reg, db, onClick }) {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}>
           {reg.status === 'active'
-            ? <span style={{ background: '#D1FAE5', color: '#065F46', borderRadius: 10, padding: '2px 8px', fontSize: 9, fontWeight: 700 }}>● Активен</span>
-            : <span style={{ background: '#F1F5F9', color: 'var(--mc-muted)', borderRadius: 10, padding: '2px 8px', fontSize: 9, fontWeight: 700 }}>✓ Завершён</span>}
-          {failed > 0 && <span style={{ background: '#FEE2E2', color: '#991B1B', borderRadius: 10, padding: '2px 8px', fontSize: 9, fontWeight: 700 }}>⚠ {failed} нерастр.</span>}
+            ? <span style={{ background: 'var(--mc-success-bg)', color: 'var(--mc-success-text)', borderRadius: 10, padding: '2px 8px', fontSize: 9, fontWeight: 700 }}>● Активен</span>
+            : <span style={{ background: 'var(--mc-neutral-bg)', color: 'var(--mc-muted)', borderRadius: 10, padding: '2px 8px', fontSize: 9, fontWeight: 700 }}>✓ Завершён</span>}
+          {failed > 0 && <span style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)', borderRadius: 10, padding: '2px 8px', fontSize: 9, fontWeight: 700 }}>⚠ {failed} нерастр.</span>}
         </div>
       </div>
       <ProgressBar done={done} total={reg.total_orders || orders.length} />
@@ -368,7 +368,7 @@ function RegistryCard({ reg, db, onClick }) {
       {couriers.length > 0 && (
         <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
           {couriers.map(c => (
-            <span key={c} style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 8, padding: '2px 7px', fontSize: 9, color: '#0369A1', fontWeight: 600 }}>{c}</span>
+            <span key={c} style={{ background: 'var(--mc-info-bg)', border: '1px solid var(--mc-info-border)', borderRadius: 8, padding: '2px 7px', fontSize: 9, color: 'var(--mc-info-text)', fontWeight: 600 }}>{c}</span>
           ))}
         </div>
       )}
@@ -463,7 +463,7 @@ export function DeliveryNewRegistryScreen({ ctx }) {
             {[['morning', '☀️ Утренняя'], ['evening', '🌙 Вечерняя']].map(([k, l]) => (
               <button key={k} onClick={() => setShift(k)}
                 style={{ flex: 1, padding: 9, borderRadius: 10, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                  background: shift === k ? '#297b8a' : '#F5F7F8', color: shift === k ? '#fff' : '#94a3b8',
+                  background: shift === k ? '#297b8a' : 'var(--mc-active-item)', color: shift === k ? '#fff' : 'var(--mc-muted)',
                   border: `1.5px solid ${shift === k ? '#297b8a' : 'var(--mc-border)'}` }}>
                 {l}
               </button>
@@ -485,40 +485,40 @@ export function DeliveryNewRegistryScreen({ ctx }) {
 
         {/* ── Диагностика: показываем что нашли в файле, если 0 заказов ── */}
         {rows !== null && rows.length === 0 && detectedHeaders.length > 0 && (
-          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
-            <div style={{ fontWeight: 700, fontSize: 11, color: '#991B1B', marginBottom: 4 }}>
+          <div style={{ background: 'var(--mc-danger-bg)', border: '1px solid var(--mc-danger-border)', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--mc-danger-text)', marginBottom: 4 }}>
               ⚠ Колонки в файле не совпали с ожидаемыми
             </div>
-            <div style={{ fontSize: 9, color: '#991B1B', marginBottom: 6 }}>
+            <div style={{ fontSize: 9, color: 'var(--mc-danger-text)', marginBottom: 6 }}>
               Найденные колонки в строке заголовка:
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
               {detectedHeaders.map((h, i) => (
-                <span key={i} style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 6, padding: '2px 6px', fontSize: 8, color: '#7F1D1D', fontWeight: 600 }}>{h}</span>
+                <span key={i} style={{ background: 'var(--mc-danger-bg)', border: '1px solid var(--mc-danger-border)', borderRadius: 6, padding: '2px 6px', fontSize: 8, color: 'var(--mc-danger-text)', fontWeight: 600 }}>{h}</span>
               ))}
             </div>
-            <div style={{ fontSize: 9, color: '#6B7280', marginBottom: 4 }}>Ожидаются колонки:</div>
+            <div style={{ fontSize: 9, color: 'var(--mc-muted)', marginBottom: 4 }}>Ожидаются колонки:</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {Object.keys(COL_MAP).map(k => (
-                <span key={k} style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 6, padding: '2px 6px', fontSize: 8, color: '#075985', fontWeight: 600 }}>{k}</span>
+                <span key={k} style={{ background: 'var(--mc-info-bg)', border: '1px solid var(--mc-info-border)', borderRadius: 6, padding: '2px 6px', fontSize: 8, color: 'var(--mc-info-text)', fontWeight: 600 }}>{k}</span>
               ))}
             </div>
           </div>
         )}
 
         {duplicates.length > 0 && (
-          <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
-            <div style={{ fontWeight: 700, fontSize: 11, color: '#92400E', marginBottom: 4 }}>⚠️ Обнаружены повторы ({duplicates.length})</div>
-            <div style={{ fontSize: 10, color: '#92400E', marginBottom: 6 }}>Эти заказы уже были в предыдущих реестрах:</div>
-            {duplicates.slice(0, 3).map(d => <div key={d.request_code} style={{ fontSize: 10, color: '#92400E' }}>• {d.request_code} — {d.client}</div>)}
+          <div style={{ background: 'var(--mc-warning-bg)', border: '1px solid var(--mc-warning-border)', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--mc-warning-text)', marginBottom: 4 }}>⚠️ Обнаружены повторы ({duplicates.length})</div>
+            <div style={{ fontSize: 10, color: 'var(--mc-warning-text)', marginBottom: 6 }}>Эти заказы уже были в предыдущих реестрах:</div>
+            {duplicates.slice(0, 3).map(d => <div key={d.request_code} style={{ fontSize: 10, color: 'var(--mc-warning-text)' }}>• {d.request_code} — {d.client}</div>)}
             {duplicates.length > 3 && <div style={{ fontSize: 9, color: '#d97706', marginTop: 2 }}>...ещё {duplicates.length - 3}</div>}
             <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
               <button onClick={() => setSkip(false)}
-                style={{ flex: 1, padding: 6, background: skipDupes ? '#F5F7F8' : '#F59E0B', color: skipDupes ? '#64748b' : '#fff', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                style={{ flex: 1, padding: 6, background: skipDupes ? 'var(--mc-active-item)' : '#F59E0B', color: skipDupes ? 'var(--mc-muted)' : '#fff', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
                 Включить все
               </button>
               <button onClick={() => setSkip(true)}
-                style={{ flex: 1, padding: 6, background: skipDupes ? '#297b8a' : '#F5F7F8', color: skipDupes ? '#fff' : '#64748b', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                style={{ flex: 1, padding: 6, background: skipDupes ? '#297b8a' : 'var(--mc-active-item)', color: skipDupes ? '#fff' : 'var(--mc-muted)', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
                 Пропустить повторы
               </button>
             </div>
@@ -534,7 +534,7 @@ export function DeliveryNewRegistryScreen({ ctx }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
                 <thead>
                   <tr>{['№', 'Клиент', 'Город', 'Адрес', 'Сумма'].map(h => (
-                    <th key={h} style={{ background: '#F1F5F9', color: 'var(--mc-muted)', padding: '4px 6px', textAlign: 'left', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                    <th key={h} style={{ background: 'var(--mc-surface-2)', color: 'var(--mc-muted)', padding: '4px 6px', textAlign: 'left', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}</tr>
                 </thead>
                 <tbody>
@@ -691,7 +691,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
 
         {failedPending.length > 0 && (
           <button onClick={() => navigate({ name: 'delivery_failed_queue', registryId })}
-            style={{ width: '100%', padding: 11, marginBottom: 10, background: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5', borderRadius: 12, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+            style={{ width: '100%', padding: 11, marginBottom: 10, background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)', border: '1px solid var(--mc-danger-border)', borderRadius: 12, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
             ⚠️ {failedPending.length} {failedPending.length === 1 ? 'заказ ждёт' : 'заказа ждут'} решения →
           </button>
         )}
@@ -742,25 +742,25 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
             {!confirmArchive ? (
               <button
                 onClick={() => setConfirmArchive(true)}
-                style={{ width: '100%', padding: 11, background: '#FFFBEB', color: '#92400E', border: '1px solid #FDE68A', borderRadius: 12, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                style={{ width: '100%', padding: 11, background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)', border: '1px solid var(--mc-warning-border)', borderRadius: 12, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                 📦 Архивировать реестр
               </button>
             ) : (
-              <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '12px 14px' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#92400E', marginBottom: 4 }}>Архивировать {reg.number}?</div>
-                <div style={{ fontSize: 11, color: '#78350F', marginBottom: 12 }}>
+              <div style={{ background: 'var(--mc-warning-bg)', border: '1px solid var(--mc-warning-border)', borderRadius: 12, padding: '12px 14px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mc-warning-text)', marginBottom: 4 }}>Архивировать {reg.number}?</div>
+                <div style={{ fontSize: 11, color: 'var(--mc-warning-text)', marginBottom: 12 }}>
                   Реестр будет перемещён в архив. Заказы останутся в базе.
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => setConfirmArchive(false)}
-                    style={{ flex: 1, padding: 9, background: '#fff', color: 'var(--mc-muted)', border: '1px solid #E5E7EB', borderRadius: 9, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                    style={{ flex: 1, padding: 9, background: 'var(--mc-surface)', color: 'var(--mc-muted)', border: '1px solid var(--mc-border)', borderRadius: 9, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                     Отмена
                   </button>
                   <button
                     onClick={handleArchiveRegistry}
                     disabled={archiving}
-                    style={{ flex: 1, padding: 9, background: archiving ? '#CBD5E1' : '#D97706', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: archiving ? 'not-allowed' : 'pointer' }}>
+                    style={{ flex: 1, padding: 9, background: archiving ? 'var(--mc-muted)' : '#D97706', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: archiving ? 'not-allowed' : 'pointer' }}>
                     {archiving ? '⏳ Архивация...' : '📦 Да, в архив'}
                   </button>
                 </div>
@@ -775,25 +775,25 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
             {!confirmDelete ? (
               <button
                 onClick={() => setConfirmDelete(true)}
-                style={{ width: '100%', padding: 11, background: '#FEF2F2', color: '#dc2626', border: '1px solid #FECACA', borderRadius: 12, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                style={{ width: '100%', padding: 11, background: 'var(--mc-danger-bg)', color: '#dc2626', border: '1px solid var(--mc-danger-border)', borderRadius: 12, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                 🗑 Удалить реестр
               </button>
             ) : (
-              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '12px 14px' }}>
+              <div style={{ background: 'var(--mc-danger-bg)', border: '1px solid var(--mc-danger-border)', borderRadius: 12, padding: '12px 14px' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', marginBottom: 4 }}>Удалить реестр {reg.number}?</div>
-                <div style={{ fontSize: 11, color: '#991B1B', marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: 'var(--mc-danger-text)', marginBottom: 12 }}>
                   Будут удалены реестр и все {orders.length} заказов. Действие необратимо.
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => setConfirmDelete(false)}
-                    style={{ flex: 1, padding: 9, background: '#fff', color: 'var(--mc-muted)', border: '1px solid #E5E7EB', borderRadius: 9, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                    style={{ flex: 1, padding: 9, background: 'var(--mc-surface)', color: 'var(--mc-muted)', border: '1px solid var(--mc-border)', borderRadius: 9, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                     Отмена
                   </button>
                   <button
                     onClick={handleDeleteRegistry}
                     disabled={deleting}
-                    style={{ flex: 1, padding: 9, background: deleting ? '#CBD5E1' : '#dc2626', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: deleting ? 'not-allowed' : 'pointer' }}>
+                    style={{ flex: 1, padding: 9, background: deleting ? 'var(--mc-muted)' : '#dc2626', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: deleting ? 'not-allowed' : 'pointer' }}>
                     {deleting ? '⏳ Удаление...' : '🗑 Да, удалить'}
                   </button>
                 </div>
@@ -817,7 +817,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, marginRight: 6 }}>
                   {isErrand && (
-                    <span style={{ background: '#EDE9FE', color: '#7C3AED', fontSize: 8, fontWeight: 800,
+                    <span style={{ background: 'var(--mc-purple-bg)', color: 'var(--mc-purple-text)', fontSize: 8, fontWeight: 800,
                       padding: '2px 6px', borderRadius: 5, flexShrink: 0 }}>📋 Поручение</span>
                   )}
                   <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--mc-text)' }}>{order.client}</div>
@@ -827,32 +827,32 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
               <div style={{ fontSize: 9, color: 'var(--mc-muted)' }}>📍 {order.city}</div>
               <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: order.payment_info ? 3 : 4 }}>{order.address}</div>
               {isErrand && order.extra_info && (
-                <div style={{ fontSize: 10, color: '#5B21B6', background: '#F5F3FF', borderRadius: 6, padding: '3px 7px', marginBottom: 4 }}>
+                <div style={{ fontSize: 10, color: 'var(--mc-purple-text)', background: 'var(--mc-purple-bg)', borderRadius: 6, padding: '3px 7px', marginBottom: 4 }}>
                   {order.extra_info}
                 </div>
               )}
               {order.accept_payment && !isErrand && (
-                <div style={{ fontSize: 9, fontWeight: 700, color: '#B45309', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginBottom: 4 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mc-warning-text)', background: 'var(--mc-warning-bg)', border: '1px solid var(--mc-warning-border)', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginBottom: 4 }}>
                   💰 Принять оплату{order.delivery_payment_method ? ` · ${DELIVERY_PAY_METHODS[order.delivery_payment_method]?.label}` : ''}
                   {order.delivery_payment_method === 'cash' && !order.cash_confirmed_by && ' · ⏳ ждёт сдачи'}
                   {order.cash_confirmed_by && ' · ✓ сданы'}
                 </div>
               )}
               {order.payment_info && !isErrand && !order.accept_payment && (
-                <div style={{ fontSize: 9, color: '#C2410C', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginBottom: 4 }}>
+                <div style={{ fontSize: 9, color: 'var(--mc-orange-text)', background: 'var(--mc-orange-bg)', border: '1px solid var(--mc-orange-border)', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginBottom: 4 }}>
                   💳 {order.payment_info}
                 </div>
               )}
               {isAdminClosed && order.fail_reason && (
-                <div style={{ fontSize: 9, color: '#6B7280', background: '#F3F4F6', padding: '3px 6px', borderRadius: 6, marginBottom: 4 }}>
+                <div style={{ fontSize: 9, color: 'var(--mc-neutral-text)', background: 'var(--mc-neutral-bg)', padding: '3px 6px', borderRadius: 6, marginBottom: 4 }}>
                   🔒 {order.fail_reason}
                 </div>
               )}
               {!isAdminClosed && order.status === 'failed' && order.fail_reason && (
-                <div style={{ fontSize: 9, color: '#dc2626', background: '#FEF2F2', padding: '3px 6px', borderRadius: 6, marginBottom: 4 }}>{order.fail_reason}</div>
+                <div style={{ fontSize: 9, color: '#dc2626', background: 'var(--mc-danger-bg)', padding: '3px 6px', borderRadius: 6, marginBottom: 4 }}>{order.fail_reason}</div>
               )}
               {order.status === 'delivered' && order.delivered_at && (
-                <div style={{ fontSize: 9, color: '#065F46', background: '#D1FAE5', padding: '2px 6px', borderRadius: 6, marginBottom: 4, display: 'inline-block' }}>
+                <div style={{ fontSize: 9, color: 'var(--mc-success-text)', background: 'var(--mc-success-bg)', padding: '2px 6px', borderRadius: 6, marginBottom: 4, display: 'inline-block' }}>
                   ✓ Доставлен {new Date(order.delivered_at).toLocaleTimeString('ru-KZ', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Almaty' })}
                 </div>
               )}
@@ -863,7 +863,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                 }
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   {order.cash_received && !isErrand && (
-                    <span style={{ background: '#DCFCE7', color: '#16a34a', padding: '2px 7px', borderRadius: 8, fontSize: 9, fontWeight: 700 }}>💵 {fmtNum(order.cash_amount)} нал.</span>
+                    <span style={{ background: 'var(--mc-success-bg)', color: '#16a34a', padding: '2px 7px', borderRadius: 8, fontSize: 9, fontWeight: 700 }}>💵 {fmtNum(order.cash_amount)} нал.</span>
                   )}
                   {courier && <span style={{ fontSize: 9, color: 'var(--mc-muted)' }}>{courier.first_name}</span>}
                   {canDetail && (
@@ -876,7 +876,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                   {canClose && !isClosingThis && (
                     <button
                       onClick={() => { setClosingId(order.id); setCloseComment(''); }}
-                      style={{ padding: '3px 9px', background: '#FEF2F2', color: '#dc2626', border: '1px solid #FECACA', borderRadius: 7, fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>
+                      style={{ padding: '3px 9px', background: 'var(--mc-danger-bg)', color: '#dc2626', border: '1px solid var(--mc-danger-border)', borderRadius: 7, fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>
                       Закрыть
                     </button>
                   )}
@@ -892,7 +892,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
                     onChange={e => setCloseComment(e.target.value)}
                     placeholder="Укажите причину (обязательно)..."
                     rows={2}
-                    style={{ width: '100%', padding: '7px 10px', background: 'var(--mc-active-item)', border: '1px solid #E5E7EB', borderRadius: 9, fontSize: 11, resize: 'none', color: 'var(--mc-text)', marginBottom: 8 }}
+                    style={{ width: '100%', padding: '7px 10px', background: 'var(--mc-active-item)', border: '1px solid var(--mc-border)', borderRadius: 9, fontSize: 11, resize: 'none', color: 'var(--mc-text)', marginBottom: 8 }}
                   />
                   <div style={{ display: 'flex', gap: 7 }}>
                     <button
@@ -1106,12 +1106,12 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                 return (
                   <div key={o.id} onClick={() => toggleSelect(o.id)}
                     style={{ padding: '9px 10px', marginBottom: 5, cursor: 'pointer', borderRadius: 10,
-                      background: isSel ? '#e8f4f6' : 'var(--mc-surface)',
+                      background: isSel ? 'var(--mc-info-bg)' : 'var(--mc-surface)',
                       border: `1.5px solid ${isSel ? '#297b8a' : 'var(--mc-border)'}`,
                       display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                     <div style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 1,
                       background: isSel ? '#297b8a' : '#fff',
-                      border: `1.5px solid ${isSel ? '#297b8a' : '#D1D5DB'}`,
+                      border: `1.5px solid ${isSel ? '#297b8a' : 'var(--mc-border)'}`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {isSel && <span style={{ color: '#fff', fontSize: 10, fontWeight: 900 }}>✓</span>}
                     </div>
@@ -1122,7 +1122,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                         {fmtNum(o.total_amount)} тг
                       </div>
                     </div>
-                    <span style={{ background: '#D1FAE5', color: '#065F46', fontSize: 8,
+                    <span style={{ background: 'var(--mc-success-bg)', color: 'var(--mc-success-text)', fontSize: 8,
                       fontWeight: 700, padding: '2px 6px', borderRadius: 5, flexShrink: 0 }}>
                       К отгрузке
                     </span>
@@ -1205,7 +1205,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                       onChange={e => setQForm(f => ({ ...f, [field]: e.target.value }))}
                       placeholder={field === 'amount' ? '0' : ''}
                       style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
-                        border: '1.5px solid #E2EAF0', fontSize: 12, color: 'var(--mc-text)',
+                        border: '1.5px solid var(--mc-border)', fontSize: 12, color: 'var(--mc-text)',
                         background: 'var(--mc-surface)', outline: 'none' }}
                     />
                   </div>
@@ -1220,8 +1220,8 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                   placeholder="Позвонить за 30 мин…"
                   rows={2}
                   style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
-                    border: '1.5px solid #E2EAF0', fontSize: 12, color: 'var(--mc-text)',
-                    background: '#fff', outline: 'none', resize: 'none' }}
+                    border: '1.5px solid var(--mc-border)', fontSize: 12, color: 'var(--mc-text)',
+                    background: 'var(--mc-surface)', outline: 'none', resize: 'none' }}
                 />
               </div>
             </div>
@@ -1243,7 +1243,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
           <>
             {/* Подсказка */}
             <div style={{ padding: '10px 12px 0', flexShrink: 0 }}>
-              <div style={{ background: '#F5F3FF', border: '1px solid #C4B5FD', borderRadius: 10, padding: '8px 10px', fontSize: 10, color: '#5B21B6' }}>
+              <div style={{ background: 'var(--mc-purple-bg)', border: '1px solid var(--mc-purple-border)', borderRadius: 10, padding: '8px 10px', fontSize: 10, color: 'var(--mc-purple-text)' }}>
                 📋 Поручение — отвезти документы, забрать что-то, любая задача для курьера без привязки к заявке из 1С
               </div>
             </div>
@@ -1290,7 +1290,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                   value={errandForm.city}
                   onChange={e => setErrandForm(f => ({ ...f, city: e.target.value }))}
                   style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
-                    border: '1.5px solid #E2EAF0', fontSize: 12, color: 'var(--mc-text)',
+                    border: '1.5px solid var(--mc-border)', fontSize: 12, color: 'var(--mc-text)',
                     background: 'var(--mc-surface)', outline: 'none' }}
                 />
               </div>
@@ -1303,8 +1303,8 @@ function AddOrderModal({ ctx, registryId, onClose }) {
                   placeholder="Позвонить заранее, забрать подпись…"
                   rows={2}
                   style={{ width: '100%', padding: '9px 11px', borderRadius: 10, boxSizing: 'border-box',
-                    border: '1.5px solid #E2EAF0', fontSize: 12, color: 'var(--mc-text)',
-                    background: '#fff', outline: 'none', resize: 'none' }}
+                    border: '1.5px solid var(--mc-border)', fontSize: 12, color: 'var(--mc-text)',
+                    background: 'var(--mc-surface)', outline: 'none', resize: 'none' }}
                 />
               </div>
             </div>
@@ -1356,17 +1356,17 @@ export function DeliveryFailedQueueScreen({ ctx, registryId }) {
               <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 2, color: 'var(--mc-text)' }}>{order.client}</div>
               <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 6 }}>📍 {order.city} · {order.address}</div>
               {order.fail_reason && (
-                <div style={{ fontSize: 10, color: '#dc2626', background: '#FEF2F2', padding: '4px 8px', borderRadius: 6, marginBottom: 8 }}>
+                <div style={{ fontSize: 10, color: '#dc2626', background: 'var(--mc-danger-bg)', padding: '4px 8px', borderRadius: 6, marginBottom: 8 }}>
                   ✗ «{order.fail_reason}»{courier ? <span style={{ color: 'var(--mc-muted)', fontSize: 9 }}> · {courier.first_name}</span> : ''}
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => decide(order.id, 'cancelled')}
-                  style={{ flex: 1, padding: 8, background: '#FEE2E2', color: '#dc2626', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                  style={{ flex: 1, padding: 8, background: 'var(--mc-danger-bg)', color: '#dc2626', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                   ✕ Отменить
                 </button>
                 <button onClick={() => decide(order.id, 'rescheduled')}
-                  style={{ flex: 1, padding: 8, background: '#EFF6FF', color: '#1D4ED8', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                  style={{ flex: 1, padding: 8, background: 'var(--mc-info-bg)', color: 'var(--mc-info-text)', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                   ↷ Перенести
                 </button>
               </div>
@@ -1374,7 +1374,7 @@ export function DeliveryFailedQueueScreen({ ctx, registryId }) {
           );
         })}
         {orders.length > 0 && (
-          <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '8px 10px', fontSize: 9, color: '#1D4ED8', marginTop: 4 }}>
+          <div style={{ background: 'var(--mc-info-bg)', border: '1px solid var(--mc-info-border)', borderRadius: 10, padding: '8px 10px', fontSize: 9, color: 'var(--mc-info-text)', marginTop: 4 }}>
             <b>«Перенести»</b> — заказ будет помечен ⚠️ при загрузке следующего реестра из 1С
           </div>
         )}
@@ -1524,7 +1524,7 @@ export function CourierRegistryScreen({ ctx }) {
                   background: isActive ? '#297b8a' : 'var(--mc-active-item)',
                   color: isActive ? '#fff' : 'var(--mc-muted)' }}>
                 {r.number} · {SHIFT_LABEL[r.shift]}
-                {freeCnt > 0 && <span style={{ marginLeft: 6, background: isActive ? 'rgba(255,255,255,.25)' : '#FEF9EE', color: isActive ? '#fff' : '#92400E', borderRadius: 8, padding: '1px 5px', fontSize: 9 }}>{freeCnt}</span>}
+                {freeCnt > 0 && <span style={{ marginLeft: 6, background: isActive ? 'rgba(255,255,255,.25)' : 'var(--mc-warning-bg)', color: isActive ? '#fff' : 'var(--mc-warning-text)', borderRadius: 8, padding: '1px 5px', fontSize: 9 }}>{freeCnt}</span>}
               </button>
             );
           })}
@@ -1550,7 +1550,7 @@ export function CourierRegistryScreen({ ctx }) {
       </div>
 
       {tab === 'free' && (
-        <div style={{ margin: '10px 12px 0', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '8px 10px', fontSize: 10, color: '#1D4ED8' }}>
+        <div style={{ margin: '10px 12px 0', background: 'var(--mc-info-bg)', border: '1px solid var(--mc-info-border)', borderRadius: 10, padding: '8px 10px', fontSize: 10, color: 'var(--mc-info-text)' }}>
           Нажмите <b>«Взять»</b> — заказ закрепится за вами
         </div>
       )}
@@ -1582,7 +1582,7 @@ export function CourierRegistryScreen({ ctx }) {
                 onClick={() => navigate({ name: 'courier_order', orderId: o.id })}
                 action={o.status === 'assigned' ? (
                   <button onClick={e => { e.stopPropagation(); releaseOrder(o.id); }}
-                    style={{ padding: '4px 10px', background: '#FEF2F2', color: '#dc2626', border: '1px solid #FECACA', borderRadius: 8, fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>
+                    style={{ padding: '4px 10px', background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)', border: '1px solid var(--mc-danger-border)', borderRadius: 8, fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>
                     Отказаться
                   </button>
                 ) : null}
@@ -1716,15 +1716,15 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
 
         <Card>
           {order.accept_payment && (
-            <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '6px 10px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ background: 'var(--mc-warning-bg)', border: '1px solid var(--mc-warning-border)', borderRadius: 8, padding: '6px 10px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 13 }}>💰</span>
-              <span style={{ fontWeight: 700, fontSize: 12, color: '#B45309' }}>Принять оплату{order.payment_info ? ` · ${order.payment_info}` : ''}</span>
+              <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--mc-warning-text)' }}>Принять оплату{order.payment_info ? ` · ${order.payment_info}` : ''}</span>
             </div>
           )}
           {order.payment_info && !order.accept_payment && (
-            <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8, padding: '6px 10px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ background: 'var(--mc-orange-bg)', border: '1px solid var(--mc-orange-border)', borderRadius: 8, padding: '6px 10px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 13 }}>💳</span>
-              <span style={{ fontWeight: 700, fontSize: 12, color: '#C2410C' }}>{order.payment_info}</span>
+              <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--mc-orange-text)' }}>{order.payment_info}</span>
             </div>
           )}
           {[['Документ', order.document], ['Сумма', fmtNum(order.amount) + ' тг']].map(([l, v]) => v && (
@@ -1739,7 +1739,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
           </div>
           {order.contacts && (
             <a href={`tel:${order.contacts}`}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '8px 10px', background: '#F0F9FF', borderRadius: 8, textDecoration: 'none', color: '#297b8a', fontWeight: 700, fontSize: 11 }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '8px 10px', background: 'var(--mc-info-bg)', borderRadius: 8, textDecoration: 'none', color: '#297b8a', fontWeight: 700, fontSize: 11 }}>
               <Phone size={14} /> {order.contacts}
             </a>
           )}
@@ -1787,7 +1787,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
                   <div style={{ marginTop: 8 }}>
                     <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 4 }}>Сумма наличных (тг)</div>
                     <input value={cashAmt} onChange={e => setCashAmt(e.target.value)} type="number"
-                      style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-surface)', border: '1px solid #BBF7D0', borderRadius: 10, fontSize: 14, fontWeight: 700, color: '#16a34a', boxSizing: 'border-box' }} />
+                      style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-surface)', border: '1px solid var(--mc-success-border)', borderRadius: 10, fontSize: 14, fontWeight: 700, color: 'var(--mc-success-text)', boxSizing: 'border-box' }} />
                   </div>
                 )}
               </div>
@@ -1795,7 +1795,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
 
             <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 4 }}>Комментарий (необязательно)</div>
             <input value={note} onChange={e => setNote(e.target.value)} placeholder="Подпись получена..."
-              style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-active-item)', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 11, marginBottom: 10, color: 'var(--mc-text)', boxSizing: 'border-box' }} />
+              style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-active-item)', border: '1px solid var(--mc-border)', borderRadius: 10, fontSize: 11, marginBottom: 10, color: 'var(--mc-text)', boxSizing: 'border-box' }} />
 
             <button onClick={markDelivered} disabled={saving || !canDeliver}
               style={{ width: '100%', padding: 12, background: saving || !canDeliver ? '#CBD5E1' : '#16a34a', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13, cursor: saving || !canDeliver ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
@@ -1811,7 +1811,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
             <div style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', marginBottom: 10 }}>✗ Не удалось доставить</div>
             <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: 4 }}>Причина *</div>
             <input value={failReason} onChange={e => setFailReason(e.target.value)} placeholder="Дверь закрыта / неверный адрес / ..."
-              style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-active-item)', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 11, marginBottom: 10, color: 'var(--mc-text)', boxSizing: 'border-box' }} />
+              style={{ width: '100%', padding: '8px 10px', background: 'var(--mc-active-item)', border: '1px solid var(--mc-border)', borderRadius: 10, fontSize: 11, marginBottom: 10, color: 'var(--mc-text)', boxSizing: 'border-box' }} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setFailMode(false)}
                 style={{ flex: 1, padding: 10, background: 'var(--mc-active-item)', color: 'var(--mc-muted)', border: 'none', borderRadius: 10, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
@@ -1905,8 +1905,8 @@ function CashHandoverBlock({ order, db, currentUser, setDb, showToast }) {
 
   if (order.cash_confirmed_by) {
     return (
-      <div style={{ background: '#D1FAE5', borderRadius: 12, padding: '10px 12px', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: '#065F46', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>✓ Наличные сданы</div>
+      <div style={{ background: 'var(--mc-success-bg)', borderRadius: 12, padding: '10px 12px', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-success-text)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>✓ Наличные сданы</div>
         <div style={{ fontSize: 11, color: 'var(--mc-text)' }}>
           {fmtNum(order.cash_amount)} тг · принял {confirmedBy ? `${confirmedBy.first_name} ${confirmedBy.last_name}` : '—'}
         </div>
@@ -1920,8 +1920,8 @@ function CashHandoverBlock({ order, db, currentUser, setDb, showToast }) {
   }
 
   return (
-    <div style={{ background: '#FEF3C7', borderRadius: 12, padding: '10px 12px', marginBottom: 12, border: '1px solid #FDE68A' }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: '#B45309', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>⏳ Ожидает сдачи наличных</div>
+    <div style={{ background: 'var(--mc-warning-bg)', borderRadius: 12, padding: '10px 12px', marginBottom: 12, border: '1px solid var(--mc-warning-border)' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-warning-text)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>⏳ Ожидает сдачи наличных</div>
       <div style={{ fontSize: 11, color: 'var(--mc-text)', marginBottom: 2 }}>
         💵 {fmtNum(order.cash_amount)} тг · курьер: {courier ? `${courier.first_name} ${courier.last_name}` : '—'}
       </div>
@@ -1983,7 +1983,7 @@ function OrderDetailModal({ order, db, currentUser, canEdit, onClose, onAddressC
               <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .4 }}>Адрес доставки</span>
               {canEdit && !editingAddress && (
                 <button onClick={() => { setNewAddress(order.address || ''); setEditingAddress(true); }}
-                  style={{ fontSize: 10, fontWeight: 700, color: '#297b8a', background: '#F0F9FA', border: '1px solid #b0dce5', borderRadius: 7, padding: '3px 10px', cursor: 'pointer' }}>
+                  style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-info-text)', background: 'var(--mc-info-bg)', border: '1px solid var(--mc-info-border)', borderRadius: 7, padding: '3px 10px', cursor: 'pointer' }}>
                   ✏️ Изменить
                 </button>
               )}
@@ -2056,8 +2056,8 @@ function OrderDetailModal({ order, db, currentUser, canEdit, onClose, onAddressC
 
           {/* Доставлено */}
           {order.status === 'delivered' && (
-            <div style={{ background: '#D1FAE5', borderRadius: 12, padding: '10px 12px', marginBottom: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#065F46', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>✓ Доставлено</div>
+            <div style={{ background: 'var(--mc-success-bg)', borderRadius: 12, padding: '10px 12px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-success-text)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>✓ Доставлено</div>
               <Field label="Курьер"    value={courier ? `${courier.first_name} ${courier.last_name}` : '—'} />
               {order.delivery_payment_method && (
                 <Field label="Оплата" value={`${DELIVERY_PAY_METHODS[order.delivery_payment_method]?.icon || ''} ${DELIVERY_PAY_METHODS[order.delivery_payment_method]?.label || order.delivery_payment_method}`} />
@@ -2074,8 +2074,8 @@ function OrderDetailModal({ order, db, currentUser, canEdit, onClose, onAddressC
 
           {/* Не доставлено */}
           {order.status === 'failed' && order.fail_reason && (
-            <div style={{ background: '#FEF2F2', borderRadius: 12, padding: '10px 12px' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Причина неудачи</div>
+            <div style={{ background: 'var(--mc-danger-bg)', borderRadius: 12, padding: '10px 12px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-danger-text)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Причина неудачи</div>
               <div style={{ fontSize: 12, color: 'var(--mc-text)' }}>{order.fail_reason}</div>
             </div>
           )}

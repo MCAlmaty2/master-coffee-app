@@ -8,10 +8,10 @@ import { AddOperationModal } from './CashScreen';
 
 const TZ = 'Asia/Almaty';
 const STATUS_META = {
-  pending:  { label: 'На одобрении', short: 'Ожидает',   color: '#F59E0B', bg: '#FEF3C7', icon: CircleDot },
-  approved: { label: 'Одобрена',     short: 'Одобрена',   color: '#3B82F6', bg: '#DBEAFE', icon: CheckCircle2 },
-  rejected: { label: 'Отклонена',    short: 'Отклонена',  color: '#EF4444', bg: '#FEE2E2', icon: XCircle },
-  paid:     { label: 'Выдано',       short: 'Выдано',     color: '#22C55E', bg: '#DCFCE7', icon: Banknote },
+  pending:  { label: 'На одобрении', short: 'Ожидает',   color: '#F59E0B', bg: 'var(--mc-warning-bg)', icon: CircleDot },
+  approved: { label: 'Одобрена',     short: 'Одобрена',   color: '#3B82F6', bg: 'var(--mc-info-bg)',    icon: CheckCircle2 },
+  rejected: { label: 'Отклонена',    short: 'Отклонена',  color: '#EF4444', bg: 'var(--mc-danger-bg)',  icon: XCircle },
+  paid:     { label: 'Выдано',       short: 'Выдано',     color: '#22C55E', bg: 'var(--mc-success-bg)', icon: Banknote },
 };
 
 function todayISO() {
@@ -393,7 +393,7 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
             </div>
             {canEditPaid && !editing && (
               <button onClick={startEditing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                style={{ background: 'rgba(255,255,255,0.7)', color: s.color }}>
+                style={{ background: 'var(--mc-surface)', color: s.color, border: '1px solid var(--mc-border)' }}>
                 <Pencil size={13} /> Изменить
               </button>
             )}

@@ -14,6 +14,28 @@
   --mc-sidebar-bg:   #ffffff;
   --mc-tile-bg:      #ffffff;
   --mc-active-item:  #f5f7f8;
+  /* Семантические статусы */
+  --mc-danger-bg:     #FEF2F2;
+  --mc-danger-border: #FECACA;
+  --mc-danger-text:   #991B1B;
+  --mc-success-bg:    #DCFCE7;
+  --mc-success-border:#BBF7D0;
+  --mc-success-text:  #065F46;
+  --mc-warning-bg:    #FEF3C7;
+  --mc-warning-border:#FDE68A;
+  --mc-warning-text:  #92400E;
+  --mc-info-bg:       #EFF6FF;
+  --mc-info-border:   #BFDBFE;
+  --mc-info-text:     #1D4ED8;
+  --mc-purple-bg:     #F5F3FF;
+  --mc-purple-border: #C4B5FD;
+  --mc-purple-text:   #5B21B6;
+  --mc-orange-bg:     #FFF7ED;
+  --mc-orange-border: #FED7AA;
+  --mc-orange-text:   #C2410C;
+  --mc-neutral-bg:    #F3F4F6;
+  --mc-neutral-text:  #6B7280;
+  --mc-progress-track:#E5E7EB;
   /* Календарь */
   --mc-cal-bg:       #ffffff;
   --mc-cal-grid:     #e8f0f2;
@@ -32,6 +54,28 @@
   --mc-sidebar-bg:   #0d1a24;
   --mc-tile-bg:      #1a2535;
   --mc-active-item:  #1e3a4a;
+  /* Семантические статусы */
+  --mc-danger-bg:     #2D1B1B;
+  --mc-danger-border: #5C2828;
+  --mc-danger-text:   #FCA5A5;
+  --mc-success-bg:    #1A2E25;
+  --mc-success-border:#1E4D3A;
+  --mc-success-text:  #6EE7B7;
+  --mc-warning-bg:    #2D2514;
+  --mc-warning-border:#5C4A1E;
+  --mc-warning-text:  #FCD34D;
+  --mc-info-bg:       #1B2538;
+  --mc-info-border:   #1E3A5C;
+  --mc-info-text:     #93C5FD;
+  --mc-purple-bg:     #251D3A;
+  --mc-purple-border: #4C3A7A;
+  --mc-purple-text:   #C4B5FD;
+  --mc-orange-bg:     #2D2114;
+  --mc-orange-border: #5C3F1E;
+  --mc-orange-text:   #FDBA74;
+  --mc-neutral-bg:    #1e3248;
+  --mc-neutral-text:  #8ca3b8;
+  --mc-progress-track:#243b52;
   /* Календарь */
   --mc-cal-bg:       #131f2e;
   --mc-cal-grid:     #1e3248;
