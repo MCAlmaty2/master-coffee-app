@@ -1293,7 +1293,17 @@ function App() {
           } else if (eventType === 'INSERT') {
             const newRow = payload.new;
             const exists = arr.some(r => r[pk] === newRow[pk]);
-            updated = exists ? arr.map(r => r[pk] === newRow[pk] ? newRow : r) : [...arr, newRow];
+            if (exists) {
+              const snap = syncSnapshotRef.current[stateKey];
+              const snapRow = snap && snap.find(r => r[pk] === newRow[pk]);
+              const localRow = arr.find(r => r[pk] === newRow[pk]);
+              if (localRow && snapRow && JSON.stringify(localRow) !== JSON.stringify(snapRow)) {
+                return d;
+              }
+              updated = arr.map(r => r[pk] === newRow[pk] ? newRow : r);
+            } else {
+              updated = [...arr, newRow];
+            }
           } else {
             const newRow = payload.new;
             const snap = syncSnapshotRef.current[stateKey];
