@@ -1334,7 +1334,13 @@ function App() {
   useEffect(() => {
     if (bootStatus.phase !== 'ready') return;
 
+    const SKIP_SYNC_DIFF = new Set(['writeOffs']);
     for (const stateKey of Object.keys(SYNC_TABLES)) {
+      if (SKIP_SYNC_DIFF.has(stateKey)) {
+        if (syncSnapshotRef.current[stateKey] === undefined) syncSnapshotRef.current[stateKey] = db[stateKey] || [];
+        else syncSnapshotRef.current[stateKey] = db[stateKey] || [];
+        continue;
+      }
       const cfg = SYNC_TABLES[stateKey];
       const currArr = db[stateKey] || [];
       const prevArr = syncSnapshotRef.current[stateKey];
@@ -2599,8 +2605,10 @@ function App() {
       completed_at: null,
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
     };
+    const { data: insData, error: insErr } = await supabase.from('write_offs').insert([writeOff]).select();
+    if (insErr) return { error: insErr.message };
+    const dbRow = insData?.[0] || writeOff;
     setDb(d => {
-      // Уведомить admin + director + senior_manager
       const appUrl = d.telegramSettings?.app_url || 'https://master-coffee-app.vercel.app';
       const approvers = d.users.filter(u => u.active && ['admin', 'director', 'senior_manager'].includes(u.role) && u.id !== currentUser.id);
       const newNotifs = approvers.map(a => makeNotif(d, {
@@ -2617,9 +2625,10 @@ function App() {
         items_count: String(items.length),
         reason: writeOff.reason.slice(0, 80),
       });
-      return { ...d, writeOffs: [writeOff, ...d.writeOffs], notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
+      return { ...d, writeOffs: [dbRow, ...d.writeOffs], notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
     });
-    return { writeOff };
+    syncSnapshotRef.current.writeOffs = [dbRow, ...(syncSnapshotRef.current.writeOffs || [])];
+    return { writeOff: dbRow };
   };
 
   const approveWriteOff = async (writeOffId, comment) => {
@@ -12481,7 +12490,7 @@ function WriteOffProductPickerModal({ db, onPick, onClose }) {
 }
 
 function WriteOffDetailScreen({ ctx, writeOffId }) {
-  const { db, currentUser, goBack, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, showToast, setDb } = ctx;
+  const { db, currentUser, goBack, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, showToast, setDb, syncSnapshotRef } = ctx;
   const wo = db.writeOffs.find(w => w.id === writeOffId);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -12534,18 +12543,21 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
     setEditing(true);
   };
 
-  const saveEdits = () => {
+  const saveEdits = async () => {
     const cleaned = editItems.filter(it => it.name && Number(it.quantity) > 0);
     if (cleaned.length === 0) { showToast('Добавьте хотя бы одну позицию'); return; }
     if (!editReason.trim()) { showToast('Укажите причину списания'); return; }
     const newLog = [...wo.log, { event: 'edited', actor: currentUser.id, at: new Date().toISOString() }];
+    const upd = { items: cleaned, reason: editReason.trim(), log: newLog };
+    const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', wo.id).select();
+    if (dbErr) { showToast(dbErr.message); return; }
+    const dbRow = updData?.[0];
+    if (!dbRow) { showToast('Не удалось обновить запись'); return; }
     setDb(d => ({
       ...d,
-      writeOffs: d.writeOffs.map(w => w.id === wo.id
-        ? { ...w, items: cleaned, reason: editReason.trim(), log: newLog }
-        : w
-      ),
+      writeOffs: d.writeOffs.map(w => w.id === wo.id ? dbRow : w),
     }));
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === wo.id ? dbRow : w);
     setEditing(false);
     showToast('Заявка обновлена');
   };
@@ -12786,17 +12798,16 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
         }} />
       )}
       {editTotalOpen && (
-        <EditDocTotalModal currentTotal={wo.doc_total} onClose={() => setEditTotalOpen(false)} onSave={(newTotal) => {
+        <EditDocTotalModal currentTotal={wo.doc_total} onClose={() => setEditTotalOpen(false)} onSave={async (newTotal) => {
           const val = Number(newTotal);
           if (!val || val <= 0) return showToast('Укажите корректную сумму');
-          setDb(d => ({
-            ...d,
-            writeOffs: d.writeOffs.map(w => w.id !== wo.id ? w : {
-              ...w,
-              doc_total: val,
-              log: [...w.log, { event: 'edit_total', actor: currentUser.id, at: new Date().toISOString(), meta: { from: w.doc_total, to: val } }],
-            }),
-          }));
+          const newLog = [...wo.log, { event: 'edit_total', actor: currentUser.id, at: new Date().toISOString(), meta: { from: wo.doc_total, to: val } }];
+          const { data: updData, error: dbErr } = await supabase.from('write_offs').update({ doc_total: val, log: newLog }).eq('id', wo.id).select();
+          if (dbErr) return showToast(dbErr.message);
+          const dbRow = updData?.[0];
+          if (!dbRow) return showToast('Не удалось обновить запись');
+          setDb(d => ({ ...d, writeOffs: d.writeOffs.map(w => w.id === wo.id ? dbRow : w) }));
+          syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === wo.id ? dbRow : w);
           setEditTotalOpen(false);
           showToast(`Сумма обновлена: ${fmtNum(val)} ₸`);
         }} />
