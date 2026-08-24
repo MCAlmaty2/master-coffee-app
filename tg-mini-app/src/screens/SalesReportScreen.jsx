@@ -286,6 +286,9 @@ export function SalesReportScreen({ ctx }) {
       });
       setEditingPlan(false);
       showToast('Отчёт сохранён');
+      if (selectedKey === nowKey) {
+        supabase.functions.invoke('plan-reminder', { body: { mode: 'full' } });
+      }
     } catch (e) {
       showToast('Ошибка: ' + e.message);
     } finally {
