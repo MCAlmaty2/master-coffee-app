@@ -9835,7 +9835,7 @@ function ExportScreen({ ctx }) {
             <div className="text-center py-2">
               <div className="text-4xl font-bold mb-1" style={{ color: 'var(--mc-text)' }}>{filtered.length}</div>
               <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>заявок попадает в экспорт</div>
-              <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>Будет {filtered.reduce((s, o) => s + o.items.length, 0)} строк (1 на товар)</div>
+              <div className="text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>Будет {filtered.reduce((s, o) => s + (o.items || []).length, 0)} строк (1 на товар)</div>
             </div>
           </Card>
           <button onClick={handleExport} disabled={filtered.length === 0}
@@ -12235,8 +12235,8 @@ function WriteOffCard({ writeOff, ctx }) {
   const author = db.users.find(u => u.id === writeOff.created_by);
   const s = WRITEOFF_STATUS[writeOff.status];
   const Icon = s.icon;
-  const itemsTotal = writeOff.items.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
-  const firstItem = writeOff.items[0]?.name || '—';
+  const itemsTotal = (writeOff.items || []).reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+  const firstItem = (writeOff.items || [])[0]?.name || '—';
   const moreItems = writeOff.items.length > 1 ? ` и ещё ${writeOff.items.length - 1}` : '';
 
   return (
@@ -12515,7 +12515,7 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
   const author = db.users.find(u => u.id === wo.created_by);
   const approver = wo.approved_by ? db.users.find(u => u.id === wo.approved_by) : null;
   const completer = wo.completed_by ? db.users.find(u => u.id === wo.completed_by) : null;
-  const itemsTotal = wo.items.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+  const itemsTotal = (wo.items || []).reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
 
   const canApprove = wo.status === 'pending' && hasPermission(db, currentUser, 'writeoff_approve');
   const canComplete = wo.status === 'approved' && hasPermission(db, currentUser, 'writeoff_finalize');
@@ -13213,7 +13213,7 @@ function ContractCard({ contract, ctx }) {
   const taker = contract.taken_by ? db.users.find(u => u.id === contract.taken_by) : null;
   const s = CONTRACT_STATUS[contract.status];
   const Icon = s.icon;
-  const totalSum = contract.specification.reduce((sum, i) => sum + Number(i.volume) * Number(i.price_per_unit), 0);
+  const totalSum = (contract.specification || []).reduce((sum, i) => sum + Number(i.volume) * Number(i.price_per_unit), 0);
   const firstLine = (contract.client_details || '').split('\n')[0].slice(0, 70);
 
   return (
@@ -13225,7 +13225,7 @@ function ContractCard({ contract, ctx }) {
           {contract.contract_no && (
             <span className="font-bold mono-font text-xs" style={{ color: '#22C55E' }}>· {contract.contract_no}</span>
           )}
-          {contract.revisions.length > 0 && (
+          {(contract.revisions || []).length > 0 && (
             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)' }}>
               v{contract.revisions.length + 1}
             </span>
@@ -13556,7 +13556,7 @@ function ContractDetailScreen({ ctx, contractId }) {
   const author = db.users.find(u => u.id === cr.created_by);
   const taker = cr.taken_by ? db.users.find(u => u.id === cr.taken_by) : null;
   const signer = cr.signed_by ? db.users.find(u => u.id === cr.signed_by) : null;
-  const totalSum = cr.specification.reduce((sum, i) => sum + Number(i.volume) * Number(i.price_per_unit), 0);
+  const totalSum = (cr.specification || []).reduce((sum, i) => sum + Number(i.volume) * Number(i.price_per_unit), 0);
 
   const canTake = cr.status === 'pending' && hasPermission(db, currentUser, 'contract_take');
   const canRevise = cr.status === 'in_progress' && (cr.created_by === currentUser.id || cr.taken_by === currentUser.id || hasPermission(db, currentUser, 'contract_take'));
