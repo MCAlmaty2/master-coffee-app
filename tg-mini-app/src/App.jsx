@@ -62,6 +62,7 @@ import {
   CourierRegistryScreen,
   CourierOrderDetailScreen,
   CourierDeliveryWidget,
+  CashQueueScreen,
 } from './screens/DeliveryScreen';
 import {
   ClientsScreen,
@@ -2621,22 +2622,20 @@ function App() {
     return { writeOff };
   };
 
-  const approveWriteOff = (writeOffId, comment) => {
+  const approveWriteOff = async (writeOffId, comment) => {
     if (!hasPermission(db, currentUser, 'writeoff_approve')) return { error: 'Нет прав одобрять заявки' };
     const wo = db.writeOffs.find(w => w.id === writeOffId);
     if (!wo) return { error: 'Заявка не найдена' };
     if (wo.status !== 'pending') return { error: `Заявка уже в статусе «${WRITEOFF_STATUS[wo.status]?.label}»` };
+    const now = new Date().toISOString();
+    const newLog = [...wo.log, { event: 'status', from: 'pending', to: 'approved', actor: currentUser.id, at: now, meta: (comment ? { comment: comment.trim() } : {}) }];
+    const upd = { status: 'approved', approved_by: currentUser.id, approved_at: now, approval_comment: (comment || '').trim() || null, log: newLog };
+    const { error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId);
+    if (dbErr) return { error: dbErr.message };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => {
         if (w.id !== writeOffId) return w;
-        return {
-          ...w,
-          status: 'approved',
-          approved_by: currentUser.id,
-          approved_at: new Date().toISOString(),
-          approval_comment: (comment || '').trim() || null,
-          log: [...w.log, { event: 'status', from: 'pending', to: 'approved', actor: currentUser.id, at: new Date().toISOString(), meta: (comment ? { comment: comment.trim() } : {}) }],
-        };
+        return { ...w, ...upd };
       });
       const newNotifs = [];
       // Уведомить автора
@@ -2667,23 +2666,21 @@ function App() {
     return { ok: true };
   };
 
-  const rejectWriteOff = (writeOffId, comment) => {
+  const rejectWriteOff = async (writeOffId, comment) => {
     if (!hasPermission(db, currentUser, 'writeoff_approve')) return { error: 'Нет прав отклонять заявки' };
     if (!comment || comment.trim().length < 3) return { error: 'Укажите причину отклонения (минимум 3 символа)' };
     const wo = db.writeOffs.find(w => w.id === writeOffId);
     if (!wo) return { error: 'Заявка не найдена' };
     if (wo.status !== 'pending') return { error: 'Отклонять можно только заявки на подтверждении' };
+    const now = new Date().toISOString();
+    const newLog = [...wo.log, { event: 'status', from: 'pending', to: 'rejected', actor: currentUser.id, at: now, meta: { comment: comment.trim() } }];
+    const upd = { status: 'rejected', approved_by: currentUser.id, approved_at: now, approval_comment: comment.trim(), log: newLog };
+    const { error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId);
+    if (dbErr) return { error: dbErr.message };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => {
         if (w.id !== writeOffId) return w;
-        return {
-          ...w,
-          status: 'rejected',
-          approved_by: currentUser.id,
-          approved_at: new Date().toISOString(),
-          approval_comment: comment.trim(),
-          log: [...w.log, { event: 'status', from: 'pending', to: 'rejected', actor: currentUser.id, at: new Date().toISOString(), meta: { comment: comment.trim() } }],
-        };
+        return { ...w, ...upd };
       });
       const newNotifs = [makeNotif(d, {
         recipient_id: wo.created_by,
@@ -2700,7 +2697,7 @@ function App() {
    * Кассир провёл документ через 1С. Теперь заявка идёт на склад.
    * Старое имя сохранено для совместимости — но статус теперь 'invoiced', не 'completed'.
    */
-  const completeWriteOff = (writeOffId, docNo, docTotal) => {
+  const completeWriteOff = async (writeOffId, docNo, docTotal) => {
     if (!hasPermission(db, currentUser, 'writeoff_finalize')) return { error: 'Закрывать списания может только кассир' };
     const wo = db.writeOffs.find(w => w.id === writeOffId);
     if (!wo) return { error: 'Заявка не найдена' };
@@ -2709,18 +2706,15 @@ function App() {
     if (!isValidDocNo(trimmed)) return { error: 'Номер документа должен быть в формате 00ЦТ-NNNNNN (например 00ЦТ-012573)' };
     const total = Number(docTotal);
     if (!total || total <= 0) return { error: 'Укажите сумму списания из 1С' };
+    const now = new Date().toISOString();
+    const newLog = [...wo.log, { event: 'status', from: 'approved', to: 'invoiced', actor: currentUser.id, at: now, meta: { doc_no: trimmed, doc_total: total } }];
+    const upd = { status: 'invoiced', doc_no: trimmed, doc_total: total, invoiced_by: currentUser.id, invoiced_at: now, log: newLog };
+    const { error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId);
+    if (dbErr) return { error: dbErr.message };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => {
         if (w.id !== writeOffId) return w;
-        return {
-          ...w,
-          status: 'invoiced',
-          doc_no: trimmed,
-          doc_total: total,
-          invoiced_by: currentUser.id,
-          invoiced_at: new Date().toISOString(),
-          log: [...w.log, { event: 'status', from: 'approved', to: 'invoiced', actor: currentUser.id, at: new Date().toISOString(), meta: { doc_no: trimmed, doc_total: total } }],
-        };
+        return { ...w, ...upd };
       });
       // Уведомления: автору + всем складским
       const author = d.users.find(u => u.id === wo.created_by);
@@ -2748,7 +2742,7 @@ function App() {
   /**
    * Склад собрал товары — генерирует код выдачи, статус becomes 'prepared'.
    */
-  const prepareWriteOff = (writeOffId) => {
+  const prepareWriteOff = async (writeOffId) => {
     if (currentUser.role !== 'warehouse' && currentUser.role !== 'admin') {
       return { error: 'Только склад может отметить готовность к выдаче' };
     }
@@ -2757,17 +2751,15 @@ function App() {
     if (wo.status !== 'invoiced') return { error: 'Заявка должна быть в статусе «В 1С»' };
     const existingCodes = db.writeOffs.filter(w => w.pickup_code).map(w => w.pickup_code);
     const code = gen4DigitCode(existingCodes);
+    const now = new Date().toISOString();
+    const newLog = [...wo.log, { event: 'status', from: 'invoiced', to: 'prepared', actor: currentUser.id, at: now, meta: { pickup_code: code } }];
+    const upd = { status: 'prepared', pickup_code: code, prepared_by: currentUser.id, prepared_at: now, log: newLog };
+    const { error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId);
+    if (dbErr) return { error: dbErr.message };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => {
         if (w.id !== writeOffId) return w;
-        return {
-          ...w,
-          status: 'prepared',
-          pickup_code: code,
-          prepared_by: currentUser.id,
-          prepared_at: new Date().toISOString(),
-          log: [...w.log, { event: 'status', from: 'invoiced', to: 'prepared', actor: currentUser.id, at: new Date().toISOString(), meta: { pickup_code: code } }],
-        };
+        return { ...w, ...upd };
       });
       const newNotifs = [makeNotif(d, {
         recipient_id: wo.created_by,
@@ -2784,7 +2776,7 @@ function App() {
   /**
    * Склад выдал товары: проверка кода → статус 'delivered'.
    */
-  const deliverWriteOff = (writeOffId, code) => {
+  const deliverWriteOff = async (writeOffId, code) => {
     if (currentUser.role !== 'warehouse' && currentUser.role !== 'admin') {
       return { error: 'Только склад может выдать списание' };
     }
@@ -2792,19 +2784,15 @@ function App() {
     if (!wo) return { error: 'Заявка не найдена' };
     if (wo.status !== 'prepared') return { error: 'Заявка ещё не подготовлена' };
     if ((code || '').trim() !== wo.pickup_code) return { error: 'Код выдачи не совпадает' };
+    const now = new Date().toISOString();
+    const newLog = [...wo.log, { event: 'status', from: 'prepared', to: 'delivered', actor: currentUser.id, at: now }];
+    const upd = { status: 'delivered', delivered_by: currentUser.id, delivered_at: now, completed_by: currentUser.id, completed_at: now, log: newLog };
+    const { error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId);
+    if (dbErr) return { error: dbErr.message };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => {
         if (w.id !== writeOffId) return w;
-        return {
-          ...w,
-          status: 'delivered',
-          delivered_by: currentUser.id,
-          delivered_at: new Date().toISOString(),
-          // оставляем completed_by/at для совместимости со старым кодом
-          completed_by: currentUser.id,
-          completed_at: new Date().toISOString(),
-          log: [...w.log, { event: 'status', from: 'prepared', to: 'delivered', actor: currentUser.id, at: new Date().toISOString() }],
-        };
+        return { ...w, ...upd };
       });
       const newNotifs = [makeNotif(d, {
         recipient_id: wo.created_by,
@@ -2817,21 +2805,19 @@ function App() {
     return { ok: true };
   };
 
-  const cancelWriteOff = (writeOffId) => {
+  const cancelWriteOff = async (writeOffId) => {
     const wo = db.writeOffs.find(w => w.id === writeOffId);
     if (!wo) return { error: 'Заявка не найдена' };
     if (wo.created_by !== currentUser.id && currentUser.role !== 'admin') return { error: 'Отменить может только автор' };
     if (wo.status !== 'pending') return { error: 'Отменить можно только заявки на подтверждении' };
+    const now = new Date().toISOString();
+    const newLog = [...wo.log, { event: 'status', from: 'pending', to: 'rejected', actor: currentUser.id, at: now, meta: { comment: 'Отменено автором' } }];
+    const upd = { status: 'rejected', approval_comment: 'Отменено автором', approved_by: currentUser.id, approved_at: now, log: newLog };
+    const { error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId);
+    if (dbErr) return { error: dbErr.message };
     setDb(d => ({
       ...d,
-      writeOffs: d.writeOffs.map(w => w.id === writeOffId ? {
-        ...w,
-        status: 'rejected',
-        approval_comment: 'Отменено автором',
-        approved_by: currentUser.id,
-        approved_at: new Date().toISOString(),
-        log: [...w.log, { event: 'status', from: 'pending', to: 'rejected', actor: currentUser.id, at: new Date().toISOString(), meta: { comment: 'Отменено автором' } }],
-      } : w),
+      writeOffs: d.writeOffs.map(w => w.id === writeOffId ? { ...w, ...upd } : w),
     }));
     return { ok: true };
   };
@@ -5283,6 +5269,7 @@ const FULL_BLEED_ROUTES = new Set([
   'delivery_failed_queue',
   'courier_registry',
   'courier_order',
+  'cash_queue',
 ]);
 
 function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
@@ -5410,6 +5397,9 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       }
       if (hasPermission(db, currentUser, 'deferred_manage') || hasPermission(db, currentUser, 'deferred_view_all') || hasPermission(db, currentUser, 'deferred_shipment')) {
         finItems.push({ id: 'deferred_payments', label: 'Отсрочки платежей', icon: Calendar });
+      }
+      if (currentUser.role === 'cashier' || currentUser.role === 'admin') {
+        finItems.push({ id: 'cash_queue', label: 'Наличные от доставок', icon: Banknote });
       }
       if (finItems.length > 0) groups.push({ title: 'Финансы', items: finItems, collapsible: true, base: 'tk' });
     }
@@ -5934,6 +5924,8 @@ function Screen({ ctx }) {
     // ─── Доставка (курьер) ───
     case 'courier_registry': return <CourierRegistryScreen ctx={ctx} />;
     case 'courier_order':    return <CourierOrderDetailScreen ctx={ctx} orderId={route.orderId} />;
+    // ─── Наличные (кассир) ───
+    case 'cash_queue':       return <CashQueueScreen ctx={ctx} />;
     // ─── Расписание / регулярные задачи ───
     case 'schedule': return <ScheduleScreen ctx={ctx} />;
     // ─── Кофейни ───
@@ -6494,6 +6486,20 @@ function DashboardHome({ ctx, title }) {
       hint: activeRegs.length > 0 ? 'активных реестров' : 'нет активных',
       color: '#0891B2',
       go: () => navigate({ name: 'delivery_registries' }),
+    });
+  }
+  // Наличные от доставок (кассир / админ)
+  if (currentUser.role === 'cashier' || currentUser.role === 'admin') {
+    const pendingCash = (db.deliveryOrders || []).filter(
+      o => o.delivery_payment_method === 'cash' && o.status === 'delivered' && !o.cash_confirmed_by
+    );
+    tiles.push({
+      key: 'cash_queue', base: 'tk', icon: Banknote, label: 'Наличные от доставок',
+      value: pendingCash.length,
+      hint: pendingCash.length > 0 ? 'ожидают приёма' : 'всё принято',
+      color: pendingCash.length > 0 ? '#16a34a' : 'var(--mc-muted)',
+      go: () => navigate({ name: 'cash_queue' }),
+      highlight: pendingCash.length > 0,
     });
   }
   // Реестр отгрузок (по праву shipment_view)
@@ -15595,6 +15601,7 @@ function NotificationsScreen({ ctx }) {
         case 'expense':  return navigate({ name: 'expense_detail',  expenseId:  n.link_id });
         case 'mpp_deal': return navigate({ name: 'mpp_deal',        dealId:     n.link_id });
         case 'mpp_kanban': return navigate({ name: 'mpp_kanban' });
+        case 'delivery_cash': return navigate({ name: 'cash_queue' });
         case 'shipment': return navigate({ name: 'shipment_registry' });
         case 'manager_task': return navigate({ name: 'manager_tasks' });
         case 'coffee_task': return navigate({ name: 'coffee_tasks' });

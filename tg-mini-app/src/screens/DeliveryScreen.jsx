@@ -2084,3 +2084,166 @@ function OrderDetailModal({ order, db, currentUser, canEdit, onClose, onAddressC
     </div>
   );
 }
+
+// ─── Очередь наличных для кассира ────────────────────────────────────────
+export function CashQueueScreen({ ctx }) {
+  const { db, currentUser, goBack, setDb, showToast } = ctx;
+  const [tab, setTab] = useState('pending');
+  const [confirmingId, setConfirmingId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const isCashier = currentUser.role === 'cashier' || currentUser.role === 'admin';
+  const allCash = (db.deliveryOrders || []).filter(
+    o => o.delivery_payment_method === 'cash' && o.status === 'delivered'
+  );
+  const pending = allCash.filter(o => !o.cash_confirmed_by)
+    .sort((a, b) => (a.delivered_at || '').localeCompare(b.delivered_at || ''));
+  const confirmed = allCash.filter(o => o.cash_confirmed_by)
+    .sort((a, b) => (b.cash_confirmed_at || '').localeCompare(a.cash_confirmed_at || ''));
+  const list = tab === 'pending' ? pending : confirmed.slice(0, 50);
+
+  const totalPending = pending.reduce((s, o) => s + (Number(o.cash_amount) || 0), 0);
+  const totalConfirmed = confirmed.reduce((s, o) => s + (Number(o.cash_amount) || 0), 0);
+
+  const handleConfirm = async (orderId) => {
+    setConfirmingId(orderId);
+    const now = new Date().toISOString();
+    const upd = { cash_confirmed_by: currentUser.id, cash_confirmed_at: now };
+    const { error } = await supabase.from('delivery_orders').update(upd).eq('id', orderId);
+    if (error) { showToast('Ошибка: ' + error.message); setConfirmingId(null); return; }
+    setDb(d => ({ ...d, deliveryOrders: d.deliveryOrders.map(o => o.id === orderId ? { ...o, ...upd } : o) }));
+    showToast('✓ Наличные приняты');
+    setConfirmingId(null);
+  };
+
+  const userName = (id) => {
+    const u = (db.users || []).find(x => x.id === id);
+    return u ? `${u.first_name} ${u.last_name || ''}`.trim() : '—';
+  };
+  const regNumber = (regId) => {
+    const r = (db.deliveryRegistries || []).find(x => x.id === regId);
+    return r ? r.number : '';
+  };
+
+  return (
+    <div style={{ background: 'var(--mc-bg)' }}>
+      <ScreenHeader title="💵 Приём наличных" subtitle={`${pending.length} ожидают`} onBack={goBack} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '12px 12px 0' }}>
+        <div style={{ background: pending.length > 0 ? 'var(--mc-warning-bg)' : 'var(--mc-surface)', border: `1px solid ${pending.length > 0 ? 'var(--mc-warning-border)' : 'var(--mc-border)'}`, borderRadius: 14, padding: '12px 14px' }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mc-warning-text)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>⏳ Ожидают</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--mc-text)' }}>{pending.length}</div>
+          <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginTop: 2 }}>{fmtNum(totalPending)} тг</div>
+        </div>
+        <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 14, padding: '12px 14px' }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mc-success-text)', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>✓ Принято</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--mc-text)' }}>{confirmed.length}</div>
+          <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginTop: 2 }}>{fmtNum(totalConfirmed)} тг</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', background: 'var(--mc-surface)', borderBottom: '1px solid var(--mc-border-light)', margin: '12px 0 0' }}>
+        {[['pending', `Ожидают (${pending.length})`], ['confirmed', 'Принятые']].map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)}
+            style={{ flex: 1, padding: '10px 4px', fontSize: 11, fontWeight: 600,
+              color: tab === k ? '#297b8a' : '#94a3b8',
+              borderBottom: `2px solid ${tab === k ? '#297b8a' : 'transparent'}`,
+              background: 'none', border: 'none', cursor: 'pointer' }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ padding: 12 }}>
+        {list.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--mc-muted)' }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>{tab === 'pending' ? '✓' : '📭'}</div>
+            <div style={{ fontSize: 13 }}>{tab === 'pending' ? 'Все наличные приняты' : 'Нет принятых'}</div>
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {list.map(order => {
+            const done = !!order.cash_confirmed_by;
+            const loading = confirmingId === order.id;
+            const expanded = expandedId === order.id;
+            return (
+              <Card key={order.id} style={{ border: done ? '1px solid var(--mc-border)' : '1px solid var(--mc-warning-border)', cursor: 'pointer' }}
+                onClick={() => setExpandedId(prev => prev === order.id ? null : order.id)}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--mc-text)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{order.client}</div>
+                    <div style={{ fontSize: 10, color: 'var(--mc-muted)' }}>
+                      {regNumber(order.registry_id)}{order.delivered_at ? ` · ${fmtDate(order.delivered_at)}` : ''}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: '#16a34a', whiteSpace: 'nowrap' }}>
+                      {fmtNum(order.cash_amount)} ₸
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--mc-muted)', transition: 'transform .2s', transform: expanded ? 'rotate(180deg)' : 'rotate(0)' }}>▼</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginBottom: done || !isCashier ? 0 : 8 }}>
+                  🚚 {userName(order.delivered_by || order.courier_id)}
+                  {order.organization ? ` · ${order.organization}` : ''}
+                </div>
+                {expanded && (
+                  <div onClick={e => e.stopPropagation()} style={{ marginTop: 8, padding: '10px 0 2px', borderTop: '1px solid var(--mc-border-light)' }}>
+                    {order.document && (
+                      <div style={{ fontSize: 11, color: 'var(--mc-text)', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--mc-muted)' }}>Документ: </span>
+                        <span style={{ fontWeight: 700 }}>{order.document}</span>
+                      </div>
+                    )}
+                    {order.address && (
+                      <div style={{ fontSize: 11, color: 'var(--mc-text)', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--mc-muted)' }}>Адрес: </span>{order.address}{order.city ? `, ${order.city}` : ''}
+                      </div>
+                    )}
+                    {order.contacts && (
+                      <div style={{ fontSize: 11, color: 'var(--mc-text)', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--mc-muted)' }}>Контакт: </span>{order.contacts}
+                      </div>
+                    )}
+                    {order.amount != null && (
+                      <div style={{ fontSize: 11, color: 'var(--mc-text)', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--mc-muted)' }}>Сумма заказа: </span>{fmtNum(order.amount)} ₸
+                      </div>
+                    )}
+                    {order.payment_info && (
+                      <div style={{ fontSize: 11, color: 'var(--mc-text)', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--mc-muted)' }}>Оплата: </span>{order.payment_info}
+                      </div>
+                    )}
+                    {order.extra_info && (
+                      <div style={{ fontSize: 11, color: 'var(--mc-text)', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--mc-muted)' }}>Комментарий: </span>{order.extra_info}
+                      </div>
+                    )}
+                    {order.request_code && (
+                      <div style={{ fontSize: 11, color: 'var(--mc-text)', marginBottom: 6 }}>
+                        <span style={{ color: 'var(--mc-muted)' }}>Код заявки: </span>{order.request_code}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {done ? (
+                  <div style={{ fontSize: 10, color: 'var(--mc-success-text)', marginTop: 4 }}>
+                    ✓ Принял {userName(order.cash_confirmed_by)} · {order.cash_confirmed_at
+                      ? new Date(order.cash_confirmed_at).toLocaleString('ru-KZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Almaty' })
+                      : ''}
+                  </div>
+                ) : isCashier && (
+                  <button onClick={e => { e.stopPropagation(); handleConfirm(order.id); }} disabled={loading}
+                    style={{ width: '100%', padding: 10, background: loading ? 'var(--mc-border)' : '#16a34a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: loading ? 'not-allowed' : 'pointer' }}>
+                    {loading ? '⏳...' : '✓ Принять наличные'}
+                  </button>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -9,7 +9,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft, Plus, X, ChevronRight, Check, ExternalLink,
-  Calendar, Clock, Trash2, Link2, AlertTriangle, Edit3, Eye,
+  Calendar, Clock, Trash2, Link2, AlertTriangle, Edit3, Eye, Users, UserPlus,
 } from 'lucide-react';
 import { supabase } from '../supabase/client';
 
@@ -69,7 +69,10 @@ function isTaskForToday(task) {
   return false;
 }
 
-function isTaskForRole(task, role) { return task.target_role === role; }
+function isTaskForRole(task, role, userId) {
+  if (task.assigned_to) return task.assigned_to === userId;
+  return task.target_role === role;
+}
 
 /** Проверка: задача выполнена текущим пользователем? */
 function checkCompleted(completions, task, userId) {
@@ -119,7 +122,7 @@ export function ScheduleScreen({ ctx }) {
   const [viewingTask, setViewingTask] = useState(null);
   const allTasks = db.scheduleTasks || [];
   const allCompletions = db.scheduleCompletions || [];
-  const myTasks = allTasks.filter(t => t.active && isTaskForRole(t, role));
+  const myTasks = allTasks.filter(t => t.active && isTaskForRole(t, role, currentUser.id));
   // Роли с доступом к расписанию — для выбора target_role (только admin видит)
   const scheduleRoles = useMemo(() => {
     const rs = new Set(['admin']);
@@ -170,7 +173,7 @@ export function ScheduleScreen({ ctx }) {
         {[
           { key: 'today', label: `Сегодня${totalToday ? ` (${doneToday}/${totalToday})` : ''}` },
           { key: 'weekly', label: 'Неделя' },
-          { key: 'monthly', label: 'Месяц' },
+          { key: 'team', label: 'Команда' },
           { key: 'manage', label: 'Управление' },
         ].map(t => (
           <button
@@ -216,8 +219,19 @@ export function ScheduleScreen({ ctx }) {
       {tab === 'weekly' && (
         <WeekView tasks={weeklyTasks} completions={allCompletions} userId={currentUser.id} onToggle={toggleComplete} isCompleted={isCompleted} />
       )}
-      {tab === 'monthly' && (
-        <MonthView tasks={myTasks} completions={allCompletions} userId={currentUser.id} isCompleted={isCompleted} onToggle={toggleComplete} />
+      {tab === 'team' && (
+        <TeamView
+          allTasks={allTasks}
+          completions={allCompletions}
+          db={db}
+          currentUser={currentUser}
+          setDb={setDb}
+          syncSnapshotRef={syncSnapshotRef}
+          showToast={showToast}
+          role={role}
+          isAdmin={role === 'admin'}
+          scheduleRoles={scheduleRoles}
+        />
       )}
       {tab === 'manage' && (
         <ManageView tasks={myTasks} allTasks={allTasks} role={role} onDelete={deleteTask} onEdit={setEditingTask} isAdmin={role === 'admin'} scheduleRoles={scheduleRoles} db={db} />
@@ -472,75 +486,318 @@ function WeekView({ tasks, completions, userId, onToggle, isCompleted }) {
   );
 }
 
-function MonthView({ tasks, completions, userId, isCompleted, onToggle }) {
-  const [calDate, setCalDate] = useState(() => new Date());
-  const y = calDate.getFullYear(), m = calDate.getMonth();
+function TeamView({ allTasks, completions, db, currentUser, setDb, syncSnapshotRef, showToast, role, isAdmin, scheduleRoles }) {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedCell, setSelectedCell] = useState(null);
+  const [assignModal, setAssignModal] = useState(null);
+
+  const TEAM_ROLES = ['admin', 'director', 'senior_manager', 'b2b', 'sales', 'cashier'];
+  const activeTasks = allTasks.filter(t => t.active);
+  const users = useMemo(() => {
+    return (db.users || []).filter(u => TEAM_ROLES.includes(u.role))
+      .sort((a, b) => TEAM_ROLES.indexOf(a.role) - TEAM_ROLES.indexOf(b.role));
+  }, [db.users]);
+
   const today = new Date();
-  const cells = useMemo(() => {
-    const first = new Date(y, m, 1), sd = (first.getDay() || 7) - 1;
-    const dim = new Date(y, m + 1, 0).getDate(), pdim = new Date(y, m, 0).getDate();
-    return Array.from({ length: Math.ceil((sd + dim) / 7) * 7 }, (_, i) => {
-      const dn = i - sd + 1;
-      if (dn < 1 || dn > dim) return { num: dn < 1 ? pdim + dn : dn - dim, other: true };
-      const date = new Date(y, m, dn), isT = date.toDateString() === today.toDateString();
-      const dw = date.getDay() || 7;
-      const isoDate = `${y}-${String(m + 1).padStart(2, '0')}-${String(dn).padStart(2, '0')}`;
-      const onceTasks = tasks.filter(t => t.frequency === 'once' && t.once_date === isoDate);
-      const wd = [...tasks.filter(t => t.frequency === 'daily' || (t.frequency === 'weekly' && t.day_of_week === dw)), ...onceTasks];
-      const ml = tasks.filter(t => t.frequency === 'monthly' && t.day_of_month === dn);
-      return { num: dn, other: false, isT, wd, ml, allDone: isT && wd.length > 0 && wd.every(isCompleted), hasDl: ml.length > 0, hasOnce: onceTasks.length > 0 };
+  const todayDow = today.getDay() || 7;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (todayDow - 1) + weekOffset * 7);
+
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const dow = i + 1;
+    const isT = d.toDateString() === today.toDateString();
+    return { dow, date: d, iso, isToday: isT, label: `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`, dayName: DOW_SHORT[dow] || (dow === 6 ? 'СБ' : 'ВС') };
+  }), [weekOffset]);
+
+  const weekLabel = `${days[0].label} — ${days[6].label}`;
+
+  function userTasksForDay(userId, user, day) {
+    return activeTasks.filter(t => {
+      const forUser = t.assigned_to ? t.assigned_to === userId : t.target_role === user.role;
+      if (!forUser) return false;
+      if (t.frequency === 'daily') return true;
+      if (t.frequency === 'weekly') return t.day_of_week === day.dow;
+      if (t.frequency === 'monthly') return t.day_of_month === day.date.getDate();
+      if (t.frequency === 'once') return t.once_date === day.iso;
+      return false;
     });
-  }, [tasks, y, m, isCompleted]);
-  const navMonth = (delta) => setCalDate(d => new Date(d.getFullYear(), d.getMonth() + delta, 1));
-  const usedTypes = [...new Set(tasks.map(t => t.task_type).filter(Boolean))];
+  }
+
+  function isTaskDone(task, userId, dayIso) {
+    const key = task.frequency === 'monthly'
+      ? dayIso.slice(0, 7)
+      : task.frequency === 'once' ? (task.once_date || dayIso) : dayIso;
+    return completions.some(c => c.task_id === task.id && c.completion_key === key && c.completed_by === userId);
+  }
+
+  const userName = (u) => `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'Без имени';
+
   return (
     <div>
-      {/* Навигация по месяцам */}
       <div className="flex items-center justify-between mb-3">
-        <button onClick={() => navMonth(-1)} className="px-3 py-1.5 rounded-lg text-sm"
+        <button onClick={() => setWeekOffset(w => w - 1)} className="px-3 py-1.5 rounded-lg text-sm"
           style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)', color: 'var(--mc-text)' }}>←</button>
-        <span className="text-base font-semibold" style={{ color: 'var(--mc-text)' }}>{MONTHS_RU[m]} {y}</span>
-        <button onClick={() => navMonth(1)} className="px-3 py-1.5 rounded-lg text-sm"
+        <div className="text-center">
+          <div className="text-sm font-semibold" style={{ color: 'var(--mc-text)' }}>{weekLabel}</div>
+          {weekOffset !== 0 && (
+            <button onClick={() => setWeekOffset(0)} className="text-[10px] mt-0.5" style={{ color: '#3390EC' }}>Текущая неделя</button>
+          )}
+        </div>
+        <button onClick={() => setWeekOffset(w => w + 1)} className="px-3 py-1.5 rounded-lg text-sm"
           style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)', color: 'var(--mc-text)' }}>→</button>
       </div>
-      {/* Дни недели */}
-      <div className="grid grid-cols-7 gap-[3px] mb-[3px]">
-        {['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d => (
-          <div key={d} className="text-center text-[10px] font-semibold uppercase py-1" style={{ color: 'var(--mc-muted)', letterSpacing: '.04em' }}>{d}</div>
-        ))}
-      </div>
-      {/* Сетка календаря */}
-      <div className="grid grid-cols-7 gap-[3px]">
-        {cells.map((c, i) => {
-          if (c.other) return (
-            <div key={i} className="min-h-[66px] rounded-lg p-1.5 opacity-30" style={{ background: 'var(--mc-active-item)', border: '1px solid var(--mc-border)' }}>
-              <div className="text-[11px] font-semibold" style={{ color: 'var(--mc-muted)' }}>{c.num}</div>
-            </div>
-          );
-          const bc = c.isT ? '#3390EC' : c.allDone ? '#22C55E' : c.hasDl ? '#D85A30' : 'var(--mc-border)';
-          return (
-            <div key={i} className="min-h-[66px] rounded-lg p-1.5" style={{ background: 'var(--mc-surface)', border: `${c.isT ? 2 : 1}px solid ${bc}` }}>
-              <div className="text-[11px] font-semibold mb-0.5" style={{ color: c.isT ? '#3390EC' : c.hasDl ? '#D85A30' : 'var(--mc-muted)' }}>{c.num}</div>
-              <div className="flex flex-wrap gap-[2px]">
-                {c.wd.map(t => {
-                  const tt = TASK_TYPES[t.task_type] || TASK_TYPES.custom;
-                  const dn = c.isT && isCompleted(t);
-                  return <div key={t.id} className="w-[6px] h-[6px] rounded-full" style={{ background: dn ? '#22C55E' : tt.color, opacity: dn ? 0.5 : 1 }} />;
+
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 2, minWidth: 600 }}>
+          <thead>
+            <tr>
+              <th style={{ width: 110, textAlign: 'left', padding: '6px 8px', fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Сотрудник</th>
+              {days.map(day => (
+                <th key={day.dow} style={{
+                  textAlign: 'center', padding: '6px 2px', fontSize: 10, fontWeight: 700,
+                  color: day.isToday ? '#3390EC' : day.dow > 5 ? '#DC2626' : 'var(--mc-muted)',
+                  background: day.isToday ? '#EBF5FF' : 'transparent',
+                  borderRadius: 6, letterSpacing: '.04em', textTransform: 'uppercase',
+                }}>
+                  <div>{day.dayName}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600 }}>{day.label}</div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {users.map(user => (
+              <tr key={user.id}>
+                <td style={{ padding: '4px 8px', fontSize: 11, fontWeight: 600, color: 'var(--mc-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700 }}>{user.first_name}</div>
+                  <div style={{ fontSize: 9, color: 'var(--mc-muted)' }}>{ROLE_LABELS[user.role] || user.role}</div>
+                </td>
+                {days.map(day => {
+                  const tasks = userTasksForDay(user.id, user, day);
+                  const done = tasks.filter(t => isTaskDone(t, user.id, day.iso)).length;
+                  const total = tasks.length;
+                  const allDone = total > 0 && done === total;
+                  const hasPending = done < total;
+                  const isSel = selectedCell?.userId === user.id && selectedCell?.iso === day.iso;
+                  return (
+                    <td key={day.dow}
+                      onClick={() => setSelectedCell(isSel ? null : { userId: user.id, user, iso: day.iso, day, tasks })}
+                      style={{
+                        textAlign: 'center', padding: 3, cursor: 'pointer',
+                        background: isSel ? '#E0F2FE' : day.isToday ? '#F8FBFF' : allDone ? '#F0FDF4' : 'var(--mc-surface)',
+                        border: `1px solid ${isSel ? '#3390EC' : allDone ? '#BBF7D0' : hasPending ? '#FDE68A' : 'var(--mc-border)'}`,
+                        borderRadius: 8, verticalAlign: 'top', minHeight: 36,
+                      }}>
+                      {total > 0 ? (
+                        <div>
+                          <div className="flex flex-wrap justify-center gap-[2px]" style={{ padding: '2px 0' }}>
+                            {tasks.slice(0, 6).map(t => {
+                              const tt = TASK_TYPES[t.task_type] || TASK_TYPES.custom;
+                              const d = isTaskDone(t, user.id, day.iso);
+                              return <div key={t.id} style={{ width: 7, height: 7, borderRadius: '50%', background: d ? '#22C55E' : tt.color, opacity: d ? 0.6 : 1 }} />;
+                            })}
+                          </div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: allDone ? '#22C55E' : '#F59E0B' }}>
+                            {done}/{total}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 9, color: 'var(--mc-muted)', padding: '4px 0' }}>—</div>
+                      )}
+                    </td>
+                  );
                 })}
-              </div>
-              {c.ml.length > 0 && <div className="text-[9px] mt-0.5 leading-tight" style={{ color: '#D85A30' }}>{c.ml.map(t => t.title.split(' ')[0]).join(', ')}</div>}
-              {c.allDone && <div className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--mc-success-text)' }}>✓ готово</div>}
-            </div>
-          );
-        })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-      {/* Легенда */}
-      <div className="flex flex-wrap gap-2 mt-4">
-        {usedTypes.map(k => { const v = TASK_TYPES[k] || TASK_TYPES.custom; return (
-          <div key={k} className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--mc-muted)' }}>
-            <div className="w-[11px] h-[11px] rounded-[3px]" style={{ background: v.color + '22', border: `1.5px solid ${v.color}` }} />{v.label}
+
+      {selectedCell && selectedCell.tasks.length > 0 && (
+        <div className="mt-3 rounded-xl overflow-hidden" style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)' }}>
+          <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid var(--mc-border)', background: 'var(--mc-active-item)' }}>
+            <div>
+              <span className="text-xs font-bold" style={{ color: 'var(--mc-text)' }}>{userName(selectedCell.user)}</span>
+              <span className="text-[10px] ml-2" style={{ color: 'var(--mc-muted)' }}>{selectedCell.day.label}</span>
+            </div>
+            {(isAdmin || role === 'director') && (
+              <button onClick={() => setAssignModal({ userId: selectedCell.userId, user: selectedCell.user })}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold"
+                style={{ background: '#3390EC', color: '#fff' }}>
+                <UserPlus size={12} /> Назначить
+              </button>
+            )}
           </div>
-        ); })}
+          <div className="p-2 space-y-1">
+            {selectedCell.tasks.map(t => {
+              const tt = TASK_TYPES[t.task_type] || TASK_TYPES.custom;
+              const done = isTaskDone(t, selectedCell.userId, selectedCell.iso);
+              return (
+                <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                  style={{ background: done ? '#F0FDF4' : 'var(--mc-bg)', border: `1px solid ${done ? '#BBF7D0' : 'var(--mc-border)'}` }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: done ? '#22C55E' : tt.color, flexShrink: 0 }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium" style={{ color: 'var(--mc-text)', textDecoration: done ? 'line-through' : 'none' }}>{t.title}</div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      {t.time_at && <span className="text-[9px]" style={{ color: 'var(--mc-muted)' }}>{t.time_at}</span>}
+                      <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: tt.color + '1A', color: tt.color, fontWeight: 600 }}>{tt.label}</span>
+                      {t.assigned_to && <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: '#EBF5FF', color: '#3390EC', fontWeight: 600 }}>Личная</span>}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: done ? '#22C55E' : '#F59E0B' }}>
+                    {done ? '✓' : '⏳'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {selectedCell && selectedCell.tasks.length === 0 && (isAdmin || role === 'director') && (
+        <div className="mt-3 text-center py-6 rounded-xl" style={{ border: '1px dashed var(--mc-border)', background: 'var(--mc-surface)' }}>
+          <div className="text-sm mb-2" style={{ color: 'var(--mc-muted)' }}>У {selectedCell.user.first_name} нет задач на {selectedCell.day.label}</div>
+          <button onClick={() => setAssignModal({ userId: selectedCell.userId, user: selectedCell.user })}
+            className="flex items-center gap-1.5 mx-auto px-4 py-2 rounded-lg text-xs font-semibold"
+            style={{ background: '#3390EC', color: '#fff' }}>
+            <UserPlus size={14} /> Назначить задачу
+          </button>
+        </div>
+      )}
+
+      {assignModal && (
+        <AssignTaskModal
+          targetUser={assignModal.user}
+          currentUser={currentUser}
+          scheduleRoles={scheduleRoles}
+          db={db}
+          onClose={() => setAssignModal(null)}
+          onSave={async (task) => {
+            await supabase.from('schedule_tasks').upsert([task], { onConflict: 'id' });
+            setDb(d => {
+              const updated = [...(d.scheduleTasks || []), task];
+              if (syncSnapshotRef) syncSnapshotRef.current.scheduleTasks = updated;
+              return { ...d, scheduleTasks: updated };
+            });
+            setAssignModal(null);
+            showToast(`Задача назначена → ${assignModal.user.first_name}`);
+          }}
+        />
+      )}
+
+      <div className="flex flex-wrap gap-2 mt-4">
+        {Object.entries(TASK_TYPES).map(([k, v]) => (
+          <div key={k} className="flex items-center gap-1.5 text-[10px]" style={{ color: 'var(--mc-muted)' }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: v.color }} />{v.label}
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5 text-[10px]" style={{ color: 'var(--mc-muted)' }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22C55E' }} />Выполнено
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AssignTaskModal({ targetUser, currentUser, scheduleRoles, db, onClose, onSave }) {
+  const [form, setForm] = useState({
+    title: '', description: '', frequency: 'once',
+    day_of_week: currentDow(), day_of_month: 5,
+    once_date: todayISO(), time_at: '09:00',
+    task_type: 'custom', link_url: '',
+  });
+  const update = (patch) => setForm(f => ({ ...f, ...patch }));
+  const handleSave = () => {
+    if (!form.title.trim()) return;
+    const task = {
+      id: uid(), title: form.title.trim(), description: form.description.trim(),
+      frequency: form.frequency,
+      day_of_week: form.frequency === 'weekly' ? form.day_of_week : null,
+      day_of_month: form.frequency === 'monthly' ? form.day_of_month : null,
+      once_date: form.frequency === 'once' ? form.once_date : null,
+      time_at: form.time_at || '09:00', task_type: form.task_type,
+      link_url: form.link_url.trim(), link_label: '',
+      target_role: targetUser.role,
+      assigned_to: targetUser.id,
+      assigned_by: currentUser.id,
+      assigned_at: new Date().toISOString(),
+      remind_minutes: 0, active: true, sort_order: 0,
+      created_by: currentUser.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    };
+    onSave(task);
+  };
+  const userName = `${targetUser.first_name || ''} ${targetUser.last_name || ''}`.trim();
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto" style={{ background: 'var(--mc-bg)' }}>
+        <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--mc-border)', background: 'var(--mc-bg)' }}>
+          <div>
+            <h2 className="text-base font-bold" style={{ color: 'var(--mc-text)' }}>Назначить задачу</h2>
+            <div className="text-xs mt-0.5" style={{ color: '#3390EC' }}>→ {userName} ({ROLE_LABELS[targetUser.role] || targetUser.role})</div>
+          </div>
+          <button onClick={onClose} className="p-1" style={{ color: 'var(--mc-muted)' }}><X size={20} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <FormField label="Название *">
+            <input value={form.title} onChange={e => update({ title: e.target.value })} placeholder="Что нужно сделать?" className={inputCls} style={inputStyle} />
+          </FormField>
+          <FormField label="Описание">
+            <textarea value={form.description} onChange={e => update({ description: e.target.value })} placeholder="Подробности..." rows={2} className={inputCls + ' resize-none'} style={inputStyle} />
+          </FormField>
+          <div>
+            <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--mc-muted)' }}>Частота</label>
+            <div className="flex gap-1">
+              {Object.entries(FREQ).map(([k, v]) => (
+                <button key={k} onClick={() => update({ frequency: k })}
+                  className="flex-1 px-2 py-2 rounded-lg text-xs font-semibold transition"
+                  style={{ background: form.frequency === k ? '#3390EC' : 'var(--mc-active-item)', color: form.frequency === k ? '#fff' : 'var(--mc-text)', border: '1px solid ' + (form.frequency === k ? '#3390EC' : 'var(--mc-border)') }}>
+                  {v.short}
+                </button>
+              ))}
+            </div>
+          </div>
+          {form.frequency === 'weekly' && (
+            <FormField label="День недели">
+              <select value={form.day_of_week} onChange={e => update({ day_of_week: +e.target.value })} className={inputCls} style={inputStyle}>
+                {[1,2,3,4,5,6,7].map(d => <option key={d} value={d}>{DOW_NAMES[d]}</option>)}
+              </select>
+            </FormField>
+          )}
+          {form.frequency === 'monthly' && (
+            <FormField label="До какого числа">
+              <select value={form.day_of_month} onChange={e => update({ day_of_month: +e.target.value })} className={inputCls} style={inputStyle}>
+                {[1,3,5,7,10,12,15,20,25,28,30].map(d => <option key={d} value={d}>{d}-го</option>)}
+              </select>
+            </FormField>
+          )}
+          {form.frequency === 'once' && (
+            <FormField label="Дата">
+              <input type="date" value={form.once_date} onChange={e => update({ once_date: e.target.value })} className={inputCls} style={inputStyle} />
+            </FormField>
+          )}
+          <FormField label="Время">
+            <input type="time" value={form.time_at} onChange={e => update({ time_at: e.target.value })} className={inputCls} style={inputStyle} />
+          </FormField>
+          <FormField label="Тип">
+            <select value={form.task_type} onChange={e => update({ task_type: e.target.value })} className={inputCls} style={inputStyle}>
+              {Object.entries(TASK_TYPES).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.label}</option>)}
+            </select>
+          </FormField>
+          <FormField label="Ссылка (необязательно)">
+            <input value={form.link_url} onChange={e => update({ link_url: e.target.value })} placeholder="https://..." className={inputCls} style={inputStyle} />
+          </FormField>
+        </div>
+        <div className="px-5 pb-5">
+          <button onClick={handleSave} disabled={!form.title.trim()}
+            className="w-full py-3 rounded-xl text-white font-semibold text-sm transition"
+            style={{ background: form.title.trim() ? '#3390EC' : '#94A3B8', cursor: form.title.trim() ? 'pointer' : 'not-allowed' }}>
+            Назначить задачу
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -916,7 +1173,7 @@ export function ScheduleHomeBanner({ ctx }) {
   const allCompletions = db.scheduleCompletions || [];
 
   const myTodayTasks = allTasks.filter(
-    t => t.active && isTaskForRole(t, role) && isTaskForToday(t)
+    t => t.active && isTaskForRole(t, role, currentUser.id) && isTaskForToday(t)
   );
 
   if (myTodayTasks.length === 0 && !viewingTask) return null;
