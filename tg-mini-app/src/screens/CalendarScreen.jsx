@@ -584,7 +584,7 @@ export function FieldCalendarScreen({ ctx }) {
       <div className="mb-1">
         <h1 className="display-font text-xl font-bold" style={{ color: 'var(--mc-text)' }}>Календарь выездных</h1>
         <p className="text-sm mt-0.5" style={{ color: 'var(--mc-muted)' }}>
-          Свои поставленные и назначенные — с деталями. Чужие — только занятые слоты.
+          Все задачи команды — с деталями для каждого сотрудника.
         </p>
       </div>
 
@@ -624,14 +624,14 @@ export function FieldCalendarScreen({ ctx }) {
       </div>
 
       {view === 'week' && (
-        <WeekCalendarView tasks={filteredTasks} weekStart={weekStart} ctx={ctx} mode="auto" onSlotClick={handleSlotClick} />
+        <WeekCalendarView tasks={filteredTasks} weekStart={weekStart} ctx={ctx} mode="team" onSlotClick={handleSlotClick} />
       )}
       {view === 'month' && (
         <MonthCalendarView tasks={filteredTasks} monthISO={monthISO} ctx={ctx}
           onDayClick={d => { setSelectedDay(d); setView('day'); }} />
       )}
       {view === 'day' && (
-        <DayCalendarView tasks={filteredTasks} date={selectedDay} ctx={ctx} mode="auto" onSlotClick={handleSlotClick} />
+        <DayCalendarView tasks={filteredTasks} date={selectedDay} ctx={ctx} mode="team" onSlotClick={handleSlotClick} />
       )}
     </div>
   );
