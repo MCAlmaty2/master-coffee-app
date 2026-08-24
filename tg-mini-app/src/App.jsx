@@ -1731,6 +1731,7 @@ function App() {
           recipient_id: author.id,
           title: 'Изменение статуса',
           body: `${order.order_number}: ${STATUS[order.status].label} → ${STATUS[newStatus].label}`,
+          link_kind: 'order', link_id: orderId,
         }));
       }
       // Кассир подтвердил оплату → уведомить постановщика заявки (менеджер может делать отгрузку)
@@ -1760,6 +1761,7 @@ function App() {
             recipient_id: order.created_by,
             title: 'Код самовывоза',
             body: `${order.order_number}: код ${ord.pickup_code}`,
+            link_kind: 'order', link_id: orderId,
           }));
         }
       }
@@ -2029,6 +2031,7 @@ function App() {
           recipient_id: order.created_by,
           title: 'Заявка отменена',
           body: `Заявка ${order.order_number} была отменена. Причина: ${reason.trim() || 'не указана'}`,
+          link_kind: 'order', link_id: orderId,
         }),
         ...d.notifications,
       ].filter(Boolean),
@@ -2102,7 +2105,7 @@ function App() {
         ...d,
         users: d.users.map(u => u.id === userId ? updated : u),
         notifications: [
-          makeNotif(d, { recipient_id: updated.id, title: 'Доступ предоставлен', body: `Роль: ${roleOf(d, role).label}. Откройте бота в Telegram и зайдите снова.` }),
+          makeNotif(d, { recipient_id: updated.id, title: 'Доступ предоставлен', body: `Роль: ${roleOf(d, role).label}. Откройте бота в Telegram и зайдите снова.`, link_kind: 'access', link_id: '' }),
           ...d.notifications,
         ].filter(Boolean),
       }));
@@ -2603,6 +2606,7 @@ function App() {
         recipient_id: a.id,
         title: '🗑 Заявка на списание',
         body: `${number}: ${items.length} поз. от ${getUserName(d, currentUser.id)}\n${writeOff.reason.slice(0, 60)}`,
+        link_kind: 'writeoff', link_id: writeOff.id,
         button_url:  `${appUrl}?startapp=writeoff_${writeOff.id}`,
         button_text: '📋 Открыть заявку',
       }));
@@ -2648,6 +2652,7 @@ function App() {
         recipient_id: c.id,
         title: 'К списанию в 1С',
         body: `${wo.number}: одобрена, требуется списать в 1С`,
+        link_kind: 'writeoff', link_id: wo.id,
       })));
       const itemsSummary = wo.items.map(i => `· ${i.name} — ${i.quantity} ${i.unit}`).join('\n');
       const tgEntry = makeTgLogEntry(d, 'writeoff_approved', {
@@ -3798,8 +3803,8 @@ function App() {
       } : c),
       // Уведомить автора и/или принявшего, кроме того, кто сейчас добавляет
       notifications: [
-        ...(cr.created_by !== currentUser.id ? [makeNotif(d, { recipient_id: cr.created_by, title: `Правка #${revision.version} к договору`, body: `${cr.number}: ${revision.comment.slice(0, 60)}` })] : []),
-        ...(cr.taken_by && cr.taken_by !== currentUser.id ? [makeNotif(d, { recipient_id: cr.taken_by, title: `Правка #${revision.version} к договору`, body: `${cr.number}: ${revision.comment.slice(0, 60)}` })] : []),
+        ...(cr.created_by !== currentUser.id ? [makeNotif(d, { recipient_id: cr.created_by, title: `Правка #${revision.version} к договору`, body: `${cr.number}: ${revision.comment.slice(0, 60)}`, link_kind: 'contract', link_id: cr.id })] : []),
+        ...(cr.taken_by && cr.taken_by !== currentUser.id ? [makeNotif(d, { recipient_id: cr.taken_by, title: `Правка #${revision.version} к договору`, body: `${cr.number}: ${revision.comment.slice(0, 60)}`, link_kind: 'contract', link_id: cr.id })] : []),
         ...d.notifications,
       ].filter(Boolean),
     }));
@@ -15579,7 +15584,7 @@ function NotificationsScreen({ ctx }) {
 
   const handleClick = (n) => {
     if (!n.read) markNotificationRead(n.id);
-    if (n.link_kind && n.link_id) {
+    if (n.link_kind) {
       switch (n.link_kind) {
         case 'order':    return navigate({ name: 'order_detail',    orderId:    n.link_id });
         case 'task':     return navigate({ name: 'task_detail',     taskId:     n.link_id });
@@ -15588,6 +15593,8 @@ function NotificationsScreen({ ctx }) {
         case 'gift':     return navigate({ name: 'gift_detail',     giftId:     n.link_id });
         case 'contract': return navigate({ name: 'contract_detail', contractId: n.link_id });
         case 'expense':  return navigate({ name: 'expense_detail',  expenseId:  n.link_id });
+        case 'mpp_deal': return navigate({ name: 'mpp_deal',        dealId:     n.link_id });
+        case 'mpp_kanban': return navigate({ name: 'mpp_kanban' });
         case 'shipment': return navigate({ name: 'shipment_registry' });
         case 'manager_task': return navigate({ name: 'manager_tasks' });
         case 'coffee_task': return navigate({ name: 'coffee_tasks' });

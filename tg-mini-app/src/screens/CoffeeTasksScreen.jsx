@@ -168,6 +168,7 @@ function CoffeeTasksScreen({ ctx }) {
   const [showScheduleManage, setShowScheduleManage] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [detailItem, setDetailItem] = useState(null);
+  const [filterUser, setFilterUser] = useState('all');
 
   const isAdmin = currentUser.role === 'admin' || currentUser.role === 'director';
 
@@ -175,10 +176,11 @@ function CoffeeTasksScreen({ ctx }) {
     (db.users || []).filter(u => u.active && COFFEE_ROLES.includes(u.role)),
   [db.users]);
 
+  const isCoffeeRole = COFFEE_ROLES.includes(currentUser.role);
   const allAssignees = useMemo(() => {
-    if (isAdmin) return coffeeUsers;
+    if (isAdmin || isCoffeeRole) return coffeeUsers;
     return coffeeUsers.filter(u => u.id === currentUser.id);
-  }, [coffeeUsers, currentUser, isAdmin]);
+  }, [coffeeUsers, currentUser, isAdmin, isCoffeeRole]);
 
   // --- Одноразовые задачи ---
   const dayTasks = useMemo(() =>
@@ -259,20 +261,25 @@ function CoffeeTasksScreen({ ctx }) {
     return items;
   }, [dayTasks, coffeeScheduleTasks, scheduleCompletions, coffeeUsers]);
 
+  const filteredItems = useMemo(() => {
+    if (filterUser === 'all') return combinedItems;
+    return combinedItems.filter(item => item.assigneeId === filterUser);
+  }, [combinedItems, filterUser]);
+
   const grouped = useMemo(() => {
     const map = {};
-    combinedItems.forEach(item => {
+    filteredItems.forEach(item => {
       const key = item.assigneeId || '_unassigned';
       if (!map[key]) map[key] = [];
       map[key].push(item);
     });
     return map;
-  }, [combinedItems]);
+  }, [filteredItems]);
 
   const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
   const today = todayISO();
-  const doneCount = combinedItems.filter(i => i.done).length;
-  const totalCount = combinedItems.length;
+  const doneCount = filteredItems.filter(i => i.done).length;
+  const totalCount = filteredItems.length;
 
   const toggleDone = (taskId) => {
     const task = (db.coffeeTasks || []).find(t => t.id === taskId);
@@ -530,6 +537,39 @@ function CoffeeTasksScreen({ ctx }) {
             );
           })}
         </div>
+
+        {/* User filter */}
+        {coffeeUsers.length > 1 && (
+          <div className="flex gap-1.5 mt-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+            <button
+              onClick={() => setFilterUser('all')}
+              className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold"
+              style={{
+                background: filterUser === 'all' ? '#297b8a' : 'var(--mc-active-item)',
+                color: filterUser === 'all' ? 'white' : 'var(--mc-text)',
+              }}
+            >
+              Все ({combinedItems.length})
+            </button>
+            {coffeeUsers.map(u => {
+              const cnt = combinedItems.filter(i => i.assigneeId === u.id).length;
+              if (cnt === 0 && filterUser !== u.id) return null;
+              return (
+                <button
+                  key={u.id}
+                  onClick={() => setFilterUser(f => f === u.id ? 'all' : u.id)}
+                  className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold"
+                  style={{
+                    background: filterUser === u.id ? '#297b8a' : 'var(--mc-active-item)',
+                    color: filterUser === u.id ? 'white' : 'var(--mc-text)',
+                  }}
+                >
+                  {u.first_name} ({cnt})
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Task list */}
@@ -577,7 +617,7 @@ function CoffeeTasksScreen({ ctx }) {
 
       {/* FAB buttons */}
       <div className="fixed bottom-6 right-4 flex flex-col gap-2 z-30">
-        {isAdmin && (
+        {(isAdmin || ['coffee_manager', 'deputy_coffee_manager'].includes(currentUser.role)) && (
           <button
             onClick={() => setShowScheduleManage(true)}
             className="w-12 h-12 rounded-full flex items-center justify-center shadow-lg"
