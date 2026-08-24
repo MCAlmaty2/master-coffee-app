@@ -2630,22 +2630,21 @@ function App() {
     const now = new Date().toISOString();
     const newLog = [...wo.log, { event: 'status', from: 'pending', to: 'approved', actor: currentUser.id, at: now, meta: (comment ? { comment: comment.trim() } : {}) }];
     const upd = { status: 'approved', approved_by: currentUser.id, approved_at: now, approval_comment: (comment || '').trim() || null, log: newLog };
-    const { error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId);
+    const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
+    if (!updData?.length) return { error: 'Не удалось обновить запись' };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => {
         if (w.id !== writeOffId) return w;
         return { ...w, ...upd };
       });
       const newNotifs = [];
-      // Уведомить автора
       newNotifs.push(makeNotif(d, {
         recipient_id: wo.created_by,
         title: 'Списание одобрено',
         link_kind: 'writeoff', link_id: wo.id,
         body: `${wo.number}: одобрена ${getUserName(d, currentUser.id)}`,
       }));
-      // Уведомить кассиров
       const cashiers = d.users.filter(u => u.active && u.role === 'cashier' && u.id !== currentUser.id);
       cashiers.forEach(c => newNotifs.push(makeNotif(d, {
         recipient_id: c.id,
@@ -2663,6 +2662,7 @@ function App() {
       });
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
     });
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? { ...w, ...upd } : w);
     return { ok: true };
   };
 
@@ -2675,8 +2675,9 @@ function App() {
     const now = new Date().toISOString();
     const newLog = [...wo.log, { event: 'status', from: 'pending', to: 'rejected', actor: currentUser.id, at: now, meta: { comment: comment.trim() } }];
     const upd = { status: 'rejected', approved_by: currentUser.id, approved_at: now, approval_comment: comment.trim(), log: newLog };
-    const { error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId);
+    const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
+    if (!updData?.length) return { error: 'Не удалось обновить запись' };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => {
         if (w.id !== writeOffId) return w;
@@ -2690,6 +2691,7 @@ function App() {
       })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? { ...w, ...upd } : w);
     return { ok: true };
   };
 
@@ -2709,14 +2711,14 @@ function App() {
     const now = new Date().toISOString();
     const newLog = [...wo.log, { event: 'status', from: 'approved', to: 'invoiced', actor: currentUser.id, at: now, meta: { doc_no: trimmed, doc_total: total } }];
     const upd = { status: 'invoiced', doc_no: trimmed, doc_total: total, invoiced_by: currentUser.id, invoiced_at: now, log: newLog };
-    const { error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId);
+    const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
+    if (!updData?.length) return { error: 'Не удалось обновить запись' };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => {
         if (w.id !== writeOffId) return w;
         return { ...w, ...upd };
       });
-      // Уведомления: автору + всем складским
       const author = d.users.find(u => u.id === wo.created_by);
       const warehouseUsers = d.users.filter(u => u.active && u.role === 'warehouse' && u.id !== currentUser.id);
       const newNotifs = [
@@ -2736,6 +2738,7 @@ function App() {
       })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? { ...w, ...upd } : w);
     return { ok: true };
   };
 
@@ -2754,8 +2757,9 @@ function App() {
     const now = new Date().toISOString();
     const newLog = [...wo.log, { event: 'status', from: 'invoiced', to: 'prepared', actor: currentUser.id, at: now, meta: { pickup_code: code } }];
     const upd = { status: 'prepared', pickup_code: code, prepared_by: currentUser.id, prepared_at: now, log: newLog };
-    const { error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId);
+    const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
+    if (!updData?.length) return { error: 'Не удалось обновить запись' };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => {
         if (w.id !== writeOffId) return w;
@@ -2770,6 +2774,7 @@ function App() {
       const tgEntries = [makeTgLogEntry(d, 'writeoff_ready', { wo_number: wo.number, pickup_code: code })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? { ...w, ...upd } : w);
     return { ok: true, code };
   };
 
@@ -2787,8 +2792,9 @@ function App() {
     const now = new Date().toISOString();
     const newLog = [...wo.log, { event: 'status', from: 'prepared', to: 'delivered', actor: currentUser.id, at: now }];
     const upd = { status: 'delivered', delivered_by: currentUser.id, delivered_at: now, completed_by: currentUser.id, completed_at: now, log: newLog };
-    const { error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId);
+    const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
+    if (!updData?.length) return { error: 'Не удалось обновить запись' };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => {
         if (w.id !== writeOffId) return w;
@@ -2802,6 +2808,7 @@ function App() {
       })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? { ...w, ...upd } : w);
     return { ok: true };
   };
 
@@ -2813,12 +2820,14 @@ function App() {
     const now = new Date().toISOString();
     const newLog = [...wo.log, { event: 'status', from: 'pending', to: 'rejected', actor: currentUser.id, at: now, meta: { comment: 'Отменено автором' } }];
     const upd = { status: 'rejected', approval_comment: 'Отменено автором', approved_by: currentUser.id, approved_at: now, log: newLog };
-    const { error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId);
+    const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
+    if (!updData?.length) return { error: 'Не удалось обновить запись' };
     setDb(d => ({
       ...d,
       writeOffs: d.writeOffs.map(w => w.id === writeOffId ? { ...w, ...upd } : w),
     }));
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? { ...w, ...upd } : w);
     return { ok: true };
   };
 
@@ -12762,25 +12771,25 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
       </div>
 
       {approveOpen && (
-        <ApproveWriteOffModal onClose={() => setApproveOpen(false)} onApprove={(comment) => {
-          const r = approveWriteOff(wo.id, comment);
-          if (r.error) return showToast(r.error);
+        <ApproveWriteOffModal onClose={() => setApproveOpen(false)} onApprove={async (comment) => {
+          const r = await approveWriteOff(wo.id, comment);
+          if (r?.error) return showToast(r.error);
           setApproveOpen(false);
           showToast(`${wo.number} одобрена — отправлено в чат-группу «Акты списаний»`);
         }} />
       )}
       {rejectOpen && (
-        <RejectWriteOffModal onClose={() => setRejectOpen(false)} onReject={(comment) => {
-          const r = rejectWriteOff(wo.id, comment);
-          if (r.error) return showToast(r.error);
+        <RejectWriteOffModal onClose={() => setRejectOpen(false)} onReject={async (comment) => {
+          const r = await rejectWriteOff(wo.id, comment);
+          if (r?.error) return showToast(r.error);
           setRejectOpen(false);
           showToast(`${wo.number} отклонена`);
         }} />
       )}
       {completeOpen && (
-        <CompleteWriteOffModal onClose={() => setCompleteOpen(false)} onComplete={(docNo, docTotal) => {
-          const r = completeWriteOff(wo.id, docNo, docTotal);
-          if (r.error) return showToast(r.error);
+        <CompleteWriteOffModal onClose={() => setCompleteOpen(false)} onComplete={async (docNo, docTotal) => {
+          const r = await completeWriteOff(wo.id, docNo, docTotal);
+          if (r?.error) return showToast(r.error);
           setCompleteOpen(false);
           showToast(`${wo.number} списана в 1С (${docNo}, ${fmtNum(docTotal)} ₸)`);
         }} />
@@ -12815,9 +12824,9 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
                 Отмена
               </button>
               <button
-                onClick={() => {
-                  const r = ctx.prepareWriteOff(wo.id);
-                  if (r.error) { showToast(r.error); return; }
+                onClick={async () => {
+                  const r = await ctx.prepareWriteOff(wo.id);
+                  if (r?.error) { showToast(r.error); return; }
                   setPrepareOpen(false);
                   showToast(`Готово! Код выдачи: ${r.code}`);
                 }}
@@ -12841,9 +12850,9 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
                 Не отменять
               </button>
               <button
-                onClick={() => {
-                  const r = cancelWriteOff(wo.id);
-                  if (r.error) { showToast(r.error); return; }
+                onClick={async () => {
+                  const r = await cancelWriteOff(wo.id);
+                  if (r?.error) { showToast(r.error); return; }
                   setCancelOpen(false);
                   showToast('Заявка отменена');
                 }}
@@ -12878,9 +12887,9 @@ function DeliverWriteOffBlock({ wo, ctx, showToast }) {
           style={{ border: '1px solid var(--mc-border)' }}
         />
         <button
-          onClick={() => {
-            const r = ctx.deliverWriteOff(wo.id, code);
-            if (r.error) return showToast(r.error);
+          onClick={async () => {
+            const r = await ctx.deliverWriteOff(wo.id, code);
+            if (r?.error) return showToast(r.error);
             showToast('Выдано');
           }}
           disabled={code.length !== 4}
