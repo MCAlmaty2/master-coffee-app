@@ -2633,11 +2633,9 @@ function App() {
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
     if (!updData?.length) return { error: 'Не удалось обновить запись' };
+    const dbRow = updData[0];
     setDb(d => {
-      const updatedList = d.writeOffs.map(w => {
-        if (w.id !== writeOffId) return w;
-        return { ...w, ...upd };
-      });
+      const updatedList = d.writeOffs.map(w => w.id === writeOffId ? dbRow : w);
       const newNotifs = [];
       newNotifs.push(makeNotif(d, {
         recipient_id: wo.created_by,
@@ -2662,7 +2660,7 @@ function App() {
       });
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
     });
-    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? { ...w, ...upd } : w);
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? dbRow : w);
     return { ok: true };
   };
 
@@ -2678,11 +2676,9 @@ function App() {
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
     if (!updData?.length) return { error: 'Не удалось обновить запись' };
+    const dbRow = updData[0];
     setDb(d => {
-      const updatedList = d.writeOffs.map(w => {
-        if (w.id !== writeOffId) return w;
-        return { ...w, ...upd };
-      });
+      const updatedList = d.writeOffs.map(w => w.id === writeOffId ? dbRow : w);
       const newNotifs = [makeNotif(d, {
         recipient_id: wo.created_by,
         title: 'Списание отклонено',
@@ -2691,7 +2687,7 @@ function App() {
       })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
-    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? { ...w, ...upd } : w);
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? dbRow : w);
     return { ok: true };
   };
 
@@ -2714,11 +2710,9 @@ function App() {
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
     if (!updData?.length) return { error: 'Не удалось обновить запись' };
+    const dbRow = updData[0];
     setDb(d => {
-      const updatedList = d.writeOffs.map(w => {
-        if (w.id !== writeOffId) return w;
-        return { ...w, ...upd };
-      });
+      const updatedList = d.writeOffs.map(w => w.id === writeOffId ? dbRow : w);
       const author = d.users.find(u => u.id === wo.created_by);
       const warehouseUsers = d.users.filter(u => u.active && u.role === 'warehouse' && u.id !== currentUser.id);
       const newNotifs = [
@@ -2738,7 +2732,7 @@ function App() {
       })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
-    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? { ...w, ...upd } : w);
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? dbRow : w);
     return { ok: true };
   };
 
@@ -2760,11 +2754,9 @@ function App() {
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
     if (!updData?.length) return { error: 'Не удалось обновить запись' };
+    const dbRow = updData[0];
     setDb(d => {
-      const updatedList = d.writeOffs.map(w => {
-        if (w.id !== writeOffId) return w;
-        return { ...w, ...upd };
-      });
+      const updatedList = d.writeOffs.map(w => w.id === writeOffId ? dbRow : w);
       const newNotifs = [makeNotif(d, {
         recipient_id: wo.created_by,
         title: 'Списание готово к выдаче',
@@ -2774,7 +2766,7 @@ function App() {
       const tgEntries = [makeTgLogEntry(d, 'writeoff_ready', { wo_number: wo.number, pickup_code: code })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
-    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? { ...w, ...upd } : w);
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? dbRow : w);
     return { ok: true, code };
   };
 
@@ -2795,11 +2787,9 @@ function App() {
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
     if (!updData?.length) return { error: 'Не удалось обновить запись' };
+    const dbRow = updData[0];
     setDb(d => {
-      const updatedList = d.writeOffs.map(w => {
-        if (w.id !== writeOffId) return w;
-        return { ...w, ...upd };
-      });
+      const updatedList = d.writeOffs.map(w => w.id === writeOffId ? dbRow : w);
       const newNotifs = [makeNotif(d, {
         recipient_id: wo.created_by,
         title: 'Списание выдано',
@@ -2808,7 +2798,7 @@ function App() {
       })];
       return { ...d, writeOffs: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
-    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? { ...w, ...upd } : w);
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? dbRow : w);
     return { ok: true };
   };
 
@@ -2823,11 +2813,12 @@ function App() {
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
     if (!updData?.length) return { error: 'Не удалось обновить запись' };
+    const dbRow = updData[0];
     setDb(d => ({
       ...d,
-      writeOffs: d.writeOffs.map(w => w.id === writeOffId ? { ...w, ...upd } : w),
+      writeOffs: d.writeOffs.map(w => w.id === writeOffId ? dbRow : w),
     }));
-    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? { ...w, ...upd } : w);
+    syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === writeOffId ? dbRow : w);
     return { ok: true };
   };
 
