@@ -1334,7 +1334,7 @@ function App() {
   useEffect(() => {
     if (bootStatus.phase !== 'ready') return;
 
-    const SKIP_SYNC_DIFF = new Set(['writeOffs']);
+    const SKIP_SYNC_DIFF = new Set(['writeOffs', 'orders']);
     for (const stateKey of Object.keys(SYNC_TABLES)) {
       if (SKIP_SYNC_DIFF.has(stateKey)) {
         if (syncSnapshotRef.current[stateKey] === undefined) syncSnapshotRef.current[stateKey] = db[stateKey] || [];
@@ -1665,44 +1665,44 @@ function App() {
       kind,
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
     };
+    const { data: insData, error: insErr } = await supabase.from('orders').insert([order]).select();
+    if (insErr) return { error: insErr.message };
+    const dbRow = insData?.[0] || order;
     setDb(d => {
-      // In-app: уведомляем B2B-менеджеров и админа (кроме самого создателя)
       const notifRecipients = d.users.filter(u =>
         ['b2b', 'admin'].includes(u.role) && u.active && u.id !== currentUser.id
       );
       const newNotifs = notifRecipients.map(u => makeNotif(d, {
         recipient_id: u.id,
         title: 'Новая заявка',
-        body: `${order.order_number}: ${order.client_type === 'individual' ? order.full_name : order.company_name}, ${fmtNum(order.total_amount)} тг`,
-        link_kind: 'order', link_id: order.id,
+        body: `${dbRow.order_number}: ${dbRow.client_type === 'individual' ? dbRow.full_name : dbRow.company_name}, ${fmtNum(dbRow.total_amount)} тг`,
+        link_kind: 'order', link_id: dbRow.id,
       }));
-      const clientName = order.client_type === 'individual' ? order.full_name : order.company_name;
-      // Telegram: новая заявка → тема «Sales Department»
-      // Шлём для всех менеджерских ролей и быстрых заявок
+      const clientName = dbRow.client_type === 'individual' ? dbRow.full_name : dbRow.company_name;
       const sendToSales = kind === 'quick' || ['b2b', 'sales', 'senior_manager', 'director', 'admin'].includes(currentUser.role);
       const tgEntries = sendToSales
         ? [makeTgLogEntry(d, 'sales_new_b2b', {
-            order_number: order.order_number,
-            doc_no: order.realization_doc_no ? ` · ${order.realization_doc_no}` : '',
+            order_number: dbRow.order_number,
+            doc_no: dbRow.realization_doc_no ? ` · ${dbRow.realization_doc_no}` : '',
             client: clientName,
-            total: fmtNum(order.total_amount),
-            delivery: order.delivery_method === 'pickup' ? '🏪 Самовывоз' : '🚚 Доставка',
+            total: fmtNum(dbRow.total_amount),
+            delivery: dbRow.delivery_method === 'pickup' ? '🏪 Самовывоз' : '🚚 Доставка',
             manager: getUserName(d, currentUser.id),
           })]
         : [];
-      return { ...d, orders: [order, ...d.orders], notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
+      syncSnapshotRef.current.orders = [dbRow, ...(syncSnapshotRef.current.orders || [])];
+      return { ...d, orders: [dbRow, ...d.orders], notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
-    return order;
+    return dbRow;
   };
 
-  const changeStatus = (orderId, newStatus, meta = {}) => {
-    // Защита от кривого 00ЦТ-номера на случай если UI обойдут
+  const changeStatus = async (orderId, newStatus, meta = {}) => {
     if (newStatus === 'shipped' && meta.doc_no && !isValidDocNo(meta.doc_no)) {
       return { error: 'Номер документа должен быть в формате 00ЦТ-NNNNNN' };
     }
-    // Подтвердить оплату (invoiced → paid): кассир, admin, или b2b для физлица-самовывоз
     const order = (db.orders || []).find(o => o.id === orderId);
-    if (order?.status === 'invoiced' && newStatus === 'paid') {
+    if (!order) return { error: 'Заявка не найдена' };
+    if (order.status === 'invoiced' && newStatus === 'paid') {
       const isIndividual = order.client_type === 'individual';
       const isPickup = order.delivery_method === 'pickup';
       const b2bPickup = isIndividual && isPickup && currentUser.role === 'b2b';
@@ -1710,28 +1710,23 @@ function App() {
         return { error: 'Подтвердить оплату может только кассир' + (isIndividual && isPickup ? ' (или B2B-менеджер для самовывоза)' : '') };
       }
     }
+    const now = new Date().toISOString();
+    const logEntry = { event: 'status', from: order.status, to: newStatus, actor: currentUser.id, at: now, meta };
+    const upd = { status: newStatus, log: [...order.log, logEntry] };
+    if (newStatus === 'invoiced' && meta.pdf) upd.invoice_pdf = meta.pdf;
+    if (newStatus === 'shipped') { upd.shipped_at = meta.shipped_at; upd.realization_doc_no = meta.doc_no; }
+    if (newStatus === 'paid' && meta.paid_amount != null) upd.paid_amount = meta.paid_amount;
+    if (newStatus === 'ready') {
+      const existingCodes = db.orders.filter(x => x.pickup_code && x.status !== 'archived').map(x => x.pickup_code);
+      upd.pickup_code = gen4DigitCode(existingCodes);
+    }
+    const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
+    if (dbErr) return { error: dbErr.message };
+    if (!updData?.length) return { error: 'Не удалось обновить заявку' };
+    const dbRow = updData[0];
     setDb(d => {
-      const orders = d.orders.map(o => {
-        if (o.id !== orderId) return o;
-        const updated = { ...o, status: newStatus };
-        const logEntry = { event: 'status', from: o.status, to: newStatus, actor: currentUser.id, at: new Date().toISOString(), meta };
-        updated.log = [...o.log, logEntry];
-        if (newStatus === 'invoiced' && meta.pdf) updated.invoice_pdf = meta.pdf;
-        if (newStatus === 'shipped') {
-          updated.shipped_at = meta.shipped_at;
-          updated.realization_doc_no = meta.doc_no;
-        }
-        if (newStatus === 'paid' && meta.paid_amount != null) {
-          updated.paid_amount = meta.paid_amount;
-        }
-        if (newStatus === 'ready') {
-          const existingCodes = d.orders.filter(x => x.pickup_code && x.status !== 'archived').map(x => x.pickup_code);
-          updated.pickup_code = gen4DigitCode(existingCodes);
-        }
-        return updated;
-      });
-      const order = d.orders.find(o => o.id === orderId);
-      const author = d.users.find(u => u.id === order?.created_by);
+      const orders = d.orders.map(o => o.id === orderId ? dbRow : o);
+      const author = d.users.find(u => u.id === order.created_by);
       const newNotifs = [];
       if (author && author.role === 'sales') {
         newNotifs.push(makeNotif(d, {
@@ -1741,7 +1736,6 @@ function App() {
           link_kind: 'order', link_id: orderId,
         }));
       }
-      // Кассир подтвердил оплату → уведомить постановщика заявки (менеджер может делать отгрузку)
       if (newStatus === 'paid' && author && author.id !== currentUser.id) {
         const clientName = order.client_type === 'individual' ? order.full_name : order.company_name;
         const shortfall = Number(meta.shortfall) || 0;
@@ -1761,91 +1755,87 @@ function App() {
           }));
         }
       }
-      if (newStatus === 'ready') {
-        const ord = orders.find(o => o.id === orderId);
-        if (ord?.pickup_code) {
-          newNotifs.push(makeNotif(d, {
-            recipient_id: order.created_by,
-            title: 'Код самовывоза',
-            body: `${order.order_number}: код ${ord.pickup_code}`,
-            link_kind: 'order', link_id: orderId,
-          }));
-        }
-      }
-      // Telegram-маршрутизация — только конкретные значимые события, не «всё подряд»
-      const tgEntries = [];
-      const updatedOrder = orders.find(o => o.id === orderId);
-      if (newStatus === 'ready' && updatedOrder?.delivery_method === 'pickup' && updatedOrder?.pickup_code) {
-        // → Sales Department: присвоен код для самовывоза
-        tgEntries.push(makeTgLogEntry(d, 'sales_pickup_code', {
-          order_number: updatedOrder.order_number,
-          client: updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name,
-          pickup_code: updatedOrder.pickup_code,
-          total: fmtNum(updatedOrder.total_amount),
+      if (newStatus === 'ready' && dbRow.pickup_code) {
+        newNotifs.push(makeNotif(d, {
+          recipient_id: order.created_by,
+          title: 'Код самовывоза',
+          body: `${order.order_number}: код ${dbRow.pickup_code}`,
+          link_kind: 'order', link_id: orderId,
         }));
       }
-      if (newStatus === 'shipped' && updatedOrder) {
-        const isPickup = updatedOrder.delivery_method === 'pickup';
+      const tgEntries = [];
+      if (newStatus === 'ready' && dbRow.delivery_method === 'pickup' && dbRow.pickup_code) {
+        tgEntries.push(makeTgLogEntry(d, 'sales_pickup_code', {
+          order_number: dbRow.order_number,
+          client: dbRow.client_type === 'individual' ? dbRow.full_name : dbRow.company_name,
+          pickup_code: dbRow.pickup_code,
+          total: fmtNum(dbRow.total_amount),
+        }));
+      }
+      if (newStatus === 'shipped') {
+        const isPickup = dbRow.delivery_method === 'pickup';
         if (isPickup) {
           tgEntries.push(makeTgLogEntry(d, 'storage_shipped_pickup', {
-            order_number: updatedOrder.order_number,
-            doc_no: updatedOrder.realization_doc_no ? ` · ${updatedOrder.realization_doc_no}` : '',
-            client: updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name,
-            pickup_code: updatedOrder.pickup_code || '—',
-            total: fmtNum(updatedOrder.total_amount),
+            order_number: dbRow.order_number,
+            doc_no: dbRow.realization_doc_no ? ` · ${dbRow.realization_doc_no}` : '',
+            client: dbRow.client_type === 'individual' ? dbRow.full_name : dbRow.company_name,
+            pickup_code: dbRow.pickup_code || '—',
+            total: fmtNum(dbRow.total_amount),
           }));
         }
-        const clientName = updatedOrder.client_type === 'individual' ? updatedOrder.full_name : updatedOrder.company_name;
+        const clientName = dbRow.client_type === 'individual' ? dbRow.full_name : dbRow.company_name;
         d.users.filter(u => u.active && u.role === 'warehouse' && u.id !== currentUser.id).forEach(wu => {
           newNotifs.push(makeNotif(d, {
             recipient_id: wu.id,
             title: isPickup ? '📦 Новый самовывоз' : '🚚 Новая доставка',
-            body: `${updatedOrder.order_number} · ${clientName}`,
+            body: `${dbRow.order_number} · ${clientName}`,
             link_kind: 'order', link_id: orderId,
           }));
         });
       }
-      // Прочие смены статуса в Telegram не шлём — это шум по требованию.
+      syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
       return { ...d, orders, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [...tgEntries, ...d.telegramLog] };
     });
   };
 
-  const closePickupOrder = (orderId, code) => {
+  const closePickupOrder = async (orderId, code) => {
     const order = (db.orders || []).find(o => o.id === orderId);
     if (!order) return { error: 'Заявка не найдена' };
     if (order.status !== 'ready') return { error: 'Заявка не готова к выдаче' };
     if (!order.pickup_code) return { error: 'У заявки нет кода выдачи' };
     if ((code || '').trim() !== order.pickup_code) return { error: 'Код не совпадает' };
-    // Только склад или админ могут выдать
     if (currentUser.role !== 'warehouse' && currentUser.role !== 'admin') {
       return { error: 'Выдавать может только склад' };
     }
-    setDb(d => ({
-      ...d,
-      orders: d.orders.map(o => {
-        if (o.id !== orderId) return o;
-        return {
-          ...o,
-          status: 'archived',
-          log: [...o.log, { event: 'pickup_closed', actor: currentUser.id, at: new Date().toISOString() }]
-        };
-      }),
-      notifications: [
-        makeNotif(d, {
-          recipient_id: order.created_by,
-          title: 'Заказ выдан клиенту',
-          body: `${order.order_number}: клиент забрал самовывоз`,
-          link_kind: 'order', link_id: order.id,
-        }),
-        ...d.notifications,
-      ].filter(Boolean),
-    }));
+    const upd = {
+      status: 'archived',
+      log: [...order.log, { event: 'pickup_closed', actor: currentUser.id, at: new Date().toISOString() }],
+    };
+    const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
+    if (dbErr) return { error: dbErr.message };
+    const dbRow = updData[0];
+    setDb(d => {
+      syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
+      return {
+        ...d,
+        orders: d.orders.map(o => o.id === orderId ? dbRow : o),
+        notifications: [
+          makeNotif(d, {
+            recipient_id: order.created_by,
+            title: 'Заказ выдан клиенту',
+            body: `${order.order_number}: клиент забрал самовывоз`,
+            link_kind: 'order', link_id: order.id,
+          }),
+          ...d.notifications,
+        ].filter(Boolean),
+      };
+    });
     return { ok: true };
   };
 
   // Подтвердить доставку: перевести shipped+delivery заказ в архив.
   // Вызывается складом или администратором после того как курьер доставил товар.
-  const archiveDeliveredOrder = (orderId) => {
+  const archiveDeliveredOrder = async (orderId) => {
     const order = (db.orders || []).find(o => o.id === orderId);
     if (!order) return { error: 'Заявка не найдена' };
     if (order.status !== 'shipped' || order.delivery_method !== 'delivery') {
@@ -1854,31 +1844,35 @@ function App() {
     if (currentUser.role !== 'warehouse' && currentUser.role !== 'admin') {
       return { error: 'Подтвердить доставку может только склад или администратор' };
     }
-    setDb(d => ({
-      ...d,
-      orders: d.orders.map(o => {
-        if (o.id !== orderId) return o;
-        return {
-          ...o,
-          status: 'archived',
-          delivered_at: new Date().toISOString(),
-          log: [...o.log, { event: 'delivered', actor: currentUser.id, at: new Date().toISOString() }],
-        };
-      }),
-      notifications: [
-        makeNotif(d, {
-          recipient_id: order.created_by,
-          title: '✅ Доставка подтверждена',
-          body: `${order.order_number}: заказ доставлен клиенту`,
-          link_kind: 'order', link_id: order.id,
-        }),
-        ...d.notifications,
-      ].filter(Boolean),
-    }));
+    const now = new Date().toISOString();
+    const upd = {
+      status: 'archived',
+      delivered_at: now,
+      log: [...order.log, { event: 'delivered', actor: currentUser.id, at: now }],
+    };
+    const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
+    if (dbErr) return { error: dbErr.message };
+    const dbRow = updData[0];
+    setDb(d => {
+      syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
+      return {
+        ...d,
+        orders: d.orders.map(o => o.id === orderId ? dbRow : o),
+        notifications: [
+          makeNotif(d, {
+            recipient_id: order.created_by,
+            title: '✅ Доставка подтверждена',
+            body: `${order.order_number}: заказ доставлен клиенту`,
+            link_kind: 'order', link_id: order.id,
+          }),
+          ...d.notifications,
+        ].filter(Boolean),
+      };
+    });
     return { ok: true };
   };
 
-  const changeDeliveryMethod = (orderId, newMethod) => {
+  const changeDeliveryMethod = async (orderId, newMethod) => {
     if (!['pickup', 'delivery'].includes(newMethod)) return { error: 'Неверный способ' };
     const order = (db.orders || []).find(o => o.id === orderId);
     if (!order) return { error: 'Заявка не найдена' };
@@ -1890,22 +1884,17 @@ function App() {
     if (!canChange) return { error: 'Нет прав на изменение способа получения' };
     const oldLabel = order.delivery_method === 'pickup' ? 'Самовывоз' : 'Доставка';
     const newLabel = newMethod === 'pickup' ? 'Самовывоз' : 'Доставка';
-    setDb(d => ({
-      ...d,
-      orders: d.orders.map(o => {
-        if (o.id !== orderId) return o;
-        return {
-          ...o,
-          delivery_method: newMethod,
-          log: [...o.log, {
-            event: 'edit',
-            actor: currentUser.id,
-            at: new Date().toISOString(),
-            changes: [{ label: 'Способ получения', from: oldLabel, to: newLabel }],
-          }],
-        };
-      }),
-    }));
+    const upd = {
+      delivery_method: newMethod,
+      log: [...order.log, { event: 'edit', actor: currentUser.id, at: new Date().toISOString(), changes: [{ label: 'Способ получения', from: oldLabel, to: newLabel }] }],
+    };
+    const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
+    if (dbErr) return { error: dbErr.message };
+    const dbRow = updData[0];
+    setDb(d => {
+      syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
+      return { ...d, orders: d.orders.map(o => o.id === orderId ? dbRow : o) };
+    });
     return { ok: true };
   };
 
@@ -1913,7 +1902,7 @@ function App() {
    * Редактировать заявку до статуса «Оплачен». Все изменения логируются.
    * Доступ: автор, b2b/senior_manager/director, admin.
    */
-  const editOrder = (orderId, changes) => {
+  const editOrder = async (orderId, changes) => {
     const order = (db.orders || []).find(o => o.id === orderId);
     if (!order) return { error: 'Заявка не найдена' };
     if (!['new', 'in_work', 'invoiced'].includes(order.status)) {
@@ -1945,16 +1934,17 @@ function App() {
     }
     if (logged.length === 0) return { ok: true };
 
-    setDb(d => ({
-      ...d,
-      orders: d.orders.map(o => {
-        if (o.id !== orderId) return o;
-        return {
-          ...o, ...changes, items: newItems, total_amount: newTotal,
-          log: [...o.log, { event: 'edit', changes: logged, actor: currentUser.id, at: new Date().toISOString() }],
-        };
-      }),
-    }));
+    const upd = {
+      ...changes, items: newItems, total_amount: newTotal,
+      log: [...order.log, { event: 'edit', changes: logged, actor: currentUser.id, at: new Date().toISOString() }],
+    };
+    const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
+    if (dbErr) return { error: dbErr.message };
+    const dbRow = updData[0];
+    setDb(d => {
+      syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
+      return { ...d, orders: d.orders.map(o => o.id === orderId ? dbRow : o) };
+    });
     return { ok: true };
   };
 
@@ -1963,7 +1953,7 @@ function App() {
    * Например склад выдал по ошибке — вернуть в предыдущий статус.
    * Доступно: admin, warehouse, b2b, senior_manager, director.
    */
-  const revertLastAction = (orderId) => {
+  const revertLastAction = async (orderId) => {
     const order = (db.orders || []).find(o => o.id === orderId);
     if (!order) return { error: 'Заявка не найдена' };
     const allowed = ['admin', 'warehouse', 'b2b', 'senior_manager', 'director'];
@@ -1983,66 +1973,58 @@ function App() {
     if (!prevStatus) return { error: 'Невозможно определить предыдущий статус' };
 
     const fromStatus = order.status;
-    setDb(d => ({
-      ...d,
-      orders: d.orders.map(o => {
-        if (o.id !== orderId) return o;
-        const updated = { ...o, status: prevStatus };
-        // откат побочных эффектов
-        if (entry.event === 'delivered' || fromStatus === 'archived') updated.delivered_at = null;
-        if (entry.to === 'shipped' || fromStatus === 'shipped') { updated.shipped_at = null; updated.realization_doc_no = null; }
-        if (entry.to === 'paid') updated.paid_amount = null;
-        updated.log = [...o.log, { event: 'revert', from: fromStatus, to: prevStatus, actor: currentUser.id, at: new Date().toISOString() }];
-        return updated;
-      }),
-    }));
+    const upd = { status: prevStatus };
+    if (entry.event === 'delivered' || fromStatus === 'archived') upd.delivered_at = null;
+    if (entry.to === 'shipped' || fromStatus === 'shipped') { upd.shipped_at = null; upd.realization_doc_no = null; }
+    if (entry.to === 'paid') upd.paid_amount = null;
+    upd.log = [...order.log, { event: 'revert', from: fromStatus, to: prevStatus, actor: currentUser.id, at: new Date().toISOString() }];
+    const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
+    if (dbErr) return { error: dbErr.message };
+    const dbRow = updData[0];
+    setDb(d => {
+      syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
+      return { ...d, orders: d.orders.map(o => o.id === orderId ? dbRow : o) };
+    });
     return { ok: true, to: prevStatus };
   };
 
-  const cancelOrder = (orderId, reason = '') => {
+  const cancelOrder = async (orderId, reason = '') => {
     const order = (db.orders || []).find(o => o.id === orderId);
     if (!order) return { error: 'Заявка не найдена' };
     if (['archived', 'cancelled'].includes(order.status)) return { error: 'Уже завершена или отменена' };
 
-    // Защита от отмены после отгрузки: только админ может отменить заявку
-    // в статусе 'shipped' или 'ready' (когда товар уже передан / клиенту назван код).
     const isShippedOrReady = ['shipped', 'ready'].includes(order.status);
     if (isShippedOrReady && currentUser.role !== 'admin') {
       return { error: 'Отменить заявку после отгрузки может только администратор' };
     }
 
-    // Отменить может только автор, менеджер B2B/sales/директор/ст.менеджер или админ
     const canCancel = order.created_by === currentUser.id
       || ['admin', 'b2b', 'sales', 'director', 'senior_manager'].includes(currentUser.role);
     if (!canCancel) return { error: 'Нет прав отменить' };
-    
-    setDb(d => ({
-      ...d,
-      orders: d.orders.map(o => {
-        if (o.id !== orderId) return o;
-        return {
-          ...o,
-          status: 'cancelled',
-          log: [...o.log, { 
-            event: 'cancelled', 
-            from: o.status, 
-            to: 'cancelled', 
-            actor: currentUser.id, 
-            at: new Date().toISOString(), 
-            meta: { reason: reason.trim() } 
-          }],
-        };
-      }),
-      notifications: [
-        makeNotif(d, {
-          recipient_id: order.created_by,
-          title: 'Заявка отменена',
-          body: `Заявка ${order.order_number} была отменена. Причина: ${reason.trim() || 'не указана'}`,
-          link_kind: 'order', link_id: orderId,
-        }),
-        ...d.notifications,
-      ].filter(Boolean),
-    }));
+
+    const upd = {
+      status: 'cancelled',
+      log: [...order.log, { event: 'cancelled', from: order.status, to: 'cancelled', actor: currentUser.id, at: new Date().toISOString(), meta: { reason: reason.trim() } }],
+    };
+    const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
+    if (dbErr) return { error: dbErr.message };
+    const dbRow = updData[0];
+    setDb(d => {
+      syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
+      return {
+        ...d,
+        orders: d.orders.map(o => o.id === orderId ? dbRow : o),
+        notifications: [
+          makeNotif(d, {
+            recipient_id: order.created_by,
+            title: 'Заявка отменена',
+            body: `Заявка ${order.order_number} была отменена. Причина: ${reason.trim() || 'не указана'}`,
+            link_kind: 'order', link_id: orderId,
+          }),
+          ...d.notifications,
+        ].filter(Boolean),
+      };
+    });
     return { ok: true };
   };
 
@@ -7052,8 +7034,8 @@ function WarehouseHome({ ctx }) {
                     </button>
                   ) : (
                     <button
-                      onClick={() => {
-                        const res = archiveDeliveredOrder(o.id);
+                      onClick={async () => {
+                        const res = await archiveDeliveredOrder(o.id);
                         if (res.error) showToast(res.error);
                         else showToast('Собрано · отправлено · заказ в архиве');
                       }}
@@ -7086,7 +7068,7 @@ function WarehouseHome({ ctx }) {
               <button onClick={() => setPickupModal(null)} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
               <button
                 disabled={enteredCode !== pickupModal.pickup_code}
-                onClick={() => { closePickupOrder(pickupModal.id, enteredCode); setPickupModal(null); showToast('Заказ выдан · перенесён в архив'); }}
+                onClick={async () => { await closePickupOrder(pickupModal.id, enteredCode); setPickupModal(null); showToast('Заказ выдан · перенесён в архив'); }}
                 className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50"
                 style={{ background: '#22C55E' }}>
                 Выдать
@@ -7375,8 +7357,8 @@ function PickupDeliverBlock({ order, closePickupOrder, showToast }) {
           style={{ border: '1px solid #86EFAC', background: 'var(--mc-surface)' }}
         />
         <button
-          onClick={() => {
-            const r = closePickupOrder(order.id, code);
+          onClick={async () => {
+            const r = await closePickupOrder(order.id, code);
             if (r?.error) return showToast(r.error);
             showToast('Заказ выдан · перенесён в архив');
           }}
@@ -7577,9 +7559,9 @@ function OrderDetailScreen({ ctx, orderId }) {
               && (effectiveRole === 'admin' || order.created_by === currentUser.id
                 || ['b2b', 'senior_manager', 'director', 'warehouse'].includes(effectiveRole)) && (
               <button
-                onClick={() => {
+                onClick={async () => {
                   const next = order.delivery_method === 'pickup' ? 'delivery' : 'pickup';
-                  const r = changeDeliveryMethod(order.id, next);
+                  const r = await changeDeliveryMethod(order.id, next);
                   if (r?.error) return showToast(r.error);
                   showToast(`Способ изменён → ${next === 'pickup' ? 'Самовывоз' : 'Доставка'}`);
                 }}
@@ -7670,9 +7652,9 @@ function OrderDetailScreen({ ctx, orderId }) {
             && order.status !== 'new' && order.status !== 'cancelled'
             && (order.log || []).some(l => ['status', 'pickup_closed', 'delivered'].includes(l.event)) && (
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (!confirm('Отменить последнее действие и вернуть предыдущий статус?')) return;
-                const r = revertLastAction(order.id);
+                const r = await revertLastAction(order.id);
                 if (r?.error) return showToast(r.error);
                 showToast(`Откат: статус → ${STATUS[r.to]?.label || r.to}`);
               }}
@@ -7748,8 +7730,8 @@ function OrderDetailScreen({ ctx, orderId }) {
 
           {effectiveRole === 'warehouse' && order.status === 'shipped' && order.delivery_method === 'delivery' && (
             <button
-              onClick={() => {
-                const r = archiveDeliveredOrder(order.id);
+              onClick={async () => {
+                const r = await archiveDeliveredOrder(order.id);
                 if (r?.error) showToast(r.error);
                 else { showToast('Собрано · отправлено · в архиве'); goBack(); }
               }}
@@ -7771,8 +7753,8 @@ function OrderDetailScreen({ ctx, orderId }) {
           order={order}
           to={statusModal.to}
           onClose={() => setStatusModal(null)}
-          onConfirm={(meta) => {
-            const r = changeStatus(order.id, statusModal.to, meta);
+          onConfirm={async (meta) => {
+            const r = await changeStatus(order.id, statusModal.to, meta);
             if (r?.error) return showToast(r.error);
             setStatusModal(null);
             showToast(`Статус: ${STATUS[statusModal.to].label}`);
@@ -7785,8 +7767,8 @@ function OrderDetailScreen({ ctx, orderId }) {
           order={order}
           ctx={ctx}
           onClose={() => setEditModalOpen(false)}
-          onSave={(changes) => {
-            const r = editOrder(order.id, changes);
+          onSave={async (changes) => {
+            const r = await editOrder(order.id, changes);
             if (r?.error) return showToast(r.error);
             setEditModalOpen(false);
             showToast('Изменения сохранены');
