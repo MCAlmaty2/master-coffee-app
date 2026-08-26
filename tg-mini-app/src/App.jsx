@@ -155,6 +155,22 @@ async function hashPin(userId, pin) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// ── Дедупликация TG-отправки ──────────────────────────────────────────────
+// Защита от дублей: React StrictMode двойной вызов updater,
+// повторный клик до завершения async, sync-diff re-trigger.
+const _tgSentRecently = new Map();
+const TG_DEDUP_MS = 8000;
+function _tgDedup(chatId, text) {
+  const key = `${chatId}:${text.slice(0, 120)}`;
+  const now = Date.now();
+  if (_tgSentRecently.has(key) && now - _tgSentRecently.get(key) < TG_DEDUP_MS) return true;
+  _tgSentRecently.set(key, now);
+  if (_tgSentRecently.size > 200) {
+    for (const [k, t] of _tgSentRecently) { if (now - t > TG_DEDUP_MS) _tgSentRecently.delete(k); }
+  }
+  return false;
+}
+
 // Хелпер: сформировать запись о том, что Telegram-бот "отправил бы"
 // makeTgLogEntry(db, eventKey, vars)
 // vars — объект переменных для шаблона, ИЛИ строка (legacy-совместимость)
@@ -165,7 +181,10 @@ function makeTgLogEntry(db, eventKey, vars) {
   // Проверяем флаг включения (по умолчанию включено)
   const enabled = tg.topics_enabled?.[eventKey] !== false;
   if (!enabled) {
-    return { id: uid(), at: now, event: eventKey, target: 'отключено', configured: false, message: '[отключено]', disabled: true };
+    const disabledEntry = { id: uid(), at: now, event: eventKey, target: 'отключено', configured: false, message: '[отключено]', disabled: true };
+    supabase.from('telegram_log').upsert([disabledEntry], { onConflict: 'id' })
+      .then(({ error }) => { if (error) console.warn('[tg:log] save failed:', error); });
+    return disabledEntry;
   }
 
   // Рендерим сообщение: из шаблона (с vars) или напрямую (строка)
@@ -185,7 +204,7 @@ function makeTgLogEntry(db, eventKey, vars) {
 
   // Fire-and-forget: отправляем через Edge Function send-telegram.
   // bot_token НЕ передаём — edge function читает TELEGRAM_BOT_TOKEN из Supabase Secrets.
-  if (chatId && tg.bot_token) {
+  if (chatId && tg.bot_token && !_tgDedup(chatId, message)) {
     try {
       const reqBody = { chat_id: chatId, text: message };
       if (topicId) reqBody.message_thread_id = topicId;
@@ -200,7 +219,11 @@ function makeTgLogEntry(db, eventKey, vars) {
     }
   }
 
-  return { id: uid(), at: now, event: eventKey, target, configured: !!tg.bot_token && !!chatId, message };
+  const entry = { id: uid(), at: now, event: eventKey, target, configured: !!tg.bot_token && !!chatId, message };
+  // Fire-and-forget: сохраняем в Supabase напрямую (sync diff для telegramLog отключён)
+  supabase.from('telegram_log').upsert([entry], { onConflict: 'id' })
+    .then(({ error }) => { if (error) console.warn('[tg:log] save failed:', error); });
+  return entry;
 }
 
 // Отправить личное сообщение пользователю (требует Telegram chat_id = telegram_id юзера,
@@ -237,6 +260,9 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, but
     ...(link_kind != null ? { link_kind } : {}),
     ...(link_id   != null ? { link_id }   : {}),
   };
+  // Fire-and-forget: сохраняем в Supabase напрямую (sync diff для notifications отключён)
+  supabase.from('notifications').upsert([notif], { onConflict: 'id' })
+    .then(({ error }) => { if (error) console.warn('[notif] save failed:', error); });
   const tgs       = db?.telegramSettings;
   const TG_DM_ALLOWED = new Set(['writeoff', 'gift', 'task', 'manager_task', 'hr', 'access', 'general', 'coffee_task', 'expense', 'release']);
   const category = link_kind || 'general';
@@ -246,21 +272,23 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, but
   // bot_token НЕ передаём в теле — edge function читает TELEGRAM_BOT_TOKEN из Supabase Secrets.
   if (recipient?.telegram_id && recipient.tg_notif_enabled !== false && tgs?.bot_token && categoryAllowed) {
     const tgText = `🔔 <b>${title}</b>${body ? `\n${body}` : ''}`;
-    const invokeBody = { chat_id: recipient.telegram_id, text: tgText };
-    if (button_url) {
-      invokeBody.reply_markup = {
-        inline_keyboard: [[
-          { text: '📱 Mobile', web_app: { url: button_url } },
-          { text: '🖥 Web', url: button_url },
-        ]],
-      };
-    }
-    try {
-      supabase.functions.invoke('send-telegram', { body: invokeBody })
-        .then(({ error }) => { if (error) console.warn('[tg:notif] send failed:', error); })
-        .catch(e => console.warn('[tg:notif] invoke failed:', e));
-    } catch (e) {
-      console.warn('[tg:notif] dispatch failed:', e);
+    if (!_tgDedup(recipient.telegram_id, tgText)) {
+      const invokeBody = { chat_id: recipient.telegram_id, text: tgText };
+      if (button_url) {
+        invokeBody.reply_markup = {
+          inline_keyboard: [[
+            { text: '📱 Mobile', web_app: { url: button_url } },
+            { text: '🖥 Web', url: button_url },
+          ]],
+        };
+      }
+      try {
+        supabase.functions.invoke('send-telegram', { body: invokeBody })
+          .then(({ error }) => { if (error) console.warn('[tg:notif] send failed:', error); })
+          .catch(e => console.warn('[tg:notif] invoke failed:', e));
+      } catch (e) {
+        console.warn('[tg:notif] dispatch failed:', e);
+      }
     }
   }
   return notif;
@@ -1301,6 +1329,8 @@ function App() {
               if (localRow && snapRow && JSON.stringify(localRow) !== JSON.stringify(snapRow)) {
                 return d;
               }
+              // Не позволяем realtime откатить read: true → false для notifications
+              if (stateKey === 'notifications' && localRow?.read && !newRow.read) return d;
               updated = arr.map(r => r[pk] === newRow[pk] ? newRow : r);
             } else {
               updated = [...arr, newRow];
@@ -1313,6 +1343,8 @@ function App() {
             if (localRow && snapRow && JSON.stringify(localRow) !== JSON.stringify(snapRow)) {
               return d;
             }
+            // Не позволяем realtime откатить read: true → false для notifications
+            if (stateKey === 'notifications' && localRow?.read && !newRow.read) return d;
             const exists = arr.some(r => r[pk] === newRow[pk]);
             updated = exists ? arr.map(r => r[pk] === newRow[pk] ? newRow : r) : [...arr, newRow];
           }
@@ -1334,7 +1366,7 @@ function App() {
   useEffect(() => {
     if (bootStatus.phase !== 'ready') return;
 
-    const SKIP_SYNC_DIFF = new Set(['writeOffs', 'orders']);
+    const SKIP_SYNC_DIFF = new Set(['writeOffs', 'orders', 'notifications', 'telegramLog']);
     for (const stateKey of Object.keys(SYNC_TABLES)) {
       if (SKIP_SYNC_DIFF.has(stateKey)) {
         if (syncSnapshotRef.current[stateKey] === undefined) syncSnapshotRef.current[stateKey] = db[stateKey] || [];
