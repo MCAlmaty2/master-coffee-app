@@ -234,6 +234,7 @@ export function CoffeeShipmentsScreen({ ctx }) {
       created_by: currentUser.id,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      org_id: ctx.currentOrgId,
     }));
     const { error } = await supabase.from('coffee_shipments').insert(newRows);
     if (error) { showToast('Ошибка: ' + error.message); return; }

@@ -110,6 +110,7 @@ export function DailyRevenueScreen({ ctx }) {
       [field]: val,
       updated_by: currentUser.id,
       updated_at: new Date().toISOString(),
+      org_id: ctx.currentOrgId,
     };
     const { error } = await supabase.from('daily_revenue').upsert(row, { onConflict: 'date' });
     if (error) { showToast('Ошибка: ' + error.message); return; }

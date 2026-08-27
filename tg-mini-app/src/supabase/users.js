@@ -2,11 +2,13 @@ import { supabase } from './client';
 
 const SAFE_SELECT = 'id, telegram_id, tg_username, first_name, last_name, photo_url, role, active, created_at, approved_at, approved_by, tg_notif_enabled, tg_notif_prefs, home_prefs, birth_date';
 
-export async function fetchAllUsers() {
-  const { data, error } = await supabase
+export async function fetchAllUsers(orgId) {
+  let query = supabase
     .from('users_safe')
     .select('*')
     .order('created_at', { ascending: false });
+  if (orgId) query = query.eq('org_id', orgId);
+  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 }
@@ -22,7 +24,7 @@ export async function findUserByTelegramId(telegramId) {
   return data;
 }
 
-export async function createPendingUserFromTelegram(tgUser) {
+export async function createPendingUserFromTelegram(tgUser, orgId) {
   const payload = {
     telegram_id: String(tgUser.id),
     tg_username: tgUser.username || null,
@@ -31,6 +33,7 @@ export async function createPendingUserFromTelegram(tgUser) {
     photo_url: tgUser.photo_url || null,
     role: 'pending',
     active: false,
+    ...(orgId ? { org_id: orgId } : {}),
   };
   const { data, error } = await supabase
     .from('users')

@@ -225,6 +225,7 @@ function CoffeeTasksScreen({ ctx }) {
       const row = {
         id: uid(), task_id: task.id, completion_key: key,
         completed_by: currentUser.id, completed_at: new Date().toISOString(),
+        org_id: ctx.currentOrgId,
       };
       await supabase.from('schedule_completions').upsert([row], { onConflict: 'id' });
       setDb(d => {
@@ -420,6 +421,7 @@ function CoffeeTasksScreen({ ctx }) {
       created_by: currentUser.id,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      org_id: ctx.currentOrgId,
     };
     await supabase.from('schedule_tasks').upsert([task], { onConflict: 'id' });
     setDb(d => {

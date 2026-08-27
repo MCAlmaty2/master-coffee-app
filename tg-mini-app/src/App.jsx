@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ChevronLeft, X, Plus, Search, Download, Bell, User, Building2, Package,
   FileText, Truck, CheckCircle2, XCircle, AlertCircle, Copy, Check,
@@ -7,7 +7,8 @@ import {
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
   Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt, Wallet, Wrench,
 } from 'lucide-react';
-import { supabase } from './supabase/client';
+import { supabase, setOrgIdHeader } from './supabase/client';
+import { isDuplicate } from './errorMonitor';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
 import { SalesReportScreen, SalesReportHomeTile } from './screens/SalesReportScreen';
 import { ShipmentRegistryScreen, ShipmentRegistryHomeTile } from './screens/ShipmentRegistryScreen';
@@ -155,6 +156,10 @@ async function hashPin(userId, pin) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// ── Текущая организация (модульный уровень, устанавливается при загрузке) ──
+let _currentOrgId = null;
+export function setModuleOrgId(orgId) { _currentOrgId = orgId; }
+
 // ── Дедупликация TG-отправки ──────────────────────────────────────────────
 // Защита от дублей: React StrictMode двойной вызов updater,
 // повторный клик до завершения async, sync-diff re-trigger.
@@ -181,7 +186,7 @@ function makeTgLogEntry(db, eventKey, vars) {
   // Проверяем флаг включения (по умолчанию включено)
   const enabled = tg.topics_enabled?.[eventKey] !== false;
   if (!enabled) {
-    const disabledEntry = { id: uid(), at: now, event: eventKey, target: 'отключено', configured: false, message: '[отключено]', disabled: true };
+    const disabledEntry = { id: uid(), at: now, event: eventKey, target: 'отключено', configured: false, message: '[отключено]', disabled: true, org_id: _currentOrgId };
     supabase.from('telegram_log').upsert([disabledEntry], { onConflict: 'id' })
       .then(({ error }) => { if (error) console.warn('[tg:log] save failed:', error); });
     return disabledEntry;
@@ -219,7 +224,7 @@ function makeTgLogEntry(db, eventKey, vars) {
     }
   }
 
-  const entry = { id: uid(), at: now, event: eventKey, target, configured: !!tg.bot_token && !!chatId, message };
+  const entry = { id: uid(), at: now, event: eventKey, target, configured: !!tg.bot_token && !!chatId, message, org_id: _currentOrgId };
   // Fire-and-forget: сохраняем в Supabase напрямую (sync diff для telegramLog отключён)
   supabase.from('telegram_log').upsert([entry], { onConflict: 'id' })
     .then(({ error }) => { if (error) console.warn('[tg:log] save failed:', error); });
@@ -256,6 +261,7 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, but
     body,
     at: new Date().toISOString(),
     read: false,
+    org_id: _currentOrgId,
     ...(scope     != null ? { scope }     : {}),
     ...(link_kind != null ? { link_kind } : {}),
     ...(link_id   != null ? { link_id }   : {}),
@@ -718,7 +724,7 @@ function buildLawyerMessage(cr) {
   const req = OUR_REQUISITES[cr.tax_regime] || OUR_REQUISITES.OUR;
   const contractLabel = `${CONTRACT_TYPE[cr.contract_type]?.label || cr.contract_type} по ${PAYMENT_TERMS[cr.payment_terms]?.label?.toLowerCase() || cr.payment_terms}`;
 
-  const specLines = cr.specification.map(it => {
+  const specLines = (cr.specification || []).map(it => {
     const price = Number(it.price_per_unit).toLocaleString('ru-RU');
     return `${it.name} ---------- ${price} тг ---- ${it.volume} ${it.unit}`;
   }).join('\n');
@@ -1116,6 +1122,9 @@ function App() {
   // Активные ошибки — отображаются плашкой и не исчезают сами
   const [errors, setErrors] = useState([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [currentOrgId, setCurrentOrgId] = useState(null);
+  const [organizations, setOrganizations] = useState([]);
+  const orgIdRef = useRef(null);
 
   // Тема: light / dark
   const [theme, setTheme] = useState(() => localStorage.getItem('mc-theme') || 'light');
@@ -1167,18 +1176,38 @@ function App() {
     (async () => {
       try {
         await seedProductsIfEmpty(PRICE_LIST);
+        const savedSession = loadSession();
+        let orgId = null;
+        let meRow = null;
+        if (savedSession) {
+          const { data } = await supabase
+            .from('users_safe').select('org_id, is_super_admin').eq('id', savedSession.user_id).single();
+          meRow = data;
+          orgId = meRow?.org_id || null;
+        }
+        if (cancelled) return;
+        const isSuperAdmin = meRow?.is_super_admin === true;
+        let allOrgs = [];
+        if (isSuperAdmin) {
+          const orgsRes = await supabase.from('organizations').select('*').order('name');
+          allOrgs = orgsRes.data || [];
+        }
+        orgIdRef.current = orgId;
+        _currentOrgId = orgId;
+        setOrgIdHeader(orgId);
+        setCurrentOrgId(orgId);
         const [users, products, tgSettingsRes] = await Promise.all([
-          fetchAllUsers(),
-          fetchAllProducts(),
-          Promise.resolve(supabase.from('telegram_settings').select('*').eq('id', 1).single())
-            .catch(() => ({ data: null })),
+          fetchAllUsers(orgId),
+          fetchAllProducts(orgId),
+          orgId
+            ? Promise.resolve(supabase.from('telegram_settings').select('*').eq('org_id', orgId).single()).catch(() => ({ data: null }))
+            : Promise.resolve({ data: null }),
         ]);
         if (cancelled) return;
-        const savedSession = loadSession();
         const me = savedSession ? users.find(u => u.id === savedSession.user_id) : null;
         const syncKeys = getTablesForRole(me?.role);
         const rest = await Promise.all(
-          syncKeys.map(k => fetchAllOfTable(k).catch(e => {
+          syncKeys.map(k => fetchAllOfTable(k, orgId).catch(e => {
             console.warn(`[sync] fetch ${k} failed (продолжаем без неё):`, e);
             return [];
           })),
@@ -1226,6 +1255,7 @@ function App() {
           }
           return merged;
         });
+        if (allOrgs.length > 0) setOrganizations(allOrgs);
         setBootStatus({ phase: 'ready', error: null });
       } catch (e) {
         if (cancelled) return;
@@ -1261,20 +1291,25 @@ function App() {
     const channels = [];
 
     // users — отдельным каналом, потому что fetchAllUsers
+    const oid = orgIdRef.current;
+    const usersFilter = oid ? { event: '*', schema: 'public', table: 'users', filter: `org_id=eq.${oid}` }
+                            : { event: '*', schema: 'public', table: 'users' };
     const usersCh = supabase
       .channel('rt-users')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, async () => {
-        const fresh = await fetchAllUsers().catch(() => null);
+      .on('postgres_changes', usersFilter, async () => {
+        const fresh = await fetchAllUsers(oid).catch(() => null);
         if (fresh) setDb(d => ({ ...d, users: fresh }));
       })
       .subscribe();
     channels.push(usersCh);
 
     // products — отдельным каналом
+    const productsFilter = oid ? { event: '*', schema: 'public', table: 'products', filter: `org_id=eq.${oid}` }
+                                : { event: '*', schema: 'public', table: 'products' };
     const productsCh = supabase
       .channel('rt-products')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async () => {
-        const fresh = await fetchAllProducts().catch(() => null);
+      .on('postgres_changes', productsFilter, async () => {
+        const fresh = await fetchAllProducts(oid).catch(() => null);
         if (fresh) setDb(d => ({ ...d, products: fresh }));
       })
       .subscribe();
@@ -1284,8 +1319,9 @@ function App() {
     const tgSettingsCh = supabase
       .channel('rt-telegram-settings')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'telegram_settings' }, async () => {
-        const { data } = await Promise.resolve(supabase.from('telegram_settings').select('*').eq('id', 1).single())
-          .catch(() => ({ data: null }));
+        const { data } = await Promise.resolve(
+          supabase.from('telegram_settings').select('*').eq('org_id', oid).single()
+        ).catch(() => ({ data: null }));
         if (data) {
           setDb(d => ({
             ...d,
@@ -1351,7 +1387,7 @@ function App() {
           syncSnapshotRef.current[stateKey] = updated;
           return { ...d, [stateKey]: updated };
         });
-      });
+      }, oid);
       channels.push(ch);
     }
 
@@ -1401,7 +1437,8 @@ function App() {
               && !(db.scheduleTasks || []).some(t => t.id === row.task_id)) {
             continue;
           }
-          upsertRow(stateKey, row).catch(e => {
+          const rowToSync = row.org_id ? row : { ...row, org_id: orgIdRef.current };
+          upsertRow(stateKey, rowToSync).catch(e => {
             const msg = String(e?.message || e);
             if (msg.includes('duplicate key value violates unique constraint')
                 || msg.includes('violates foreign key constraint')) {
@@ -1483,8 +1520,53 @@ function App() {
   }, [bootStatus.phase, db.scheduleTasks, db.users, session]);
 
   const currentUser = session ? db.users.find(u => u.id === session.user_id) : null;
-  // effectiveRole — роль, под которой Admin сейчас "видит" приложение
   const effectiveRole = (currentUser?.role === 'admin' && actAs) ? actAs : currentUser?.role;
+
+  const switchOrg = async (newOrgId) => {
+    if (!newOrgId || newOrgId === currentOrgId) return;
+    orgIdRef.current = newOrgId;
+    _currentOrgId = newOrgId;
+    setOrgIdHeader(newOrgId);
+    setCurrentOrgId(newOrgId);
+    setBootStatus({ phase: 'loading', error: null });
+    try {
+      const [users, products, tgRes] = await Promise.all([
+        fetchAllUsers(newOrgId),
+        fetchAllProducts(newOrgId),
+        supabase.from('telegram_settings').select('*').eq('org_id', newOrgId).single().then(r => r, () => ({ data: null })),
+      ]);
+      const syncKeys = getTablesForRole(currentUser?.role);
+      const rest = await Promise.all(
+        syncKeys.map(k => fetchAllOfTable(k, newOrgId).catch(() => [])),
+      );
+      const meId = session?.user_id;
+      const meInList = users.some(u => u.id === meId);
+      if (!meInList && meId) {
+        const prev = db.users.find(u => u.id === meId);
+        if (prev) users.push(prev);
+      }
+      const update = { users, products };
+      syncKeys.forEach((k, i) => { update[k] = rest[i]; });
+      setDb(d => {
+        const merged = { ...d, ...update };
+        const tgRow = tgRes?.data;
+        if (tgRow) {
+          merged.telegramSettings = {
+            ...d.telegramSettings,
+            bot_token: tgRow.bot_token || '', bot_username: tgRow.bot_username || '',
+            group_chat_id: tgRow.group_chat_id || '', topics: tgRow.topics || {},
+            topics_enabled: tgRow.topics_enabled || {}, templates: tgRow.templates || {},
+            app_url: tgRow.app_url || '',
+          };
+        }
+        return merged;
+      });
+      setBootStatus({ phase: 'ready', error: null });
+    } catch (e) {
+      console.warn('[switchOrg] failed:', e);
+      setBootStatus({ phase: 'error', error: e.message });
+    }
+  };
 
   // ─── Буфер ошибок для повторной отправки при восстановлении сети ───
   useEffect(() => {
@@ -1496,6 +1578,7 @@ function App() {
           reporter_name: currentUser ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim() : 'Гость',
           kind: entry.kind, source: entry.source, message: entry.message,
           details: entry.details, route_name: entry.route, at: entry.at,
+          org_id: _currentOrgId,
         }).then(({ error }) => {
           if (error) console.warn('[reportError flush] не удалось:', error.message);
         }).catch(() => { pendingErrorReports.current.push(entry); });
@@ -1527,23 +1610,19 @@ function App() {
    * @param {object} opts — {kind, source, message, details, route}
    */
   const reportError = (opts) => {
+    const msg = opts.message || String(opts);
+    if (isDuplicate(msg)) return;
     const id = uid();
     const entry = {
       id,
       kind:    opts.kind    || 'unknown',
       source:  opts.source  || null,
-      message: opts.message || String(opts),
+      message: msg,
       details: opts.details || null,
       route:   opts.route   || route?.name || null,
       at:      new Date().toISOString(),
     };
-    // 1. Сразу показываем в UI (плашка снизу)
-    setErrors(prev => {
-      // не дублируем одинаковые ошибки подряд
-      if (prev.length > 0 && prev[prev.length - 1].message === entry.message) return prev;
-      return [...prev, entry];
-    });
-    // 2. Параллельно отправляем в Supabase, чтобы админ видел
+    setErrors(prev => [...prev, entry]);
     const sendReport = (reportEntry) => {
       supabase.from('error_reports').insert({
         id: reportEntry.id,
@@ -1555,6 +1634,7 @@ function App() {
         details:       reportEntry.details,
         route_name:    reportEntry.route,
         at:            reportEntry.at,
+        org_id: _currentOrgId,
       }).then(({ error }) => {
         if (!error) {
           const adminUser = db.users.find(u => u.role === 'admin');
@@ -1622,7 +1702,7 @@ function App() {
       let user = await findUserByTelegramId(tgUser.id);
       if (!user) {
         // Первый вход — создаём pending и уведомляем админа
-        user = await createPendingUserFromTelegram(tgUser);
+        user = await createPendingUserFromTelegram(tgUser, _currentOrgId);
         // Создать уведомление для всех админов
         const admins = db.users.filter(u => u.role === 'admin' && u.active);
         if (admins.length > 0) {
@@ -1696,6 +1776,7 @@ function App() {
       created_by: currentUser.id,
       kind,
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
+      org_id: _currentOrgId,
     };
     const { data: insData, error: insErr } = await supabase.from('orders').insert([order]).select();
     if (insErr) return { error: insErr.message };
@@ -2308,6 +2389,7 @@ function App() {
       created_at: new Date().toISOString(),
       created_by: currentUser.id,
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
+      org_id: _currentOrgId,
     };
     if (hasTime) {
       task.log.push({ event: 'status', from: 'new', to: 'in_work', actor: currentUser.id, at: new Date().toISOString(), meta: { visit_date: data.visit_date, visit_time: data.visit_time } });
@@ -2618,6 +2700,7 @@ function App() {
       completed_by: null,
       completed_at: null,
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
+      org_id: _currentOrgId,
     };
     const { data: insData, error: insErr } = await supabase.from('write_offs').insert([writeOff]).select();
     if (insErr) return { error: insErr.message };
@@ -2886,6 +2969,7 @@ function App() {
       cash_operation_id: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      org_id: _currentOrgId,
     };
 
     setDb(d => {
@@ -3027,6 +3111,7 @@ function App() {
         id, name: name.trim(), budget_key: budgetKey.trim(),
         budget_plan: Number(budgetPlan) || 0, active: true,
         sort_order: maxSort + 1, created_at: new Date().toISOString(),
+        org_id: _currentOrgId,
       }],
     }));
     return { ok: true, id };
@@ -3045,6 +3130,7 @@ function App() {
         notes: data.notes?.trim() || '', next_action: '', next_action_date: null,
         amount: Number(data.amount) || 0, sort_order: 0,
         created_by: currentUser.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        org_id: _currentOrgId,
       }],
     }));
     return { ok: true, id };
@@ -3072,6 +3158,7 @@ function App() {
         duration_minutes: Number(data.duration_minutes) || 0,
         result: data.result?.trim() || '',
         created_by: currentUser.id, created_at: new Date().toISOString(),
+        org_id: _currentOrgId,
       }],
     }));
     return { ok: true, id };
@@ -3128,6 +3215,7 @@ function App() {
           status: 'active', min_leads: Number(data.min_leads) || 2,
           deadline: data.deadline || null,
           created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          org_id: _currentOrgId,
         }],
         notifications: [notif, ...d.notifications].filter(Boolean),
       };
@@ -3163,6 +3251,7 @@ function App() {
         id, deal_id: dealId, product_id: product.id || null,
         product_name: product.name || '', quantity: Number(product.quantity) || 1,
         price: Number(product.price) || 0, created_at: new Date().toISOString(),
+        org_id: _currentOrgId,
       }],
     }));
     return { ok: true, id };
@@ -3207,6 +3296,7 @@ function App() {
           author_id: currentUser.id, author_name: authorName,
           is_reminder: !!data.is_reminder, reminder_date: data.reminder_date || null,
           created_at: new Date().toISOString(),
+          org_id: _currentOrgId,
         }],
         notifications: [...notifs.filter(Boolean), ...d.notifications],
       };
@@ -3231,6 +3321,7 @@ function App() {
       created_by: currentUser.id,
       created_by_name: `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь',
       created_at: new Date().toISOString(),
+      org_id: _currentOrgId,
     };
     const payerName = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь';
     setDb(d => {
@@ -3290,6 +3381,7 @@ function App() {
       active: true,
       created_at: now,
       created_by: currentUser.id,
+      org_id: _currentOrgId,
     };
     setDb(d => ({ ...d, deferredClients: [client, ...(d.deferredClients || [])] }));
     return { ok: true, id };
@@ -3328,6 +3420,7 @@ function App() {
       paid_by: null,
       created_at: todayISO(),
       created_by: currentUser.id,
+      org_id: _currentOrgId,
     };
     setDb(d => ({ ...d, deferredShipments: [shipment, ...(d.deferredShipments || [])] }));
     return { ok: true, id };
@@ -3380,7 +3473,7 @@ function App() {
     if (!isAdm && !hasPermission(db, currentUser, 'rental_equipment')) return { error: 'Нет прав' };
     if (!data.type?.trim()) return { error: 'Укажите вид оборудования' };
     const id = uid();
-    const row = { id, ...data, residual_value: Number(data.residual_value) || 0, status: data.status || 'in_office', created_at: todayISO(), updated_at: todayISO() };
+    const row = { id, ...data, residual_value: Number(data.residual_value) || 0, status: data.status || 'in_office', created_at: todayISO(), updated_at: todayISO(), org_id: _currentOrgId };
     setDb(d => ({ ...d, rentalEquipment: [row, ...(d.rentalEquipment || [])] }));
     return { ok: true, id };
   };
@@ -3417,7 +3510,7 @@ function App() {
     if (!isAdm && !hasPermission(db, currentUser, 'rental_clients')) return { error: 'Нет прав' };
     if (!data.name?.trim()) return { error: 'Укажите наименование' };
     const id = uid();
-    const row = { id, ...data, manager_id: data.manager_id || null, technician_id: data.technician_id || null, plan_kg: Number(data.plan_kg) || 0, plan_price_per_kg: Number(data.plan_price_per_kg) || 0, purchase_day: Number(data.purchase_day) || null, status: 'active', created_at: todayISO(), updated_at: todayISO() };
+    const row = { id, ...data, manager_id: data.manager_id || null, technician_id: data.technician_id || null, plan_kg: Number(data.plan_kg) || 0, plan_price_per_kg: Number(data.plan_price_per_kg) || 0, purchase_day: Number(data.purchase_day) || null, status: 'active', created_at: todayISO(), updated_at: todayISO(), org_id: _currentOrgId };
     setDb(d => ({ ...d, rentalClients: [row, ...(d.rentalClients || [])] }));
     return { ok: true, id };
   };
@@ -3439,7 +3532,7 @@ function App() {
     const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
     if (!isAdm && !hasPermission(db, currentUser, 'rental_purchases')) return { error: 'Нет прав' };
     const id = uid();
-    const row = { id, client_id: data.client_id, month: data.month, kg_fact: Number(data.kg_fact) || 0, amount_fact: Number(data.amount_fact) || 0, entered_by: currentUser.id, created_at: todayISO(), updated_at: todayISO() };
+    const row = { id, client_id: data.client_id, month: data.month, kg_fact: Number(data.kg_fact) || 0, amount_fact: Number(data.amount_fact) || 0, entered_by: currentUser.id, created_at: todayISO(), updated_at: todayISO(), org_id: _currentOrgId };
     setDb(d => ({ ...d, rentalPurchases: [row, ...(d.rentalPurchases || [])] }));
     return { ok: true, id };
   };
@@ -3464,7 +3557,7 @@ function App() {
     if (!eq) return { error: 'Оборудование не найдено' };
     const id = uid();
     const now = todayISO();
-    const movement = { id, equipment_id: data.equipment_id, movement_type: data.movement_type, from_location: eq.current_location || (eq.current_client_id ? 'client' : 'office'), to_location: data.to_location || '', client_id: data.client_id || null, performed_by: currentUser.id, doc_ref: data.doc_ref || null, notes: data.notes || null, moved_at: now, created_at: now };
+    const movement = { id, equipment_id: data.equipment_id, movement_type: data.movement_type, from_location: eq.current_location || (eq.current_client_id ? 'client' : 'office'), to_location: data.to_location || '', client_id: data.client_id || null, performed_by: currentUser.id, doc_ref: data.doc_ref || null, notes: data.notes || null, moved_at: now, created_at: now, org_id: _currentOrgId };
     const statusMap = { to_client: 'rented', from_client: 'in_office', to_repair: 'in_repair', from_repair: 'in_office', write_off: 'written_off' };
     setDb(d => {
       const freshEq = (d.rentalEquipment || []).find(e => e.id === data.equipment_id) || eq;
@@ -3486,7 +3579,7 @@ function App() {
     const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
     if (!isAdm && !hasPermission(db, currentUser, 'rental_revisions')) return { error: 'Нет прав' };
     const id = uid();
-    const row = { id, location_type: data.location_type, location_id: data.location_id || null, conducted_by: currentUser.id, revision_date: data.revision_date || todayISO(), checklist: data.checklist || [], result: data.result || null, notes: data.notes || null, created_at: todayISO() };
+    const row = { id, location_type: data.location_type, location_id: data.location_id || null, conducted_by: currentUser.id, revision_date: data.revision_date || todayISO(), checklist: data.checklist || [], result: data.result || null, notes: data.notes || null, created_at: todayISO(), org_id: _currentOrgId };
     setDb(d => ({ ...d, rentalRevisions: [row, ...(d.rentalRevisions || [])] }));
     return { ok: true, id };
   };
@@ -3534,6 +3627,7 @@ function App() {
       processed_by: null, processed_at: null, prepared_by: null, prepared_at: null,
       pickup_code: null, delivered_by: null, delivered_at: null,
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
+      org_id: _currentOrgId,
     };
     const itemsSummary = giftItems.length === 1
       ? `${firstItem.name} × ${firstItem.quantity}`
@@ -3734,6 +3828,7 @@ function App() {
       created_by: currentUser.id,
       created_at: new Date().toISOString(),
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
+      org_id: _currentOrgId,
     };
 
     setDb(d => {
@@ -3926,6 +4021,7 @@ function App() {
       templates:      merged.templates      || {},
       app_url:        merged.app_url        || 'https://master-coffee-app.vercel.app',
       updated_at:     new Date().toISOString(),
+      org_id: _currentOrgId,
     })).catch(e => { throw e; });
   };
 
@@ -3944,6 +4040,7 @@ function App() {
       color: data.color || '#64748B',
       is_system: false,
       permissions: data.permissions || [],
+      org_id: _currentOrgId,
     };
     setDb(d => ({ ...d, roleDefinitions: [...(d.roleDefinitions || []), newRole] }));
     return { ok: true, role: newRole };
@@ -4027,6 +4124,7 @@ function App() {
       completed_at: null,
       cancelled_at: null,
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
+      org_id: _currentOrgId,
     };
 
     // Вставка с retry при дублировании номера (race condition)
@@ -4181,7 +4279,7 @@ function App() {
       newId = String(n).padStart(3, '0');
     }
     if (existingIds.has(newId)) return { error: `Товар с ID "${newId}" уже есть` };
-    const newProduct = { id: newId, cat, name, unit, price, active: true };
+    const newProduct = { id: newId, cat, name, unit, price, active: true, org_id: _currentOrgId };
     try {
       const saved = await createProductInDb(newProduct);
       setDb(d => ({ ...d, products: [...(d.products || []), saved] }));
@@ -4213,7 +4311,7 @@ function App() {
       existingIds.add(newId);
       nextN++;
       try {
-        const saved = await createProductInDb({ id: newId, cat, name, unit, price, active: true });
+        const saved = await createProductInDb({ id: newId, cat, name, unit, price, active: true, org_id: _currentOrgId });
         added.push(saved);
       } catch (e) {
         errors.push(`Строка ${i + 1}: ${e.message}`);
@@ -4283,6 +4381,7 @@ function App() {
         unit: 'шт',
         price: 0,
         active: false,
+        org_id: _currentOrgId,
       });
       setDb(d => ({ ...d, products: [...(d.products || []), saved] }));
       return { ok: true };
@@ -4389,6 +4488,7 @@ function App() {
         message,
         at: new Date().toISOString(),
         read: false,
+        org_id: _currentOrgId,
       };
       // Сохраняем в Supabase, чтобы Admin видел в любом сеансе
       const { error: dbErr } = await supabase.from('feedback_messages').insert(feedback);
@@ -4406,6 +4506,7 @@ function App() {
             body: `От ${currentUser.first_name}: ${message.slice(0, 80)}${message.length > 80 ? '…' : ''}`,
             at: new Date().toISOString(),
             read: false,
+            org_id: _currentOrgId,
           }],
         }));
         // Полное сообщение в личный Telegram (не огрызок)
@@ -4442,14 +4543,26 @@ function App() {
       const result = await verifyPin(pin);
       if (result?.user) {
         setSession({ user_id: result.user.id });
+        const { data: meRow } = await supabase
+          .from('users_safe').select('org_id, is_super_admin').eq('id', result.user.id).single();
+        const orgId = meRow?.org_id || null;
+        orgIdRef.current = orgId;
+        _currentOrgId = orgId;
+        setOrgIdHeader(orgId);
+        setCurrentOrgId(orgId);
+        if (meRow?.is_super_admin) {
+          const { data: orgs } = await supabase.from('organizations').select('*').order('name');
+          if (orgs?.length) setOrganizations(orgs);
+        }
         setRoute({ name: 'home' });
         setRouteStack([]);
         showToast(`С возвращением, ${result.user.first_name}`);
         return { ok: true };
       }
       return { error: result?.error || 'Неверный PIN' };
-    } catch {
-      return { error: 'Неверный PIN' };
+    } catch (e) {
+      console.warn('[loginViaPin] error:', e);
+      return { error: e?.message || 'Ошибка проверки PIN' };
     }
   };
 
@@ -4480,7 +4593,7 @@ function App() {
   };
 
   const ctx = {
-    db, setDb, currentUser, effectiveRole, actAs, setActAs,
+    db, setDb, currentUser, effectiveRole, actAs, setActAs, currentOrgId, organizations, switchOrg,
     route, navigate, goBack, showToast, hasPermission: (perm) => hasPermission(db, currentUser, perm),
     bootStatus,
     loginViaTelegram, logout,
@@ -5296,7 +5409,7 @@ const FULL_BLEED_ROUTES = new Set([
 ]);
 
 function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
-  const { currentUser, effectiveRole, actAs, setActAs, route, navigate, logout, db, theme, toggleTheme } = ctx;
+  const { currentUser, effectiveRole, actAs, setActAs, route, navigate, logout, db, theme, toggleTheme, currentOrgId, organizations, switchOrg } = ctx;
   const role = effectiveRole;
   const isManager = MANAGER_ROLES.includes(role);
   const userBase = getUserBase(currentUser);
@@ -5492,6 +5605,24 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
           </div>
         </div>
 
+        {currentUser?.is_super_admin && organizations.length > 1 && (
+          <div className="mx-3 mb-2 px-2 py-1.5 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
+            <div className="flex items-center gap-1.5 mb-1" style={{ fontSize: 10, fontWeight: 600, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              <Building2 size={11} /> Организация
+            </div>
+            <select
+              value={currentOrgId || ''}
+              onChange={e => switchOrg(e.target.value)}
+              className="w-full rounded-md border px-2 py-1 text-xs font-semibold"
+              style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', borderColor: 'var(--mc-border)' }}
+            >
+              {organizations.map(o => (
+                <option key={o.id} value={o.id}>{o.name}{o.is_demo ? ' (demo)' : ''}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {userBase === 'all' && (
           <div className="mx-3 mb-2 grid grid-cols-2 gap-1 p-1 rounded-xl" style={{ background: 'var(--mc-active-item)' }}>
             {[
@@ -5595,6 +5726,24 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
               </div>
               <button onClick={() => setMobileMenuOpen(false)} style={{ color: 'var(--mc-muted)', marginTop: 2 }}><X size={20} /></button>
             </div>
+
+            {currentUser?.is_super_admin && organizations.length > 1 && (
+              <div className="mx-3 mb-2 px-2 py-1.5 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
+                <div className="flex items-center gap-1.5 mb-1" style={{ fontSize: 10, fontWeight: 600, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  <Building2 size={11} /> Организация
+                </div>
+                <select
+                  value={currentOrgId || ''}
+                  onChange={e => { switchOrg(e.target.value); setMobileMenuOpen(false); }}
+                  className="w-full rounded-md border px-2 py-1 text-xs font-semibold"
+                  style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', borderColor: 'var(--mc-border)' }}
+                >
+                  {organizations.map(o => (
+                    <option key={o.id} value={o.id}>{o.name}{o.is_demo ? ' (demo)' : ''}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {userBase === 'all' && (
               <div className="mx-3 mb-2 grid grid-cols-2 gap-1 p-1 rounded-xl" style={{ background: 'var(--mc-active-item)' }}>
@@ -5814,6 +5963,11 @@ class ScreenErrorBoundary extends React.Component {
   componentDidCatch(error, info) {
     // eslint-disable-next-line no-console
     console.error('[ScreenErrorBoundary] crash:', error, info);
+    if (this.props.onReportError) {
+      const msg = error?.message || String(error);
+      const stack = error?.stack ? String(error.stack).slice(0, 800) : '';
+      this.props.onReportError({ kind: 'crash', source: 'ErrorBoundary', message: msg, route: this.props.currentRoute, details: { stack, componentStack: info?.componentStack?.slice(0, 500) } });
+    }
   }
   componentDidUpdate(prevProps) {
     // Если изменилcя route — пробуем перерисовать (сбросить ошибку)
@@ -13611,9 +13765,9 @@ function ContractDetailScreen({ ctx, contractId }) {
             <FieldRow label="Налоговый режим клиента" value={`${TAX_REGIME[cr.tax_regime].label} — ${TAX_REGIME[cr.tax_regime].desc}`} />
           </Card>
 
-          <Card title={`Спецификация (${cr.specification.length})`}>
+          <Card title={`Спецификация (${(cr.specification || []).length})`}>
             <div className="space-y-2">
-              {cr.specification.map(it => (
+              {(cr.specification || []).map(it => (
                 <div key={it.id} className="flex items-start justify-between gap-3 py-2" style={{ borderBottom: '1px solid #F1F5F9' }}>
                   <div className="min-w-0 flex-1">
                     <div className="font-semibold text-sm" style={{ color: 'var(--mc-text)' }}>{it.name}</div>
@@ -16142,6 +16296,7 @@ function AdminReleaseNotesScreen({ ctx }) {
       id: uid(), title: title.trim(), body: body.trim() || null,
       note_date: todayISOalmaty(), created_by: currentUser.id,
       created_at: new Date().toISOString(), sent_at: null,
+      org_id: _currentOrgId,
     };
     const { error } = await supabase.from('release_notes').insert(row);
     if (error) return showToast('Ошибка: ' + error.message);
@@ -16396,6 +16551,7 @@ function AdminErrorReportsScreen({ ctx }) {
         details: { test: true, timestamp: new Date().toISOString() },
         route_name: 'admin_errors',
         at: new Date().toISOString(),
+        org_id: _currentOrgId,
       });
       if (error) throw error;
       showToast('Тестовая запись добавлена');

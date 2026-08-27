@@ -83,6 +83,7 @@ export function ManagerTasksScreen({ ctx }) {
       due_date: data.due_date || null,
       log: [{ event: 'created', actor: currentUser.id, at: new Date().toISOString() }],
       created_at: new Date().toISOString(),
+      org_id: ctx.currentOrgId,
     };
     const { error } = await supabase.from('manager_tasks').insert(row);
     if (error) { showToast('Ошибка: ' + error.message); return; }

@@ -53,7 +53,7 @@ function parseXlsxSheet(ws) {
   return parseRows(rows);
 }
 
-async function saveToSupabase(bu, wd, clients, userId) {
+async function saveToSupabase(bu, wd, clients, userId, orgId) {
   await supabase.from('debtor_records')
     .delete().eq('business_unit', bu).eq('week_date', wd);
   if (!clients.length) return 0;
@@ -62,6 +62,7 @@ async function saveToSupabase(bu, wd, clients, userId) {
     client: c.client, balance: c.balance, reconciliation: c.reconciliation,
     paid_orders: c.paid_orders, paid_items: c.paid_items,
     actual_debt: c.actual_debt, comment: c.comment,
+    org_id: orgId,
   }));
   const { error } = await supabase.from('debtor_records').insert(records);
   if (error) throw error;
@@ -132,7 +133,7 @@ export default function DebtorScreen({ ctx }) {
         if (!bu || !wd) continue;
         weekDate = wd;
         const clients = parseXlsxSheet(wb.Sheets[name]);
-        imported += await saveToSupabase(bu, wd, clients, currentUser.id);
+        imported += await saveToSupabase(bu, wd, clients, currentUser.id, ctx.currentOrgId);
       }
       if (imported === 0) {
         showToast('Не найдены листы формата "ТОО ДД.ММ"');

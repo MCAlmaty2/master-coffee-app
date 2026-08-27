@@ -275,6 +275,7 @@ export function SalesReportScreen({ ctx }) {
         plans: draftPlans,
         updated_by: currentUser.id,
         updated_at: new Date().toISOString(),
+        org_id: ctx.currentOrgId,
       }, { onConflict: 'month' });
       if (error) throw error;
       setDb(d => {

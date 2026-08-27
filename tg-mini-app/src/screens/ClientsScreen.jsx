@@ -446,6 +446,7 @@ export function ClientEditScreen({ ctx, clientId }) {
         created_by:     currentUser.id,
         updated_at:     now,
         ...(!existing && { created_at: now }),
+        org_id:         ctx.currentOrgId,
       };
       const { error } = await supabase.from('clients').upsert([row], { onConflict: 'id' });
       if (error) throw error;

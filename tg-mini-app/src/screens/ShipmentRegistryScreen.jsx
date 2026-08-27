@@ -206,6 +206,7 @@ export function ShipmentRegistryScreen({ ctx }) {
       invoice_returned: false, delivery_date: null, paid: false, paid_amount: null,
       seq: maxSeq + i + 1,
       created_by: currentUser.id, created_at: new Date().toISOString(),
+      org_id: ctx.currentOrgId,
     }));
     const { error } = await supabase.from('shipment_registry').insert(newRows);
     if (error) { showToast('Ошибка: ' + error.message); return; }

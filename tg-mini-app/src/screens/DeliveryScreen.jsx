@@ -425,11 +425,11 @@ export function DeliveryNewRegistryScreen({ ctx }) {
 
       const { data: reg, error: regErr } = await supabase
         .from('delivery_registries')
-        .insert([{ number, date: todayISO(), shift, status: 'active', raw_file_name: fileName, total_orders: finalRows.length, created_by: currentUser.id, created_at: new Date().toISOString() }])
+        .insert([{ number, date: todayISO(), shift, status: 'active', raw_file_name: fileName, total_orders: finalRows.length, created_by: currentUser.id, created_at: new Date().toISOString(), org_id: ctx.currentOrgId }])
         .select().single();
       if (regErr) throw regErr;
 
-      const orderRows = finalRows.map(r => ({ ...r, id: uid(), registry_id: reg.id, status: 'pending', accept_payment: needsPayment(r.payment_info), created_at: new Date().toISOString() }));
+      const orderRows = finalRows.map(r => ({ ...r, id: uid(), registry_id: reg.id, status: 'pending', accept_payment: needsPayment(r.payment_info), created_at: new Date().toISOString(), org_id: ctx.currentOrgId }));
       const { error: ordErr } = await supabase.from('delivery_orders').insert(orderRows);
       if (ordErr) throw ordErr;
 
@@ -973,6 +973,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
       amount:          Number(o.total_amount) || 0,
       status:          'pending',
       created_at:      now,
+      org_id:          ctx.currentOrgId,
     }));
     const { error } = await supabase.from('delivery_orders').insert(rows);
     if (error) { showToast('Ошибка: ' + error.message, 'error'); setSaving(false); return; }
@@ -1003,6 +1004,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
       extra_info:   qForm.comment.trim(),
       status:       'pending',
       created_at:   now,
+      org_id:       ctx.currentOrgId,
     };
     const { error } = await supabase.from('delivery_orders').insert([row]);
     if (error) { showToast('Ошибка: ' + error.message, 'error'); setSaving(false); return; }
@@ -1035,6 +1037,7 @@ function AddOrderModal({ ctx, registryId, onClose }) {
       amount:       0,
       status:       'pending',
       created_at:   now,
+      org_id:       ctx.currentOrgId,
     };
     const { error } = await supabase.from('delivery_orders').insert([row]);
     if (error) { showToast('Ошибка: ' + error.message, 'error'); setSaving(false); return; }

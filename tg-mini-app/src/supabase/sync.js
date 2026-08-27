@@ -80,7 +80,7 @@ export function getTablesForRole(role) {
 /**
  * Загрузить строки таблицы (с учётом dateFilter)
  */
-export const fetchAllOfTable = async (stateKey) => {
+export const fetchAllOfTable = async (stateKey, orgId) => {
   const cfg = SYNC_TABLES[stateKey];
   if (!cfg) throw new Error(`Unknown table: ${stateKey}`);
   const PAGE = 1000;
@@ -88,6 +88,7 @@ export const fetchAllOfTable = async (stateKey) => {
   let from = 0;
   while (true) {
     let query = supabase.from(cfg.table).select('*').range(from, from + PAGE - 1);
+    if (orgId) query = query.eq('org_id', orgId);
     if (cfg.dateFilter) {
       query = query.gte(cfg.dateFilter.column, cfg.dateFilter.cutoff());
     }
@@ -130,15 +131,17 @@ export const deleteRow = async (stateKey, pkValue) => {
  * Подписаться на realtime с инкрементальным обновлением (без перекачки).
  * callback получает { eventType, new, old } — обновляем только затронутую строку.
  */
-export const subscribeToTable = (stateKey, callback) => {
+export const subscribeToTable = (stateKey, callback, orgId) => {
   const cfg = SYNC_TABLES[stateKey];
   if (!cfg) {
     console.warn(`[subscribeToTable] Unknown table: ${stateKey}`);
     return null;
   }
+  const filterCfg = { event: '*', schema: 'public', table: cfg.table };
+  if (orgId) filterCfg.filter = `org_id=eq.${orgId}`;
   return supabase
     .channel(`rt-${stateKey}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: cfg.table }, (payload) => {
+    .on('postgres_changes', filterCfg, (payload) => {
       callback(payload);
     })
     .subscribe();

@@ -8,12 +8,25 @@ if (!URL || !ANON_KEY) {
   console.error('[supabase] Не заданы VITE_SUPABASE_URL и/или VITE_SUPABASE_ANON_KEY. Проверь файл .env');
 }
 
+let _orgIdForHeaders = null;
+export function setOrgIdHeader(orgId) { _orgIdForHeaders = orgId; }
+
+const _nativeFetch = globalThis.fetch.bind(globalThis);
+
 export const supabase = createClient(URL || '', ANON_KEY || '', {
   auth: {
-    // Мы не используем встроенный Supabase Auth — авторизация идёт через Telegram WebApp.
-    // Поэтому отключаем сессии, чтобы не было лишних запросов.
     persistSession: false,
     autoRefreshToken: false,
+  },
+  global: {
+    fetch: (url, options) => {
+      if (_orgIdForHeaders) {
+        const headers = new Headers(options?.headers);
+        headers.set('x-org-id', _orgIdForHeaders);
+        options = { ...(options || {}), headers };
+      }
+      return _nativeFetch(url, options);
+    },
   },
 });
 
