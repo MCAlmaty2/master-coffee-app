@@ -8278,7 +8278,7 @@ function ChangeStatusModal({ order, to, onClose, onConfirm }) {
 
   const [pdfFile, setPdfFile] = useState(null);
   const [docNo, setDocNo] = useState(needsShipMeta ? '00ЦТ-' : '');
-  const [shipDate, setShipDate] = useState(new Date().toISOString().slice(0, 10));
+  const [shipDate, setShipDate] = useState(todayISO());
   const [cancelReason, setCancelReason] = useState('');
   const [paidAmount, setPaidAmount] = useState(needsPayment ? String(order.total_amount || '') : '');
 
@@ -10094,8 +10094,8 @@ function ArchiveScreen({ ctx }) {
 
 function ExportScreen({ ctx }) {
   const { db, showToast } = ctx;
-  const [dateFrom, setDateFrom] = useState(new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
-  const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
+  const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 7); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; });
+  const [dateTo, setDateTo] = useState(todayISO());
   const [statusFilter, setStatusFilter] = useState('all');
 
   const filtered = db.orders.filter(o => {
@@ -11767,7 +11767,7 @@ function EditTaskModal({ task, onClose, onSave }) {
 
 function DuplicateTaskModal({ task, db, onClose, onCreate }) {
   const tomorrow = (() => {
-    const base = task.visit_date || new Date().toISOString().slice(0, 10);
+    const base = task.visit_date || todayISO();
     const d = new Date(base + 'T00:00');
     d.setDate(d.getDate() + 1);
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -11784,7 +11784,7 @@ function DuplicateTaskModal({ task, db, onClose, onCreate }) {
 
   // быстрые кнопки +N дней от даты задачи
   const quickDays = [1, 2, 3, 7].map(n => {
-    const base = task.visit_date || new Date().toISOString().slice(0, 10);
+    const base = task.visit_date || todayISO();
     const d = new Date(base + 'T00:00');
     d.setDate(d.getDate() + n);
     const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -11905,7 +11905,7 @@ function StartTaskModal({ task, onClose, onStart }) {
   const toM = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
   const frM = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
 
-  const [date,     setDate]     = useState(task.visit_date    || new Date().toISOString().slice(0, 10));
+  const [date,     setDate]     = useState(task.visit_date    || todayISO());
   const [timeFrom, setTimeFrom] = useState(task.visit_time    || '10:00');
   const [timeTo,   setTimeTo]   = useState(task.visit_time_end || (task.visit_time ? frM(toM(task.visit_time) + (task.duration_min || 60)) : '11:00'));
   const [duration, setDuration] = useState(task.duration_min  || 60);

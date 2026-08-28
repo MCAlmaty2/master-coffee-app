@@ -7,6 +7,9 @@ import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Plus, ClipboardPaste, Trash2, Check, X, Banknote } from 'lucide-react';
 import { supabase } from '../supabase/client';
 
+const TZ = 'Asia/Almaty';
+const todayISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
+
 /* ── Права ─────────────────────────────────────────────────── */
 const CAN_EDIT_ROLES = ['admin', 'senior_manager', 'director', 'b2b', 'cashier']; // A-G
 const CAN_PAY_ROLES  = ['admin', 'cashier'];                            // I
@@ -289,7 +292,7 @@ export function ShipmentRegistryScreen({ ctx }) {
     const updated = {
       ...match,
       paid_amount: newPaid,
-      paid_at: fullyPaid ? new Date().toISOString().slice(0, 10) : null,
+      paid_at: fullyPaid ? todayISO() : null,
       paid_by: fullyPaid ? userId : null,
     };
     return shipments.map(s => s.id === match.id ? updated : s);
