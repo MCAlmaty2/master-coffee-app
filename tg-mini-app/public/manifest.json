@@ -1,7 +1,7 @@
 {
-  "name": "Master Coffee CRM",
-  "short_name": "MC CRM",
-  "description": "CRM-система Master Coffee Roasters",
+  "name": "CRM Platform",
+  "short_name": "CRM",
+  "description": "CRM-система для управления операциями",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",

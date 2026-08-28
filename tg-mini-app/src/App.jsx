@@ -8,6 +8,7 @@ import {
   Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt, Wallet, Wrench,
 } from 'lucide-react';
 import { supabase, setOrgIdHeader } from './supabase/client';
+import { orgHasModule } from './modules';
 import { isDuplicate } from './errorMonitor';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
 import { SalesReportScreen, SalesReportHomeTile } from './screens/SalesReportScreen';
@@ -26,6 +27,8 @@ import BudgetScreen from './screens/BudgetScreen';
 import MppKanbanScreen from './screens/MppKanbanScreen';
 import { DeferredPaymentScreen, DeferredPaymentHomeBanner } from './screens/DeferredPaymentScreen';
 import { RentalEquipmentScreen, RentalHomeBanner } from './screens/RentalEquipmentScreen';
+import OrgManagementScreen from './screens/OrgManagementScreen';
+import PlatformUsersScreen from './screens/PlatformUsersScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -160,6 +163,28 @@ async function hashPin(userId, pin) {
 let _currentOrgId = null;
 export function setModuleOrgId(orgId) { _currentOrgId = orgId; }
 
+// ── Брендинг организации ──────────────────────────────────────────────────
+const DEFAULT_BRANDING = {
+  company_name: 'CRM Platform',
+  tagline: 'Operations System',
+  logo_url: null,
+  logo_hor_url: null,
+  accent_color: '#297b8a',
+};
+
+function getOrgBranding(org) {
+  if (!org?.branding || typeof org.branding !== 'object') {
+    return { ...DEFAULT_BRANDING, company_name: org?.name || DEFAULT_BRANDING.company_name };
+  }
+  return {
+    company_name: org.branding.company_name || org.name || DEFAULT_BRANDING.company_name,
+    tagline: org.branding.tagline || DEFAULT_BRANDING.tagline,
+    logo_url: org.branding.logo_url || DEFAULT_BRANDING.logo_url,
+    logo_hor_url: org.branding.logo_hor_url || DEFAULT_BRANDING.logo_hor_url,
+    accent_color: org.branding.accent_color || DEFAULT_BRANDING.accent_color,
+  };
+}
+
 // ── Дедупликация TG-отправки ──────────────────────────────────────────────
 // Защита от дублей: React StrictMode двойной вызов updater,
 // повторный клик до завершения async, sync-diff re-trigger.
@@ -249,11 +274,14 @@ async function sendPrivateTelegram(user, text) {
 
 // Создать in-app уведомление + fire-and-forget личный Telegram получателю.
 // button_url / button_text — опционально: добавляет inline-кнопку под сообщением (web_app).
+const SUPER_ADMIN_NOTIF_ALLOWED = new Set(['access', 'feedback', 'general']);
+
 function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, button_url, button_text, scope }) {
   const recipient = db?.users?.find(u => u.id === recipient_id);
   const isCoffeeUser = COFFEESHOP_ROLES.includes(recipient?.role);
   if (scope === 'coffeeshop' && !isCoffeeUser) return null;
   if (scope !== 'coffeeshop' && isCoffeeUser) return null;
+  if (recipient?.is_super_admin && !SUPER_ADMIN_NOTIF_ALLOWED.has(link_kind || 'general')) return null;
   const notif = {
     id: uid(),
     recipient_id,
@@ -604,10 +632,10 @@ function defaultPermissionsFor(roleKey) {
 // Проверка права для пользователя (на основе его роли)
 function hasPermission(db, user, permKey) {
   if (!user || !user.role) return false;
-  if (user.role === 'admin') return true; // admin может всё
-  const roleDef = db.roleDefinitions?.find(r => r.key === user.role);
+  if (user.role === 'admin') return true;
+  const roleDef = db.roleDefinitions?.find(r => r.key === user.role && r.org_id === user.org_id)
+    || db.roleDefinitions?.find(r => r.key === user.role);
   if (!roleDef) {
-    // системная роль без записи в БД — берём пресет
     return defaultPermissionsFor(user.role).includes(permKey);
   }
   return roleDef.permissions?.includes(permKey) || false;
@@ -942,6 +970,7 @@ function loadDB() {
       // Системные роли как записи в БД (чтобы их можно было редактировать)
       if (!db.roleDefinitions) {
         db.roleDefinitions = SYSTEM_ROLES.map(key => ({
+          id: uid(),
           key,
           label: ROLES[key].label,
           short: ROLES[key].short,
@@ -950,11 +979,11 @@ function loadDB() {
           is_system: true,
         }));
       } else {
-        // дозалить новые системные роли, появившиеся в новой версии кода
         const existingKeys = new Set(db.roleDefinitions.map(r => r.key));
         for (const key of SYSTEM_ROLES) {
           if (!existingKeys.has(key)) {
             db.roleDefinitions.push({
+              id: uid(),
               key,
               label: ROLES[key].label,
               short: ROLES[key].short,
@@ -1015,6 +1044,7 @@ function seedDB() {
     mppDealProducts: [],
     mppComments: [],
     roleDefinitions: SYSTEM_ROLES.map(key => ({
+      id: uid(),
       key,
       label: ROLES[key].label,
       short: ROLES[key].short,
@@ -1125,6 +1155,7 @@ function App() {
   const [currentOrgId, setCurrentOrgId] = useState(null);
   const [organizations, setOrganizations] = useState([]);
   const orgIdRef = useRef(null);
+  const [platformMode, setPlatformMode] = useState(false);
 
   // Тема: light / dark
   const [theme, setTheme] = useState(() => localStorage.getItem('mc-theme') || 'light');
@@ -1191,6 +1222,9 @@ function App() {
         if (isSuperAdmin) {
           const orgsRes = await supabase.from('organizations').select('*').order('name');
           allOrgs = orgsRes.data || [];
+        } else if (orgId) {
+          const { data: myOrg } = await supabase.from('organizations').select('*').eq('id', orgId).single();
+          if (myOrg) allOrgs = [myOrg];
         }
         orgIdRef.current = orgId;
         _currentOrgId = orgId;
@@ -1227,12 +1261,14 @@ function App() {
           for (const sysKey of SYSTEM_ROLES) {
             if (!existingRoleKeys.has(sysKey) && ROLES[sysKey]) {
               const newSysRole = {
+                id: uid(),
                 key: sysKey,
                 label: ROLES[sysKey].label,
                 short: ROLES[sysKey].short,
                 color: ROLES[sysKey].color,
                 permissions: defaultPermissionsFor(sysKey),
                 is_system: true,
+                org_id: orgIdRef.current,
               };
               merged.roleDefinitions = [...merged.roleDefinitions, newSysRole];
               upsertRow('roleDefinitions', newSysRole).catch(() => {});
@@ -1256,6 +1292,10 @@ function App() {
           return merged;
         });
         if (allOrgs.length > 0) setOrganizations(allOrgs);
+        if (isSuperAdmin) {
+          setPlatformMode(true);
+          setRoute({ name: 'platform_orgs' });
+        }
         setBootStatus({ phase: 'ready', error: null });
       } catch (e) {
         if (cancelled) return;
@@ -1523,6 +1563,12 @@ function App() {
   const effectiveRole = (currentUser?.role === 'admin' && actAs) ? actAs : currentUser?.role;
 
   const switchOrg = async (newOrgId) => {
+    if (newOrgId === 'platform') {
+      setPlatformMode(true);
+      setRoute({ name: 'platform_orgs' });
+      return;
+    }
+    setPlatformMode(false);
     if (!newOrgId || newOrgId === currentOrgId) return;
     orgIdRef.current = newOrgId;
     _currentOrgId = newOrgId;
@@ -1729,6 +1775,20 @@ function App() {
         return { pending: true, user };
       }
       setSession({ user_id: user.id });
+      const { data: meRow } = await supabase
+        .from('users_safe').select('org_id, is_super_admin').eq('id', user.id).single();
+      const orgId = meRow?.org_id || null;
+      orgIdRef.current = orgId;
+      _currentOrgId = orgId;
+      setOrgIdHeader(orgId);
+      setCurrentOrgId(orgId);
+      if (meRow?.is_super_admin) {
+        const { data: orgs } = await supabase.from('organizations').select('*').order('name');
+        if (orgs?.length) setOrganizations(orgs);
+      } else if (orgId) {
+        const { data: myOrg } = await supabase.from('organizations').select('*').eq('id', orgId).single();
+        if (myOrg) setOrganizations([myOrg]);
+      }
       setRoute({ name: 'home' });
       setRouteStack([]);
       return { ok: true, user };
@@ -2233,6 +2293,17 @@ function App() {
     try {
       const updated = await updateUserRoleInDb(userId, role);
       setDb(d => ({ ...d, users: d.users.map(u => u.id === userId ? updated : u) }));
+      return { ok: true };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+  const updateUserOrg = async (userId, newOrgId) => {
+    if (!currentUser?.is_super_admin) return { error: 'Только для супер-администратора' };
+    try {
+      const { error } = await supabase.from('users').update({ org_id: newOrgId }).eq('id', userId);
+      if (error) throw error;
+      setDb(d => ({ ...d, users: d.users.map(u => u.id === userId ? { ...u, org_id: newOrgId } : u) }));
       return { ok: true };
     } catch (e) {
       return { error: e.message };
@@ -4034,6 +4105,7 @@ function App() {
     if (!data.label || data.label.length < 2) return { error: 'Укажите название' };
     const label = data.label.trim();
     const newRole = {
+      id: uid(),
       key,
       label,
       short: data.short?.trim() || label.slice(0, 10),
@@ -4067,12 +4139,14 @@ function App() {
 
   const deleteCustomRole = async (roleKey) => {
     if (SYSTEM_ROLES.includes(roleKey)) return { error: 'Системную роль нельзя удалить' };
+    const roleDef = db.roleDefinitions.find(r => r.key === roleKey);
+    if (!roleDef) return { error: 'Роль не найдена' };
     const usersWithRole = db.users.filter(u => u.role === roleKey && u.active);
     if (usersWithRole.length > 0) return { error: `Сначала переназначьте ${usersWithRole.length} пользователей с этой ролью` };
     try {
-      await deleteRow('roleDefinitions', roleKey);
-      setDb(d => ({ ...d, roleDefinitions: d.roleDefinitions.filter(r => r.key !== roleKey) }));
-      if (syncSnapshotRef) syncSnapshotRef.current.roleDefinitions = (syncSnapshotRef.current.roleDefinitions || []).filter(r => r.key !== roleKey);
+      await deleteRow('roleDefinitions', roleDef.id);
+      setDb(d => ({ ...d, roleDefinitions: d.roleDefinitions.filter(r => r.id !== roleDef.id) }));
+      if (syncSnapshotRef) syncSnapshotRef.current.roleDefinitions = (syncSnapshotRef.current.roleDefinitions || []).filter(r => r.id !== roleDef.id);
       return { ok: true };
     } catch (e) {
       reportError({ kind: 'manual', source: 'roles', message: `Ошибка удаления роли: ${e.message}` });
@@ -4493,15 +4567,13 @@ function App() {
       // Сохраняем в Supabase, чтобы Admin видел в любом сеансе
       const { error: dbErr } = await supabase.from('feedback_messages').insert(feedback);
       if (dbErr) throw dbErr;
-      // Уведомление Admin-у: in-app + полное сообщение в личный Telegram
-      const adminUser = db.users.find(u => u.role === 'admin');
-      if (adminUser) {
-        // In-app notification (без makeNotif — он автоматически обрезает body в TG-DM)
+      const superAdmin = db.users.find(u => u.is_super_admin);
+      if (superAdmin) {
         setDb(d => ({
           ...d,
           notifications: [...(d.notifications || []), {
             id: uid(),
-            recipient_id: adminUser.id,
+            recipient_id: superAdmin.id,
             title: 'Новая обратная связь',
             body: `От ${currentUser.first_name}: ${message.slice(0, 80)}${message.length > 80 ? '…' : ''}`,
             at: new Date().toISOString(),
@@ -4509,9 +4581,8 @@ function App() {
             org_id: _currentOrgId,
           }],
         }));
-        // Полное сообщение в личный Telegram (не огрызок)
         sendPrivateTelegram(
-          adminUser,
+          superAdmin,
           `💬 <b>Обратная связь</b>\nОт: ${currentUser.first_name} ${currentUser.last_name || ''}\n\n${message}`,
         );
       }
@@ -4553,6 +4624,9 @@ function App() {
         if (meRow?.is_super_admin) {
           const { data: orgs } = await supabase.from('organizations').select('*').order('name');
           if (orgs?.length) setOrganizations(orgs);
+        } else if (orgId) {
+          const { data: myOrg } = await supabase.from('organizations').select('*').eq('id', orgId).single();
+          if (myOrg) setOrganizations([myOrg]);
         }
         setRoute({ name: 'home' });
         setRouteStack([]);
@@ -4592,13 +4666,16 @@ function App() {
     }
   };
 
+  const currentOrg = useMemo(() => organizations.find(o => o.id === currentOrgId) || null, [organizations, currentOrgId]);
+  const currentBranding = useMemo(() => getOrgBranding(currentOrg), [currentOrg]);
+
   const ctx = {
-    db, setDb, currentUser, effectiveRole, actAs, setActAs, currentOrgId, organizations, switchOrg,
+    db, setDb, currentUser, effectiveRole, actAs, setActAs, currentOrgId, organizations, setOrganizations, switchOrg, currentOrg, currentBranding, platformMode,
     route, navigate, goBack, showToast, hasPermission: (perm) => hasPermission(db, currentUser, perm),
     bootStatus,
     loginViaTelegram, logout,
     createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, changeDeliveryMethod, cancelOrder, editOrder, revertLastAction,
-    approveAccess, rejectAccess, updateUserRole, updateUserName, deactivateUser, activateUser, updateUserTgNotif, updateMyTgPrefs, updateMyHomePrefs, transferAdmin,
+    approveAccess, rejectAccess, updateUserRole, updateUserOrg, updateUserName, deactivateUser, activateUser, updateUserTgNotif, updateMyTgPrefs, updateMyHomePrefs, transferAdmin,
     createTask, startTask, completeTask, rescheduleTask, deleteTask, reassignTask, editTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createGift, approveGift, rejectGift, processGift, prepareGift, deliverGift, cancelGift,
@@ -4745,7 +4822,7 @@ function App() {
   // Что показывать: loader / error / экран входа / приложение
   const renderBody = () => {
     if (bootStatus.phase === 'loading') {
-      return <BootSplash title="Подключаемся к базе…" subtitle="Master Coffee Procurement OS" />;
+      return <BootSplash title="Подключаемся к базе…" subtitle="Operations Platform" />;
     }
     if (bootStatus.phase === 'error') {
       return <BootSplash
@@ -4851,7 +4928,7 @@ function ErrorsPanel({ errors, onDismiss, onDismissAll, isAdmin, navigate }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 /* ═════════════════════════════════════════════════════════════════════════
-   INTRO SPLASH — экран первого входа с лентами Master Coffee
+   INTRO SPLASH — экран первого входа
    Показывается один раз, потом сохраняем флаг в localStorage.
    ═════════════════════════════════════════════════════════════════════════ */
 
@@ -4923,23 +5000,20 @@ function IntroSplash({ onContinue }) {
       {/* Центральный блок */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 z-10 w-full max-w-md mx-auto">
 
-        {/* Реальный логотип — символ черепахи */}
         <div className="splash-float mb-6">
-          <img
-            src="/logo-symbol.png"
-            alt="Master Coffee Roasters"
-            style={{ width: 110, height: 110, objectFit: 'contain' }}
-          />
+          <div className="inline-flex items-center justify-center w-28 h-28 rounded-3xl" style={{ background: 'rgba(41,123,138,0.1)' }}>
+            <Building2 size={56} style={{ color: '#297b8a' }} />
+          </div>
         </div>
 
         <div className="text-center mb-2">
           <div className="font-black tracking-widest uppercase"
                style={{ fontSize: 28, color: '#297b8a', letterSpacing: '0.18em', lineHeight: 1 }}>
-            MASTER
+            CRM
           </div>
           <div className="font-medium tracking-widest uppercase"
                style={{ fontSize: 13, color: 'var(--mc-muted)', letterSpacing: '0.35em', marginTop: 3 }}>
-            COFFEE ROASTERS
+            PLATFORM
           </div>
         </div>
 
@@ -5174,7 +5248,9 @@ function TelegramAuthScreen({ ctx }) {
     if (isCheckingToken) {
       return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center px-4 gap-4" style={{ background: 'var(--mc-active-item)' }}>
-          <img src="/logo-symbol.png" alt="" style={{ width: 52, height: 52, objectFit: 'contain' }} />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl" style={{ background: 'rgba(41,123,138,0.1)' }}>
+            <Building2 size={28} style={{ color: '#297b8a' }} />
+          </div>
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl" style={{ background: '#E7F3FE' }}>
             <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#297b8a', borderTopColor: 'transparent' }} />
           </div>
@@ -5274,14 +5350,14 @@ function PinLoginScreen({ hasUrlToken, loginViaPin }) {
   return (
     <div className="min-h-screen w-full flex items-center justify-center px-4" style={{ background: 'var(--mc-active-item)' }}>
       <div className="w-full max-w-sm">
-        {/* Логотип */}
         <div className="text-center mb-8">
-          <img src="/logo-symbol.png" alt="Master Coffee Roasters"
-               style={{ width: 72, height: 72, objectFit: 'contain', marginBottom: 16 }} />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4" style={{ background: 'rgba(41,123,138,0.1)' }}>
+            <Building2 size={32} style={{ color: '#297b8a' }} />
+          </div>
           <div className="font-black tracking-widest uppercase"
-               style={{ fontSize: 22, color: '#297b8a', letterSpacing: '0.18em', lineHeight: 1 }}>MASTER</div>
+               style={{ fontSize: 22, color: '#297b8a', letterSpacing: '0.18em', lineHeight: 1 }}>CRM</div>
           <div className="font-medium tracking-widest uppercase"
-               style={{ fontSize: 11, color: 'var(--mc-muted)', letterSpacing: '0.35em', marginTop: 2 }}>COFFEE ROASTERS</div>
+               style={{ fontSize: 11, color: 'var(--mc-muted)', letterSpacing: '0.35em', marginTop: 2 }}>PLATFORM</div>
           <div className="text-sm mt-2" style={{ color: 'var(--mc-muted)' }}>Управление закупками и операциями</div>
         </div>
 
@@ -5409,7 +5485,7 @@ const FULL_BLEED_ROUTES = new Set([
 ]);
 
 function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
-  const { currentUser, effectiveRole, actAs, setActAs, route, navigate, logout, db, theme, toggleTheme, currentOrgId, organizations, switchOrg } = ctx;
+  const { currentUser, effectiveRole, actAs, setActAs, route, navigate, logout, db, theme, toggleTheme, currentOrgId, organizations, switchOrg, currentBranding, currentOrg, platformMode } = ctx;
   const role = effectiveRole;
   const isManager = MANAGER_ROLES.includes(role);
   const userBase = getUserBase(currentUser);
@@ -5436,7 +5512,25 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     main.push({ id: 'notifications', label: 'Уведомления', icon: Bell });
     groups.push({ title: 'Главное', items: main });
 
+    // ── ПЛАТФОРМА (только супер-админ) ────
+    if (currentUser.is_super_admin) {
+      const platform = [];
+      platform.push({ id: 'platform_orgs',    label: 'Организации',       icon: Building2 });
+      platform.push({ id: 'platform_users',   label: 'Все пользователи',  icon: Users });
+      platform.push({ id: 'platform_errors',  label: 'Ошибки платформы',  icon: AlertTriangle });
+      platform.push({ id: 'admin_feedback',   label: 'Сообщения сотрудников', icon: Mail });
+      platform.push({ id: 'feedback',         label: 'Обратная связь',    icon: MessageSquare });
+      groups.push({ title: 'Платформа', items: platform });
+    }
+
+    if (platformMode) {
+      return groups;
+    }
+
+    const mod = (key) => orgHasModule(currentOrg, key);
+
     // ── ОТДЕЛ ПРОДАЖ ──────────────────────
+    if (mod('sales')) {
     const sales = [];
     if (role === 'admin' || role === 'b2b' || role === 'sales' || role === 'warehouse'
         || hasPermission(db, currentUser, 'orders_view_all') || hasPermission(db, currentUser, 'orders_view_own')) {
@@ -5458,8 +5552,10 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       sales.push({ id: 'mpp_kanban', label: 'Воронка МПП', icon: Monitor });
     }
     if (sales.length > 0) groups.push({ title: 'Отдел продаж', items: sales, collapsible: true, base: 'tk' });
+    }
 
     // ── БАРИСТА И ТЕХНИКИ ────────────────
+    if (mod('field')) {
     const field = [];
     if (FIELD_ROLES.includes(role) || isManager
         || hasPermission(db, currentUser, 'tasks_view_own') || hasPermission(db, currentUser, 'tasks_self_assign')) {
@@ -5469,8 +5565,10 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       field.push({ id: 'field_calendar', label: 'Календарь команды', icon: Eye });
     }
     if (field.length > 0) groups.push({ title: 'Бариста и техники', items: field, collapsible: true, base: 'tk' });
+    }
 
     // ── СКЛАД И ДОСТАВКА ─────────────────
+    if (mod('warehouse')) {
     const warehouse = [];
     if (hasPermission(db, currentUser, 'delivery_manage') || hasPermission(db, currentUser, 'delivery_view_all')) {
       warehouse.push({ id: 'delivery_registries', label: 'Доставки', icon: Truck });
@@ -5488,6 +5586,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       warehouse.push({ id: 'gifts', label: 'Подарки', icon: Gift });
     }
     if (warehouse.length > 0) groups.push({ title: 'Склад и доставка', items: warehouse, collapsible: true, base: 'tk' });
+    }
 
     // ── АРХИВ / ЭКСПОРТ ──────────────────
     const archiveItems = [];
@@ -5500,7 +5599,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     if (archiveItems.length > 0) groups.push({ title: 'Архив', items: archiveItems, collapsible: true, base: 'tk' });
 
     // ── ТОВАРЫ / ПРАЙС (по праву products_edit) ────────────────────────────
-    if (hasPermission(db, currentUser, 'products_edit')) {
+    if (mod('products') && hasPermission(db, currentUser, 'products_edit')) {
       const prodItems = [];
       prodItems.push({ id: 'admin_products', label: 'Товары / прайс',     icon: Package });
       prodItems.push({ id: 'admin_categories', label: 'Категории товаров', icon: Tag });
@@ -5508,6 +5607,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     }
 
     // ── КОФЕЙНИ ────────────────────────────
+    if (mod('coffeeshops')) {
     const coffeeItems = [];
     if (hasPermission(db, currentUser, 'coffee_shipments_view')
         || hasPermission(db, currentUser, 'coffee_shipments_edit')
@@ -5518,9 +5618,10 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       coffeeItems.push({ id: 'coffee_tasks', label: 'Задачник', icon: ListTodo });
     }
     if (coffeeItems.length > 0) groups.push({ title: 'Кофейни', items: coffeeItems, collapsible: true, base: 'coffeeshop' });
+    }
 
     // ── ФИНАНСЫ (касса / подотчёт / расходы) ────────────────────────────
-    {
+    if (mod('finance')) {
       const finItems = [];
       if (['admin', 'director', 'cashier'].includes(currentUser.role)) {
         finItems.push({ id: 'cash', label: 'Касса / Подотчёт', icon: Banknote });
@@ -5541,7 +5642,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     }
 
     // ── АРЕНДА ОБОРУДОВАНИЯ ────────────────────
-    {
+    if (mod('rental')) {
       const rentalItems = [];
       if (hasPermission(db, currentUser, 'rental_equipment') || hasPermission(db, currentUser, 'rental_clients') || hasPermission(db, currentUser, 'rental_purchases') || hasPermission(db, currentUser, 'rental_revisions') || hasPermission(db, currentUser, 'rental_report')) {
         rentalItems.push({ id: 'rental_home', label: 'Арендное оборудование', icon: Wrench });
@@ -5550,29 +5651,29 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     }
 
     // ── HR-КАЛЕНДАРЬ (отпуска и дни рождения) ────────────────────
-    if (hasPermission(db, currentUser, 'hr_calendar_view')) {
+    if (mod('hr') && hasPermission(db, currentUser, 'hr_calendar_view')) {
       groups.push({ title: 'HR', items: [
         { id: 'hr_calendar', label: 'Отпуска и дни рождения', icon: CalendarDays },
       ], collapsible: true, base: 'tk' });
     }
 
     // ── РАСПИСАНИЕ (по разрешению schedule_access) ────────────────────
-    if (hasPermission(db, currentUser, 'schedule_access')) {
+    if (mod('hr') && hasPermission(db, currentUser, 'schedule_access')) {
       groups.push({ title: 'Расписание', items: [
         { id: 'schedule', label: 'Регулярные задачи', icon: Calendar },
       ], collapsible: true, base: 'tk' });
     }
 
-    // ── АДМИН ────────────────────────────
-    if (currentUser.role === 'admin') {
+    // ── АДМИН (org-level) ────────────────────────────
+    if (currentUser.role === 'admin' || currentUser.is_super_admin) {
       const admin = [];
       admin.push({ id: 'admin_users',    label: 'Пользователи',       icon: Users });
       admin.push({ id: 'admin_roles',    label: 'Роли и права',       icon: KeyRound });
       admin.push({ id: 'admin_requests', label: 'Запросы доступа',    icon: Bell });
-      admin.push({ id: 'admin_telegram', label: 'Telegram-уведомления', icon: Send });
-      admin.push({ id: 'admin_feedback', label: 'Сообщения сотрудников', icon: Mail });
-      admin.push({ id: 'admin_release_notes', label: 'Что нового (рассылка)', icon: Send });
-      admin.push({ id: 'admin_errors',   label: 'Отчёты об ошибках',  icon: AlertTriangle });
+      if (!currentUser.is_super_admin) {
+        admin.push({ id: 'admin_telegram', label: 'Telegram-уведомления', icon: Send });
+        admin.push({ id: 'admin_release_notes', label: 'Что нового (рассылка)', icon: Send });
+      }
       admin.push({ id: 'admin_service',  label: 'Сервис · очистка',   icon: Settings });
       groups.push({ title: 'Администрирование', items: admin, collapsible: true, base: 'admin' });
     }
@@ -5584,10 +5685,10 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
 
     return groups.filter(g => {
       if (!g.base) return true;
-      if (g.base === 'admin') return currentUser.role === 'admin';
+      if (g.base === 'admin') return currentUser.role === 'admin' || currentUser.is_super_admin;
       return g.base === activeBase;
     });
-  }, [role, currentUser, isManager, db, activeBase]);
+  }, [role, currentUser, isManager, db, activeBase, currentOrg, platformMode]);
 
   const myUnreadNotifs = db.notifications.filter(n => n.recipient_id === currentUser.id && !n.read).length;
   const pendingRequests = currentUser.role === 'admin' ? db.users.filter(u => u.role === 'pending').length : 0;
@@ -5597,25 +5698,45 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       {/* Sidebar Desktop */}
       <aside className="hidden lg:flex flex-col w-64 flex-shrink-0 sticky top-0 h-screen" style={{ background: 'var(--mc-sidebar-bg)', borderRight: '1px solid var(--mc-border)' }}>
         <div className="px-5 pt-5 pb-3">
-          <img src="/logo-hor.png" alt="Master Coffee Roasters"
-               style={{ height: 32, objectFit: 'contain', objectPosition: 'left' }} />
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: '#297b8a',
-                        textTransform: 'uppercase', marginTop: 4 }}>
-            MC Workspace · Almaty
-          </div>
+          {platformMode ? (
+            <>
+              <div className="font-bold" style={{ fontSize: 18, color: '#297b8a', letterSpacing: '0.04em' }}>
+                CRM Platform
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: '#297b8a', textTransform: 'uppercase', marginTop: 4 }}>
+                Панель управления
+              </div>
+            </>
+          ) : (
+            <>
+              {currentBranding.logo_hor_url ? (
+                <img src={currentBranding.logo_hor_url} alt={currentBranding.company_name}
+                     style={{ height: 32, objectFit: 'contain', objectPosition: 'left' }} />
+              ) : (
+                <div className="font-bold" style={{ fontSize: 18, color: currentBranding.accent_color, letterSpacing: '0.04em' }}>
+                  {currentBranding.company_name}
+                </div>
+              )}
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: currentBranding.accent_color,
+                            textTransform: 'uppercase', marginTop: 4 }}>
+                {currentOrg?.name || currentBranding.company_name}
+              </div>
+            </>
+          )}
         </div>
 
-        {currentUser?.is_super_admin && organizations.length > 1 && (
+        {currentUser?.is_super_admin && (
           <div className="mx-3 mb-2 px-2 py-1.5 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
             <div className="flex items-center gap-1.5 mb-1" style={{ fontSize: 10, fontWeight: 600, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               <Building2 size={11} /> Организация
             </div>
             <select
-              value={currentOrgId || ''}
+              value={platformMode ? 'platform' : (currentOrgId || '')}
               onChange={e => switchOrg(e.target.value)}
               className="w-full rounded-md border px-2 py-1 text-xs font-semibold"
               style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', borderColor: 'var(--mc-border)' }}
             >
+              <option value="platform">Платформа</option>
               {organizations.map(o => (
                 <option key={o.id} value={o.id}>{o.name}{o.is_demo ? ' (demo)' : ''}</option>
               ))}
@@ -5623,7 +5744,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
           </div>
         )}
 
-        {userBase === 'all' && (
+        {userBase === 'all' && !platformMode && (
           <div className="mx-3 mb-2 grid grid-cols-2 gap-1 p-1 rounded-xl" style={{ background: 'var(--mc-active-item)' }}>
             {[
               { v: 'tk', label: 'ТК', icon: Truck },
@@ -5689,8 +5810,14 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       <div className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 border-b" style={{ background: 'var(--mc-sidebar-bg)', borderColor: 'var(--mc-border)' }}>
         <div className="flex items-center gap-2 min-w-0">
           <button onClick={() => setMobileMenuOpen(true)} className="p-1 -ml-1 flex-shrink-0"><Menu size={22} /></button>
-          <img src="/logo-hor.png" alt="Master Coffee Roasters"
-               style={{ height: 28, objectFit: 'contain', maxWidth: 160 }} />
+          {platformMode ? (
+            <span className="font-bold truncate" style={{ fontSize: 16, color: '#297b8a' }}>CRM Platform</span>
+          ) : currentBranding.logo_hor_url ? (
+            <img src={currentBranding.logo_hor_url} alt={currentBranding.company_name}
+                 style={{ height: 28, objectFit: 'contain', maxWidth: 160 }} />
+          ) : (
+            <span className="font-bold truncate" style={{ fontSize: 16, color: currentBranding.accent_color }}>{currentBranding.company_name}</span>
+          )}
         </div>
         {/* Аватарка пользователя справа — клик ведёт на главную */}
         <button
@@ -5717,27 +5844,43 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
           <aside className="w-72 max-w-[80%] h-full flex flex-col overflow-y-auto" style={{ background: 'var(--mc-sidebar-bg)' }} onClick={e => e.stopPropagation()}>
             <div className="px-5 pt-5 pb-3 flex items-start justify-between flex-shrink-0">
               <div>
-                <img src="/logo-hor.png" alt="Master Coffee Roasters"
-                     style={{ height: 28, objectFit: 'contain' }} />
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: '#297b8a',
-                              textTransform: 'uppercase', marginTop: 3 }}>
-                  MC Workspace · Almaty
-                </div>
+                {platformMode ? (
+                  <>
+                    <div className="font-bold" style={{ fontSize: 16, color: '#297b8a' }}>CRM Platform</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: '#297b8a', textTransform: 'uppercase', marginTop: 3 }}>
+                      Панель управления
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {currentBranding.logo_hor_url ? (
+                      <img src={currentBranding.logo_hor_url} alt={currentBranding.company_name}
+                           style={{ height: 28, objectFit: 'contain' }} />
+                    ) : (
+                      <div className="font-bold" style={{ fontSize: 16, color: currentBranding.accent_color }}>{currentBranding.company_name}</div>
+                    )}
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: currentBranding.accent_color,
+                                  textTransform: 'uppercase', marginTop: 3 }}>
+                      {currentOrg?.name || currentBranding.company_name}
+                    </div>
+                  </>
+                )}
               </div>
               <button onClick={() => setMobileMenuOpen(false)} style={{ color: 'var(--mc-muted)', marginTop: 2 }}><X size={20} /></button>
             </div>
 
-            {currentUser?.is_super_admin && organizations.length > 1 && (
+            {currentUser?.is_super_admin && (
               <div className="mx-3 mb-2 px-2 py-1.5 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
                 <div className="flex items-center gap-1.5 mb-1" style={{ fontSize: 10, fontWeight: 600, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   <Building2 size={11} /> Организация
                 </div>
                 <select
-                  value={currentOrgId || ''}
+                  value={platformMode ? 'platform' : (currentOrgId || '')}
                   onChange={e => { switchOrg(e.target.value); setMobileMenuOpen(false); }}
                   className="w-full rounded-md border px-2 py-1 text-xs font-semibold"
                   style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', borderColor: 'var(--mc-border)' }}
                 >
+                  <option value="platform">Платформа</option>
                   {organizations.map(o => (
                     <option key={o.id} value={o.id}>{o.name}{o.is_demo ? ' (demo)' : ''}</option>
                   ))}
@@ -5745,7 +5888,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
               </div>
             )}
 
-            {userBase === 'all' && (
+            {userBase === 'all' && !platformMode && (
               <div className="mx-3 mb-2 grid grid-cols-2 gap-1 p-1 rounded-xl" style={{ background: 'var(--mc-active-item)' }}>
                 {[
                   { v: 'tk', label: 'ТК', icon: Truck },
@@ -6065,6 +6208,9 @@ function Screen({ ctx }) {
     case 'order_detail': return <OrderDetailScreen ctx={ctx} orderId={route.orderId} />;
     case 'archive': return <ArchiveScreen ctx={ctx} />;
     case 'export': return <ExportScreen ctx={ctx} />;
+    case 'platform_orgs': return <OrgManagementScreen ctx={ctx} />;
+    case 'platform_users': return <PlatformUsersScreen ctx={ctx} />;
+    case 'platform_errors': return <AdminErrorReportsScreen ctx={ctx} crossOrg />;
     case 'admin_users': return <AdminUsersScreen ctx={ctx} />;
     case 'admin_errors': return <AdminErrorReportsScreen ctx={ctx} />;
     case 'admin_service': return <AdminServiceScreen ctx={ctx} />;
@@ -10036,7 +10182,7 @@ function ExportScreen({ ctx }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function AdminUsersScreen({ ctx }) {
-  const { db, currentUser, updateUserRole, updateUserName, deactivateUser, activateUser, updateUserTgNotif, setPinForUser, resetPinForUser, showToast, resetDB } = ctx;
+  const { db, currentUser, updateUserRole, updateUserOrg, updateUserName, deactivateUser, activateUser, updateUserTgNotif, setPinForUser, resetPinForUser, showToast, resetDB, organizations } = ctx;
 
   const isAdmin = currentUser.role === 'admin';
   const isDirector = currentUser.role === 'director';
@@ -10111,6 +10257,13 @@ function AdminUsersScreen({ ctx }) {
               else showToast('Имя обновлено');
               return res;
             } : null}
+            onChangeOrg={currentUser.is_super_admin ? async (userId, orgId) => {
+              const res = await updateUserOrg(userId, orgId);
+              if (res?.error) showToast(res.error);
+              else showToast('Организация изменена');
+              return res;
+            } : null}
+            organizations={currentUser.is_super_admin ? organizations : null}
           />
         ))}
       </div>
@@ -10118,7 +10271,7 @@ function AdminUsersScreen({ ctx }) {
   );
 }
 
-function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActivate, onToggleTgNotif, onSetPin, onResetPin, onEditName }) {
+function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActivate, onToggleTgNotif, onSetPin, onResetPin, onEditName, onChangeOrg, organizations }) {
   const [open, setOpen] = useState(false);
   const [pinFormOpen, setPinFormOpen] = useState(false);
   const [pinValue, setPinValue] = useState('');
@@ -10167,6 +10320,10 @@ function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActi
           ) : (
             <span className="text-[10px] font-semibold rounded-full px-2 py-1" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>без роли</span>
           )}
+          {organizations && (() => {
+            const org = organizations.find(o => o.id === user.org_id);
+            return org ? <span className="text-[10px] font-semibold rounded-full px-2 py-1 whitespace-nowrap" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>{org.name}</span> : null;
+          })()}
           {!user.active && <span className="text-[10px] font-semibold rounded-full px-2 py-1" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>отключён</span>}
           <button onClick={() => setOpen(v => !v)} className="p-1" style={{ color: 'var(--mc-muted)' }}>
             <ChevronDown size={16} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
@@ -10175,6 +10332,23 @@ function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActi
       </div>
       {open && user.role !== 'admin' && (
         <div className="mt-3 pt-3 space-y-2" style={{ borderTop: '1px solid #F1F5F9' }}>
+          {/* Организация */}
+          {onChangeOrg && organizations && organizations.length > 1 && (
+            <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: 'var(--mc-active-item)' }}>
+              <Building2 size={14} style={{ color: 'var(--mc-muted)', flexShrink: 0 }} />
+              <span className="text-xs font-semibold" style={{ color: 'var(--mc-text)', flexShrink: 0 }}>Организация:</span>
+              <select
+                value={user.org_id || ''}
+                onChange={e => onChangeOrg(user.id, e.target.value)}
+                className="flex-1 rounded-md border px-2 py-1 text-xs"
+                style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', borderColor: 'var(--mc-border)' }}
+              >
+                {organizations.map(o => (
+                  <option key={o.id} value={o.id}>{o.name}{o.is_demo ? ' (demo)' : ''}</option>
+                ))}
+              </select>
+            </div>
+          )}
           {/* Имя */}
           {nameEditing && onEditName && (
             <div className="rounded-lg p-3" style={{ background: 'var(--mc-active-item)' }}>

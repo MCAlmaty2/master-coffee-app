@@ -1,8 +1,3 @@
-// ═════════════════════════════════════════════════════════════════════
-// ЭКРАН ВХОДА — STAGE V (ВИЗУАЛЬНОЕ ОФОРМЛЕНИЕ) — ИСПРАВЛЕННАЯ ВЕРСИЯ
-// Master Coffee Procurement OS
-// ═════════════════════════════════════════════════════════════════════
-
 function LoginScreen({ onLoginClick, loading = false, error = null }) {
   return (
     <div style={{
@@ -15,7 +10,7 @@ function LoginScreen({ onLoginClick, loading = false, error = null }) {
       position: 'relative',
       overflow: 'hidden',
     }}>
-      {/* Полоса сверху с повторяющимся текстом */}
+      {/* Полоса сверху */}
       <div style={{
         background: 'rgba(0, 0, 0, 0.15)',
         padding: '8px 0',
@@ -29,7 +24,7 @@ function LoginScreen({ onLoginClick, loading = false, error = null }) {
         textAlign: 'center',
         borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
       }}>
-        <span>MASTER COFFEE  •  MASTER COFFEE  •  MASTER COFFEE  •  MASTER COFFEE  •  MASTER</span>
+        <span>CRM PLATFORM  •  CRM PLATFORM  •  CRM PLATFORM  •  CRM PLATFORM  •  CRM</span>
       </div>
 
       {/* Центральное содержимое */}
@@ -42,41 +37,32 @@ function LoginScreen({ onLoginClick, loading = false, error = null }) {
         padding: '40px 20px',
         textAlign: 'center',
       }}>
-        {/* Облачко с кофейными зёрнышками - улучшенный SVG */}
-        <svg width="100" height="70" viewBox="0 0 100 70" style={{ marginBottom: 32 }} xmlns="http://www.w3.org/2000/svg">
-          {/* Облако - белое с градиентом */}
-          <defs>
-            <linearGradient id="cloudGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" style={{ stopColor: '#FFFFFF', stopOpacity: 1 }} />
-              <stop offset="100%" style={{ stopColor: '#F5F5F5', stopOpacity: 1 }} />
-            </linearGradient>
-          </defs>
-          
-          {/* Основное облако - три выпуклости */}
-          <path d="M 20 40 Q 15 40 15 35 Q 15 25 25 25 Q 30 15 40 15 Q 50 15 55 25 Q 65 25 65 35 Q 65 40 60 40 Z" 
-                fill="url(#cloudGrad)" stroke="#E0E0E0" strokeWidth="0.5" />
-          
-          {/* Нижние выпуклости */}
-          <ellipse cx="25" cy="42" rx="12" ry="10" fill="url(#cloudGrad)" stroke="#E0E0E0" strokeWidth="0.5" />
-          <ellipse cx="50" cy="42" rx="12" ry="10" fill="url(#cloudGrad)" stroke="#E0E0E0" strokeWidth="0.5" />
-          
-          {/* Кофейные зёрнышки внутри облака - коричневые овалы */}
-          {/* Верхний ряд */}
-          <ellipse cx="28" cy="28" rx="3.5" ry="5.5" fill="#8B6F47" opacity="0.9" transform="rotate(-25 28 28)" />
-          <ellipse cx="42" cy="24" rx="3.5" ry="5.5" fill="#9B7F57" opacity="0.9" transform="rotate(20 42 24)" />
-          <ellipse cx="56" cy="28" rx="3.5" ry="5.5" fill="#8B6F47" opacity="0.9" transform="rotate(-25 56 28)" />
-          
-          {/* Средний ряд */}
-          <ellipse cx="20" cy="38" rx="3.5" ry="5.5" fill="#7B5F37" opacity="0.85" transform="rotate(15 20 38)" />
-          <ellipse cx="40" cy="35" rx="3.5" ry="5.5" fill="#9B7F57" opacity="0.9" transform="rotate(-20 40 35)" />
-          <ellipse cx="62" cy="38" rx="3.5" ry="5.5" fill="#8B6F47" opacity="0.85" transform="rotate(15 62 38)" />
-          
-          {/* Нижний ряд */}
-          <ellipse cx="32" cy="46" rx="3.5" ry="5.5" fill="#6B5435" opacity="0.8" transform="rotate(25 32 46)" />
-          <ellipse cx="50" cy="48" rx="3.5" ry="5.5" fill="#7B5F37" opacity="0.8" transform="rotate(-20 50 48)" />
-        </svg>
+        {/* Иконка */}
+        <div style={{
+          width: 90,
+          height: 90,
+          borderRadius: 24,
+          background: 'rgba(255, 255, 255, 0.15)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 32,
+        }}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+            <path d="M9 22v-4h6v4" />
+            <path d="M8 6h.01" />
+            <path d="M16 6h.01" />
+            <path d="M12 6h.01" />
+            <path d="M12 10h.01" />
+            <path d="M12 14h.01" />
+            <path d="M16 10h.01" />
+            <path d="M16 14h.01" />
+            <path d="M8 10h.01" />
+            <path d="M8 14h.01" />
+          </svg>
+        </div>
 
-        {/* Текст логотипа */}
         <h1 style={{
           fontSize: '52px',
           fontWeight: 700,
@@ -85,10 +71,9 @@ function LoginScreen({ onLoginClick, loading = false, error = null }) {
           lineHeight: 1.2,
           letterSpacing: '-0.5px',
         }}>
-          MASTER<br />COFFEE
+          CRM
         </h1>
 
-        {/* Подзаголовок */}
         <p style={{
           fontSize: '12px',
           fontWeight: 500,
@@ -97,10 +82,9 @@ function LoginScreen({ onLoginClick, loading = false, error = null }) {
           letterSpacing: '1px',
           textTransform: 'uppercase',
         }}>
-          PROCUREMENT OS
+          OPERATIONS PLATFORM
         </p>
 
-        {/* Сообщение об ошибке */}
         {error && (
           <div style={{
             background: 'rgba(239, 68, 68, 0.2)',
@@ -151,12 +135,12 @@ function LoginScreen({ onLoginClick, loading = false, error = null }) {
         >
           {loading ? (
             <>
-              <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span>
+              <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>&#x27F3;</span>
               Загрузка...
             </>
           ) : (
             <>
-              <span style={{ fontSize: '18px' }}>✈️</span>
+              <span style={{ fontSize: '18px' }}>&#x2708;&#xFE0F;</span>
               Войти через Telegram
             </>
           )}

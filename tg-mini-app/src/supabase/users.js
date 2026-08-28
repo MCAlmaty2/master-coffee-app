@@ -1,6 +1,6 @@
 import { supabase } from './client';
 
-const SAFE_SELECT = 'id, telegram_id, tg_username, first_name, last_name, photo_url, role, active, created_at, approved_at, approved_by, tg_notif_enabled, tg_notif_prefs, home_prefs, birth_date';
+const SAFE_SELECT = 'id, telegram_id, tg_username, first_name, last_name, photo_url, role, active, created_at, approved_at, approved_by, tg_notif_enabled, tg_notif_prefs, home_prefs, birth_date, org_id, is_super_admin';
 
 export async function fetchAllUsers(orgId) {
   let query = supabase

@@ -26,7 +26,7 @@ export const SYNC_TABLES = {
   writeOffs:          { table: 'write_offs',        pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M }, base: 'tk' },
   contractRequests:   { table: 'contract_requests', pk: 'id', base: 'tk' },
   notifications:      { table: 'notifications',     pk: 'id', dateFilter: { column: 'at', cutoff: CUTOFF_3M } },
-  roleDefinitions:    { table: 'role_definitions',  pk: 'key' },
+  roleDefinitions:    { table: 'role_definitions',  pk: 'id' },
   telegramLog:        { table: 'telegram_log',      pk: 'id', dateFilter: { column: 'at', cutoff: CUTOFF_3M } },
   deliveryRegistries: { table: 'delivery_registries', pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M }, base: 'tk' },
   deliveryOrders:     { table: 'delivery_orders',     pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M }, base: 'tk' },
