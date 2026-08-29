@@ -1095,13 +1095,13 @@ function validateOrderForm(form) {
   if (form.client_type === 'individual') {
     const name = (form.full_name || '').trim();
     if (!name) errors.full_name = 'Укажите ФИО';
-    else if (/\d/.test(name)) errors.full_name = 'Имя не может содержать цифры';
-    else if (name.split(/\s+/).filter(Boolean).length < 2) errors.full_name = 'Минимум 2 слова';
-    else if (name.length < 6) errors.full_name = 'Минимум 6 символов';
+    else if (name.length < 3) errors.full_name = 'Минимум 3 символа';
+    else if (name.length > 21) errors.full_name = 'Максимум 21 символ';
   } else {
     const company = (form.company_name || '').trim();
     if (!company) errors.company_name = 'Укажите наименование юр. лица';
     else if (company.length < 3) errors.company_name = 'Минимум 3 символа';
+    else if (company.length > 21) errors.company_name = 'Максимум 21 символ';
     const bin = (form.bin || '').trim();
     if (!bin) errors.bin = 'Укажите БИН/ИИН';
     else if (!BIN_RE.test(bin)) errors.bin = 'БИН/ИИН — ровно 12 цифр';
@@ -3660,6 +3660,8 @@ function App() {
   const createGift = async (data) => {
     if (!hasPermission(db, currentUser, 'gift_create')) return { error: 'Нет прав на создание заявки на подарок' };
     if (!data.client_name?.trim()) return { error: 'Укажите клиента' };
+    if (data.client_name.trim().length < 3) return { error: 'Имя клиента — минимум 3 символа' };
+    if (data.client_name.trim().length > 21) return { error: 'Имя клиента — максимум 21 символ' };
     const items = (data.items || []).filter(i => i && i.name && String(i.name).trim() && Number(i.quantity) > 0);
     if (items.length === 0) return { error: 'Добавьте хотя бы одну позицию' };
     if (data.delivery_type === 'delivery' && !data.address?.trim()) return { error: 'Укажите адрес доставки' };
@@ -8189,14 +8191,14 @@ function EditOrderModal({ order, ctx, onClose, onSave }) {
           {/* Клиент */}
           {isLegal ? (
             <>
-              <div style={{ marginBottom: 10 }}><label style={lbl}>Наименование</label><input style={fld} value={form.company_name} onChange={e => upd('company_name', e.target.value)} /></div>
+              <div style={{ marginBottom: 10 }}><label style={lbl}>Наименование</label><input style={fld} value={form.company_name} onChange={e => upd('company_name', e.target.value)} maxLength={21} /></div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
                 <div><label style={lbl}>БИН</label><input style={fld} value={form.bin} onChange={e => upd('bin', e.target.value.replace(/\D/g, '').slice(0, 12))} /></div>
                 <div><label style={lbl}>Контакт</label><input style={fld} value={form.contact_person} onChange={e => upd('contact_person', e.target.value)} /></div>
               </div>
             </>
           ) : (
-            <div style={{ marginBottom: 10 }}><label style={lbl}>ФИО</label><input style={fld} value={form.full_name} onChange={e => upd('full_name', e.target.value)} /></div>
+            <div style={{ marginBottom: 10 }}><label style={lbl}>ФИО</label><input style={fld} value={form.full_name} onChange={e => upd('full_name', e.target.value)} maxLength={21} /></div>
           )}
           <div style={{ marginBottom: 10 }}><label style={lbl}>Телефон</label><input style={fld} value={form.phone} onChange={e => upd('phone', e.target.value)} /></div>
           <div style={{ marginBottom: 10 }}><label style={lbl}>{isLegal ? 'Юр. адрес' : 'Адрес'}</label><textarea rows={2} style={{ ...fld, resize: 'vertical' }} value={form.address} onChange={e => upd('address', e.target.value)} /></div>
@@ -8425,7 +8427,7 @@ function Card({ title, children }) {
 
 // Универсальное текстовое поле с лейблом и ошибкой.
 // Используется во многих формах (CreateOrderScreen, ExportScreen, AdminTelegramScreen и др.)
-function SiteInput({ label, value, onChange, error, type = 'text', placeholder, disabled }) {
+function SiteInput({ label, value, onChange, error, type = 'text', placeholder, disabled, maxLength }) {
   return (
     <div>
       {label && (
@@ -8437,6 +8439,7 @@ function SiteInput({ label, value, onChange, error, type = 'text', placeholder, 
         onChange={e => onChange?.(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
+        maxLength={maxLength}
         className="w-full px-3 py-2 rounded-lg outline-none"
         style={{
           border: `1px solid ${error ? '#EB5757' : 'var(--mc-border)'}`,
@@ -8602,10 +8605,10 @@ function CreateOrderScreen({ ctx }) {
                 <Users size={14} /> Выбрать из базы клиентов
               </button>
               {form.client_type === 'individual' ? (
-                <SiteInput label="ФИО" value={form.full_name} onChange={v => update({ full_name: v })} error={errors.full_name} placeholder="Иванов Иван Иванович" />
+                <SiteInput label="ФИО" value={form.full_name} onChange={v => update({ full_name: v })} error={errors.full_name} placeholder="Иванов Иван Иванович" maxLength={21} />
               ) : (
                 <>
-                  <SiteInput label="Наименование юр. лица" value={form.company_name} onChange={v => update({ company_name: v })} error={errors.company_name} placeholder='ТОО "Coffee Boom"' />
+                  <SiteInput label="Наименование юр. лица" value={form.company_name} onChange={v => update({ company_name: v })} error={errors.company_name} placeholder='ТОО "Coffee Boom"' maxLength={21} />
                   <SiteInput label="БИН/ИИН" value={form.bin} onChange={v => update({ bin: v.replace(/\D/g, '').slice(0, 12) })} error={errors.bin} placeholder="180440019877" />
                   <SiteInput label="Контактное лицо" value={form.contact_person} onChange={v => update({ contact_person: v })} error={errors.contact_person} placeholder="Касымов Ержан" />
                 </>
@@ -9328,7 +9331,8 @@ function CreateQuickScreen({ ctx }) {
 
   const handleCreate = async () => {
     const e = {};
-    if (!form.client_name || form.client_name.trim().length < 2) e.client_name = 'Укажите имя клиента';
+    if (!form.client_name || form.client_name.trim().length < 3) e.client_name = 'Минимум 3 символа';
+    else if (form.client_name.trim().length > 21) e.client_name = 'Максимум 21 символ';
     const items = form.items || [];
     if (items.length === 0) {
       e.items = 'Добавьте хотя бы один товар';
@@ -9579,6 +9583,7 @@ function CreateQuickScreen({ ctx }) {
                 <input
                   value={form.client_name || ''}
                   onChange={e => update({ client_name: e.target.value })}
+                  maxLength={21}
                   className="w-full px-3 py-2 rounded-lg outline-none"
                   style={{ border: `1px solid ${errors.client_name ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 15 }}
                 />
@@ -10827,18 +10832,21 @@ function CreateTaskScreen({ ctx }) {
     if (!form.assignee_id) e.assignee_id = 'Выберите исполнителя';
     if (isTraining) {
       if (!form.training_course) e.training_course = 'Выберите курс обучения';
-      if (!form.client_name || form.client_name.trim().length < 2) e.client_name = 'Укажите ФИО ученика';
+      if (!form.client_name || form.client_name.trim().length < 3) e.client_name = 'Минимум 3 символа';
+      else if (form.client_name.trim().length > 21) e.client_name = 'Максимум 21 символ';
       if (!form.phone || !normalizePhone(form.phone)) e.phone = 'Укажите телефон ученика';
       if (!form.visit_date || !form.visit_time) e.visit_time = 'Для обучения дата и время обязательны';
       if (courseInfo?.days === 1 && !form.training_prepaid) e.training_prepaid = 'Для однодневного курса необходима полная предоплата';
     } else if (isTasting) {
-      if (!form.client_name || form.client_name.trim().length < 2) e.client_name = 'Укажите наименование заведения';
+      if (!form.client_name || form.client_name.trim().length < 3) e.client_name = 'Минимум 3 символа';
+      else if (form.client_name.trim().length > 21) e.client_name = 'Максимум 21 символ';
       if ((form.tasting_location || 'school') === 'offsite' && (!form.address || form.address.trim().length < 4)) {
         e.address = 'Укажите адрес выездной дегустации';
       }
       if (!form.visit_date || !form.visit_time) e.visit_time = 'Для дегустации дата и время обязательны';
     } else if (!isInternal) {
-      if (!form.client_name || form.client_name.trim().length < 2) e.client_name = 'Укажите клиента';
+      if (!form.client_name || form.client_name.trim().length < 3) e.client_name = 'Минимум 3 символа';
+      else if (form.client_name.trim().length > 21) e.client_name = 'Максимум 21 символ';
       if (!form.address || form.address.trim().length < 4) e.address = 'Укажите адрес';
       if (!form.phone || !normalizePhone(form.phone)) e.phone = 'Некорректный номер';
     }
@@ -11127,7 +11135,7 @@ function CreateTaskScreen({ ctx }) {
           {!isInternal && !isTasting && !isTraining && (
             <Card title="Информация о клиенте">
               <div className="space-y-3">
-                <SiteInput label="Наименование компании или клиента" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Coffee Boom Almaty" />
+                <SiteInput label="Наименование компании или клиента" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Coffee Boom Almaty" maxLength={21} />
                 <SiteInput label="Адрес" value={form.address} onChange={v => update({ address: v })} error={errors.address} placeholder="г. Алматы, ул. Абая 150" />
                 <SiteInput label="Номер телефона" value={form.phone} onChange={v => update({ phone: v })} error={errors.phone} placeholder="+7 777 ..." />
               </div>
@@ -11137,7 +11145,7 @@ function CreateTaskScreen({ ctx }) {
           {isTasting && (
             <Card title="Информация о дегустации">
               <div className="space-y-3">
-                <SiteInput label="Наименование заведения *" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Coffee House, кафе «Уют»..." />
+                <SiteInput label="Наименование заведения *" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Coffee House, кафе «Уют»..." maxLength={21} />
                 <SiteInput label="Контактное лицо" value={form.tasting_contact || ''} onChange={v => update({ tasting_contact: v })} placeholder="Иванов Иван" />
                 <SiteInput label="Телефон" value={form.phone} onChange={v => update({ phone: v })} placeholder="+7 777 ..." />
                 <div>
@@ -11253,7 +11261,7 @@ function CreateTaskScreen({ ctx }) {
           {isTraining && (
             <Card title="Ученик / клиент">
               <div className="space-y-3">
-                <SiteInput label="ФИО ученика *" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Иванов Иван" />
+                <SiteInput label="ФИО ученика *" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Иванов Иван" maxLength={21} />
                 <SiteInput label="Телефон *" value={form.phone} onChange={v => update({ phone: v })} error={errors.phone} placeholder="+7 777 ..." />
                 <SiteInput label="Контактное лицо (если отличается)" value={form.training_contact || ''} onChange={v => update({ training_contact: v })} placeholder="Менеджер, родитель..." />
               </div>
@@ -15112,6 +15120,7 @@ function CreateGrindScreen({ ctx }) {
         <Card title="Контрагент">
           <input type="text" placeholder="ТОО / ИП / имя клиента"
             value={form.client_name} onChange={e => update({ client_name: e.target.value })}
+            maxLength={21}
             className="w-full px-3 py-2.5 rounded-lg outline-none"
             style={fieldStyle('client_name')} />
         </Card>
@@ -16045,6 +16054,13 @@ function NotificationsScreen({ ctx }) {
    ЭКРАН ОБРАТНОЙ СВЯЗИ
    ═════════════════════════════════════════════════════════════════════════ */
 
+const FB_TYPES = [
+  { key: 'feature', label: 'Доработка', icon: '🔧', color: '#3390EC' },
+  { key: 'bug',     label: 'Баг',       icon: '🐛', color: '#EB5757' },
+  { key: 'idea',    label: 'Предложение', icon: '💡', color: '#F59E0B' },
+  { key: 'other',   label: 'Другое',    icon: '📋', color: '#64748B' },
+];
+
 function FeedbackScreen({ ctx }) {
   const { db, currentUser, goBack, sendFeedback, showToast, setDb, notify } = ctx;
   const [message, setMessage] = useState('');
@@ -16185,6 +16201,18 @@ function FeedbackScreen({ ctx }) {
                       </div>
                     )}
 
+                    {/* Оценка от супер-админа */}
+                    {fb.estimate && (
+                      <div className="mt-2 p-3 rounded-lg" style={{ background: '#F0F4FF', border: '1px solid #C7D2FE' }}>
+                        <div className="text-xs font-bold mb-1.5" style={{ color: '#4338CA' }}>📋 Оценка обращения</div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: 'var(--mc-text)' }}>
+                          <div><span style={{ color: 'var(--mc-muted)' }}>Тип:</span> {FB_TYPES.find(t => t.key === fb.estimate.type)?.icon} {FB_TYPES.find(t => t.key === fb.estimate.type)?.label || fb.estimate.type}</div>
+                          {fb.estimate.time && <div><span style={{ color: 'var(--mc-muted)' }}>Срок:</span> {fb.estimate.time}</div>}
+                          {fb.estimate.cost && <div><span style={{ color: 'var(--mc-muted)' }}>Стоимость:</span> {Number(fb.estimate.cost).toLocaleString('ru')} ₸</div>}
+                        </div>
+                      </div>
+                    )}
+
                     {/* История комментариев */}
                     {comments.length > 0 && (
                       <div className="mt-2 space-y-1">
@@ -16263,6 +16291,7 @@ function AdminFeedbackScreen({ ctx }) {
   const [loading, setLoading] = React.useState(true);
   const [draft, setDraft] = React.useState({}); // fbId -> comment
   const [tab, setTab] = React.useState('active'); // active | archived
+  const [estimates, setEstimates] = React.useState({}); // fbId -> { type, time, cost }
 
   React.useEffect(() => {
     (async () => {
@@ -16271,7 +16300,11 @@ function AdminFeedbackScreen({ ctx }) {
         .select('*')
         .order('at', { ascending: false });
       if (error) console.warn('[feedback] load error:', error.message, error.code);
-      setFeedbacks(data || []);
+      const list = data || [];
+      setFeedbacks(list);
+      const est = {};
+      list.forEach(fb => { if (fb.estimate) est[fb.id] = fb.estimate; });
+      setEstimates(e => ({ ...e, ...est }));
       setLoading(false);
     })();
   }, []);
@@ -16326,6 +16359,32 @@ function AdminFeedbackScreen({ ctx }) {
     setFeedbacks(list => list.map(x => x.id === fb.id ? { ...x, ...patch } : x));
     setDraft(d => ({ ...d, [fb.id]: '' }));
     showToast('Комментарий добавлен');
+  };
+
+  const saveEstimate = async (fb) => {
+    const est = estimates[fb.id];
+    if (!est?.type) return showToast('Выберите тип обращения');
+    const patch = { estimate: est };
+    const { error } = await supabase.from('feedback_messages').update(patch).eq('id', fb.id);
+    if (error) return showToast('Ошибка: ' + error.message);
+    setFeedbacks(list => list.map(x => x.id === fb.id ? { ...x, ...patch } : x));
+    if (fb.sender_id && fb.sender_id !== currentUser.id && notify) {
+      const parts = [`Тип: ${FB_TYPES.find(t => t.key === est.type)?.label || est.type}`];
+      if (est.time) parts.push(`Срок: ${est.time}`);
+      if (est.cost) parts.push(`Стоимость: ${Number(est.cost).toLocaleString('ru')} ₸`);
+      const n = notify({
+        recipient_id: fb.sender_id,
+        title: '📋 Оценка по вашему обращению',
+        body: parts.join('\n'),
+        link_kind: 'feedback', link_id: fb.id,
+      });
+      if (n) setDb(d => ({ ...d, notifications: [n, ...(d.notifications || [])] }));
+    }
+    showToast('Оценка сохранена');
+  };
+
+  const updateEst = (fbId, field, value) => {
+    setEstimates(e => ({ ...e, [fbId]: { ...(e[fbId] || {}), [field]: value } }));
   };
 
   const activeFbs = feedbacks.filter(fb => fb.status !== 'archived');
@@ -16428,6 +16487,54 @@ function AdminFeedbackScreen({ ctx }) {
                             💬 Добавить комментарий
                           </button>
                         )}
+                        {/* Оценка обращения */}
+                        {!isAwaiting && (
+                          <div className="mt-3 p-3 rounded-xl" style={{ background: 'var(--mc-active-item)', border: '1px solid var(--mc-border)' }}>
+                            <div className="text-xs font-bold mb-2" style={{ color: 'var(--mc-text)' }}>📋 Оценка обращения</div>
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                              {FB_TYPES.map(t => {
+                                const sel = (estimates[fb.id]?.type) === t.key;
+                                return (
+                                  <button key={t.key} onClick={() => updateEst(fb.id, 'type', t.key)}
+                                    style={{ padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                                      border: `1.5px solid ${sel ? t.color : 'var(--mc-border)'}`,
+                                      background: sel ? `${t.color}18` : 'var(--mc-surface)', color: sel ? t.color : 'var(--mc-muted)' }}>
+                                    {t.icon} {t.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div className="flex gap-2 mb-2">
+                              <div className="flex-1">
+                                <label className="text-[10px] font-bold block mb-0.5" style={{ color: 'var(--mc-muted)' }}>Срок выполнения</label>
+                                <input value={estimates[fb.id]?.time || ''} onChange={e => updateEst(fb.id, 'time', e.target.value)}
+                                  placeholder="напр. 2-3 дня"
+                                  className="w-full px-2 py-1.5 rounded-lg text-xs"
+                                  style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)', color: 'var(--mc-text)' }} />
+                              </div>
+                              <div className="flex-1">
+                                <label className="text-[10px] font-bold block mb-0.5" style={{ color: 'var(--mc-muted)' }}>Стоимость (₸)</label>
+                                <input type="number" value={estimates[fb.id]?.cost || ''} onChange={e => updateEst(fb.id, 'cost', e.target.value)}
+                                  placeholder="0"
+                                  className="w-full px-2 py-1.5 rounded-lg text-xs"
+                                  style={{ border: '1px solid var(--mc-border)', background: 'var(--mc-surface)', color: 'var(--mc-text)' }} />
+                              </div>
+                            </div>
+                            {estimates[fb.id]?.type && (
+                              <button onClick={() => saveEstimate(fb)}
+                                className="w-full py-1.5 rounded-lg text-xs font-bold text-white"
+                                style={{ background: '#297b8a', cursor: 'pointer' }}>
+                                {fb.estimate ? 'Обновить оценку' : 'Сохранить оценку'}
+                              </button>
+                            )}
+                            {fb.estimate && (
+                              <div className="text-[10px] mt-1 text-center" style={{ color: 'var(--mc-muted)' }}>
+                                Сотрудник видит эту оценку
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {/* Кнопки статусов — скрываем если ожидает подтверждения */}
                         {!isAwaiting && (
                           <div className="flex flex-wrap gap-2 mt-2">
