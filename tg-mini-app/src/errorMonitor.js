@@ -18,6 +18,7 @@ function isDuplicate(message) {
 
 function sendToDb(kind, message, details) {
   if (!message || isDuplicate(message)) return;
+  if (String(message).includes('Failed to fetch')) return;
   supabase.from('error_reports').insert({
     reporter_id: null,
     reporter_name: 'Global handler',

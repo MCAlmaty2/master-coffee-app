@@ -1495,12 +1495,14 @@ function App() {
                 : snap.filter(r => r[cfg.pk] !== id);
             }
             console.warn(`[sync] ${stateKey} upsert ${id}:`, msg);
-            reportError({
-              kind: 'sync',
-              source: stateKey,
-              message: `Не удалось сохранить запись в "${stateKey}": ${msg}`,
-              details: { operation: 'upsert', rowId: id, error: msg },
-            });
+            if (!msg.includes('Failed to fetch')) {
+              reportError({
+                kind: 'sync',
+                source: stateKey,
+                message: `Не удалось сохранить запись в "${stateKey}": ${msg}`,
+                details: { operation: 'upsert', rowId: id, error: msg },
+              });
+            }
           });
         }
       }
@@ -1683,13 +1685,13 @@ function App() {
         org_id: _currentOrgId,
       }).then(({ error }) => {
         if (!error) {
-          const adminUser = db.users.find(u => u.role === 'admin');
-          if (adminUser) {
+          const superAdmin = db.users.find(u => u.is_super_admin);
+          if (superAdmin) {
             const reporter = currentUser
               ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim()
               : 'Гость';
             sendPrivateTelegram(
-              adminUser,
+              superAdmin,
               `🚨 <b>Ошибка в приложении</b>\nПользователь: ${reporter}\nМаршрут: ${reportEntry.route || '—'}\n\n${reportEntry.message}`,
             );
           }
