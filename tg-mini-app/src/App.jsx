@@ -10464,7 +10464,7 @@ function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActi
           </button>
         </div>
       </div>
-      {open && user.role !== 'admin' && (
+      {open && (
         <div className="mt-3 pt-3 space-y-2" style={{ borderTop: '1px solid #F1F5F9' }}>
           {/* Организация */}
           {onChangeOrg && organizations && organizations.length > 1 && (
