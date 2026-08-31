@@ -1154,6 +1154,7 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentOrgId, setCurrentOrgId] = useState(null);
   const [organizations, setOrganizations] = useState([]);
+  const [myOrgAccess, setMyOrgAccess] = useState([]);
   const orgIdRef = useRef(null);
   const [platformMode, setPlatformMode] = useState(false);
 
@@ -1219,13 +1220,26 @@ function App() {
         if (cancelled) return;
         const isSuperAdmin = meRow?.is_super_admin === true;
         let allOrgs = [];
+        let orgAccessList = [];
         if (isSuperAdmin) {
           const orgsRes = await supabase.from('organizations').select('*').order('name');
           allOrgs = orgsRes.data || [];
-        } else if (orgId) {
-          const { data: myOrg } = await supabase.from('organizations').select('*').eq('id', orgId).single();
-          if (myOrg) allOrgs = [myOrg];
+        } else if (savedSession) {
+          const { data: accessRows } = await supabase
+            .from('user_org_access').select('org_id, role').eq('user_id', savedSession.user_id);
+          orgAccessList = accessRows || [];
+          if (orgAccessList.length > 0) {
+            const orgIds = orgAccessList.map(a => a.org_id);
+            const { data: orgsData } = await supabase
+              .from('organizations').select('*').in('id', orgIds).order('name');
+            allOrgs = orgsData || [];
+          } else if (orgId) {
+            const { data: myOrg } = await supabase.from('organizations').select('*').eq('id', orgId).single();
+            if (myOrg) allOrgs = [myOrg];
+            orgAccessList = [{ org_id: orgId, role: meRow?.role || 'viewer' }];
+          }
         }
+        setMyOrgAccess(orgAccessList);
         orgIdRef.current = orgId;
         _currentOrgId = orgId;
         setOrgIdHeader(orgId);
@@ -1562,7 +1576,9 @@ function App() {
   }, [bootStatus.phase, db.scheduleTasks, db.users, session]);
 
   const currentUser = session ? db.users.find(u => u.id === session.user_id) : null;
-  const effectiveRole = (currentUser?.role === 'admin' && actAs) ? actAs : currentUser?.role;
+  const orgAccess = myOrgAccess.find(a => a.org_id === currentOrgId);
+  const isViewer = orgAccess?.role === 'viewer' && currentOrgId !== currentUser?.org_id;
+  const effectiveRole = isViewer ? 'viewer' : ((currentUser?.role === 'admin' && actAs) ? actAs : currentUser?.role);
 
   const switchOrg = async (newOrgId) => {
     if (newOrgId === 'platform') {
@@ -1583,7 +1599,9 @@ function App() {
         fetchAllProducts(newOrgId),
         supabase.from('telegram_settings').select('*').eq('org_id', newOrgId).single().then(r => r, () => ({ data: null })),
       ]);
-      const syncKeys = getTablesForRole(currentUser?.role);
+      const accessForOrg = myOrgAccess.find(a => a.org_id === newOrgId);
+      const isViewerOrg = accessForOrg?.role === 'viewer' && newOrgId !== currentUser?.org_id;
+      const syncKeys = isViewerOrg ? getTablesForRole('admin') : getTablesForRole(currentUser?.role);
       const rest = await Promise.all(
         syncKeys.map(k => fetchAllOfTable(k, newOrgId).catch(() => [])),
       );
@@ -2306,6 +2324,26 @@ function App() {
       const { error } = await supabase.from('users').update({ org_id: newOrgId }).eq('id', userId);
       if (error) throw error;
       setDb(d => ({ ...d, users: d.users.map(u => u.id === userId ? { ...u, org_id: newOrgId } : u) }));
+      return { ok: true };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+  const addOrgAccess = async (userId, orgId, role = 'viewer') => {
+    if (!currentUser?.is_super_admin) return { error: 'Только для супер-администратора' };
+    try {
+      const { error } = await supabase.from('user_org_access').upsert({ user_id: userId, org_id: orgId, role }, { onConflict: 'user_id,org_id' });
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+  const removeOrgAccess = async (userId, orgId) => {
+    if (!currentUser?.is_super_admin) return { error: 'Только для супер-администратора' };
+    try {
+      const { error } = await supabase.from('user_org_access').delete().eq('user_id', userId).eq('org_id', orgId);
+      if (error) throw error;
       return { ok: true };
     } catch (e) {
       return { error: e.message };
@@ -4674,12 +4712,12 @@ function App() {
   const currentBranding = useMemo(() => getOrgBranding(currentOrg), [currentOrg]);
 
   const ctx = {
-    db, setDb, currentUser, effectiveRole, actAs, setActAs, currentOrgId, organizations, setOrganizations, switchOrg, currentOrg, currentBranding, platformMode,
-    route, navigate, goBack, showToast, hasPermission: (perm) => hasPermission(db, currentUser, perm),
+    db, setDb, currentUser, effectiveRole, isViewer, actAs, setActAs, currentOrgId, organizations, setOrganizations, switchOrg, currentOrg, currentBranding, platformMode, myOrgAccess, setMyOrgAccess,
+    route, navigate, goBack, showToast, hasPermission: (perm) => isViewer ? false : hasPermission(db, currentUser, perm),
     bootStatus,
     loginViaTelegram, logout,
     createOrder, changeStatus, closePickupOrder, archiveDeliveredOrder, changeDeliveryMethod, cancelOrder, editOrder, revertLastAction,
-    approveAccess, rejectAccess, updateUserRole, updateUserOrg, updateUserName, deactivateUser, activateUser, updateUserTgNotif, updateMyTgPrefs, updateMyHomePrefs, transferAdmin,
+    approveAccess, rejectAccess, updateUserRole, updateUserOrg, updateUserName, deactivateUser, activateUser, updateUserTgNotif, updateMyTgPrefs, updateMyHomePrefs, transferAdmin, addOrgAccess, removeOrgAccess,
     createTask, startTask, completeTask, rescheduleTask, deleteTask, reassignTask, editTask,
     createWriteOff, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, prepareWriteOff, deliverWriteOff,
     createGift, approveGift, rejectGift, processGift, prepareGift, deliverGift, cancelGift,
@@ -4706,7 +4744,7 @@ function App() {
     generateWebToken,
     loginViaPin, setPinForUser, resetPinForUser,
     theme, toggleTheme,
-    can: (perm) => hasPermission(db, currentUser, perm),
+    can: (perm) => isViewer ? false : hasPermission(db, currentUser, perm),
     notify: (opts) => makeNotif(db, opts),
     syncSnapshotRef,
   };
@@ -5489,9 +5527,9 @@ const FULL_BLEED_ROUTES = new Set([
 ]);
 
 function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
-  const { currentUser, effectiveRole, actAs, setActAs, route, navigate, logout, db, theme, toggleTheme, currentOrgId, organizations, switchOrg, currentBranding, currentOrg, platformMode } = ctx;
+  const { currentUser, effectiveRole, isViewer, actAs, setActAs, route, navigate, logout, db, theme, toggleTheme, currentOrgId, organizations, switchOrg, currentBranding, currentOrg, platformMode, myOrgAccess } = ctx;
   const role = effectiveRole;
-  const isManager = MANAGER_ROLES.includes(role);
+  const isManager = MANAGER_ROLES.includes(role) || isViewer;
   const userBase = getUserBase(currentUser);
   const [viewBase, setViewBase] = useState(userBase === 'all' ? 'tk' : userBase);
   const activeBase = userBase === 'all' ? viewBase : userBase;
@@ -5532,27 +5570,28 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     }
 
     const mod = (key) => orgHasModule(currentOrg, key);
+    const canNav = (perm) => isViewer || hasPermission(db, currentUser, perm);
 
     // ── ОТДЕЛ ПРОДАЖ ──────────────────────
     if (mod('sales')) {
     const sales = [];
-    if (role === 'admin' || role === 'b2b' || role === 'sales' || role === 'warehouse'
+    if (isViewer || role === 'admin' || role === 'b2b' || role === 'sales' || role === 'warehouse'
         || hasPermission(db, currentUser, 'orders_view_all') || hasPermission(db, currentUser, 'orders_view_own')) {
       sales.push({ id: 'orders_list', label: 'Заявки', icon: Inbox });
     }
-    if (hasPermission(db, currentUser, 'grind_view_all') || hasPermission(db, currentUser, 'grind_create') || hasPermission(db, currentUser, 'grind_fulfill')) {
+    if (isViewer || hasPermission(db, currentUser, 'grind_view_all') || hasPermission(db, currentUser, 'grind_create') || hasPermission(db, currentUser, 'grind_fulfill')) {
       sales.push({ id: 'grinds', label: 'Помол кофе', icon: Coffee });
     }
-    if (hasPermission(db, currentUser, 'contract_view_all') || hasPermission(db, currentUser, 'contract_create')) {
+    if (isViewer || hasPermission(db, currentUser, 'contract_view_all') || hasPermission(db, currentUser, 'contract_create')) {
       sales.push({ id: 'contracts', label: 'Договоры', icon: FileText });
     }
     if (isManager || role === 'director' || role === 'senior_manager') {
       sales.push({ id: 'clients', label: 'Клиенты', icon: Users });
     }
-    if (hasPermission(db, currentUser, 'shipment_view') || hasPermission(db, currentUser, 'shipment_edit')) {
+    if (isViewer || hasPermission(db, currentUser, 'shipment_view') || hasPermission(db, currentUser, 'shipment_edit')) {
       sales.push({ id: 'shipment_registry', label: 'Реестр отгрузок', icon: Package });
     }
-    if (hasPermission(db, currentUser, 'mpp_manage') || hasPermission(db, currentUser, 'mpp_view')) {
+    if (isViewer || hasPermission(db, currentUser, 'mpp_manage') || hasPermission(db, currentUser, 'mpp_view')) {
       sales.push({ id: 'mpp_kanban', label: 'Воронка МПП', icon: Monitor });
     }
     if (sales.length > 0) groups.push({ title: 'Отдел продаж', items: sales, collapsible: true, base: 'tk' });
@@ -5561,11 +5600,11 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     // ── БАРИСТА И ТЕХНИКИ ────────────────
     if (mod('field')) {
     const field = [];
-    if (FIELD_ROLES.includes(role) || isManager
+    if (isViewer || FIELD_ROLES.includes(role) || isManager
         || hasPermission(db, currentUser, 'tasks_view_own') || hasPermission(db, currentUser, 'tasks_self_assign')) {
       field.push({ id: 'tasks_list', label: 'Задачи (выезд)', icon: ClipboardList });
     }
-    if (FIELD_ROLES.includes(role) || isManager || hasPermission(db, currentUser, 'tasks_calendar_all')) {
+    if (isViewer || FIELD_ROLES.includes(role) || isManager || hasPermission(db, currentUser, 'tasks_calendar_all')) {
       field.push({ id: 'field_calendar', label: 'Календарь команды', icon: Eye });
     }
     if (field.length > 0) groups.push({ title: 'Бариста и техники', items: field, collapsible: true, base: 'tk' });
@@ -5574,17 +5613,17 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     // ── СКЛАД И ДОСТАВКА ─────────────────
     if (mod('warehouse')) {
     const warehouse = [];
-    if (hasPermission(db, currentUser, 'delivery_manage') || hasPermission(db, currentUser, 'delivery_view_all')) {
+    if (isViewer || hasPermission(db, currentUser, 'delivery_manage') || hasPermission(db, currentUser, 'delivery_view_all')) {
       warehouse.push({ id: 'delivery_registries', label: 'Доставки', icon: Truck });
     }
-    if (hasPermission(db, currentUser, 'delivery_courier')) {
+    if (!isViewer && hasPermission(db, currentUser, 'delivery_courier')) {
       warehouse.push({ id: 'courier_registry', label: 'Мои доставки', icon: Truck });
     }
-    if (['cashier', 'director', 'senior_manager', 'warehouse'].includes(role)
+    if (isViewer || ['cashier', 'director', 'senior_manager', 'warehouse'].includes(role)
         || hasPermission(db, currentUser, 'writeoff_view_all') || hasPermission(db, currentUser, 'writeoff_create')) {
       warehouse.push({ id: 'writeoffs', label: 'Списания', icon: Trash2 });
     }
-    if (hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
+    if (isViewer || hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
         || hasPermission(db, currentUser, 'gift_process') || hasPermission(db, currentUser, 'gift_view_all')
         || role === 'warehouse') {
       warehouse.push({ id: 'gifts', label: 'Подарки', icon: Gift });
@@ -5594,16 +5633,16 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
 
     // ── АРХИВ / ЭКСПОРТ ──────────────────
     const archiveItems = [];
-    if (role === 'admin' || role === 'b2b' || hasPermission(db, currentUser, 'orders_archive_view')) {
+    if (isViewer || role === 'admin' || role === 'b2b' || hasPermission(db, currentUser, 'orders_archive_view')) {
       archiveItems.push({ id: 'archive', label: 'Архив', icon: Inbox });
     }
-    if (role === 'admin' || role === 'b2b' || hasPermission(db, currentUser, 'orders_export')) {
+    if (isViewer || role === 'admin' || role === 'b2b' || hasPermission(db, currentUser, 'orders_export')) {
       archiveItems.push({ id: 'export', label: 'Экспорт', icon: Download });
     }
     if (archiveItems.length > 0) groups.push({ title: 'Архив', items: archiveItems, collapsible: true, base: 'tk' });
 
-    // ── ТОВАРЫ / ПРАЙС (по праву products_edit) ────────────────────────────
-    if (mod('products') && hasPermission(db, currentUser, 'products_edit')) {
+    // ── ТОВАРЫ / ПРАЙС ────────────────────────────
+    if (mod('products') && (isViewer || hasPermission(db, currentUser, 'products_edit'))) {
       const prodItems = [];
       prodItems.push({ id: 'admin_products', label: 'Товары / прайс',     icon: Package });
       prodItems.push({ id: 'admin_categories', label: 'Категории товаров', icon: Tag });
@@ -5613,12 +5652,12 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     // ── КОФЕЙНИ ────────────────────────────
     if (mod('coffeeshops')) {
     const coffeeItems = [];
-    if (hasPermission(db, currentUser, 'coffee_shipments_view')
+    if (isViewer || hasPermission(db, currentUser, 'coffee_shipments_view')
         || hasPermission(db, currentUser, 'coffee_shipments_edit')
         || hasPermission(db, currentUser, 'coffee_shipments_pay')) {
       coffeeItems.push({ id: 'coffee_shipments', label: 'Отгрузки кофеен', icon: Building2 });
     }
-    if (hasPermission(db, currentUser, 'coffee_tasks_view') || hasPermission(db, currentUser, 'coffee_tasks_edit')) {
+    if (isViewer || hasPermission(db, currentUser, 'coffee_tasks_view') || hasPermission(db, currentUser, 'coffee_tasks_edit')) {
       coffeeItems.push({ id: 'coffee_tasks', label: 'Задачник', icon: ListTodo });
     }
     if (coffeeItems.length > 0) groups.push({ title: 'Кофейни', items: coffeeItems, collapsible: true, base: 'coffeeshop' });
@@ -5627,19 +5666,19 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     // ── ФИНАНСЫ (касса / подотчёт / расходы) ────────────────────────────
     if (mod('finance')) {
       const finItems = [];
-      if (['admin', 'director', 'cashier'].includes(currentUser.role)) {
+      if (isViewer || ['admin', 'director', 'cashier'].includes(currentUser.role)) {
         finItems.push({ id: 'cash', label: 'Касса / Подотчёт', icon: Banknote });
       }
-      if (hasPermission(db, currentUser, 'expense_create') || hasPermission(db, currentUser, 'expense_approve') || hasPermission(db, currentUser, 'expense_pay') || hasPermission(db, currentUser, 'expense_view_all')) {
+      if (isViewer || hasPermission(db, currentUser, 'expense_create') || hasPermission(db, currentUser, 'expense_approve') || hasPermission(db, currentUser, 'expense_pay') || hasPermission(db, currentUser, 'expense_view_all')) {
         finItems.push({ id: 'expenses', label: 'Чеки расходов', icon: Receipt });
       }
-      if (hasPermission(db, currentUser, 'budget_view')) {
+      if (isViewer || hasPermission(db, currentUser, 'budget_view')) {
         finItems.push({ id: 'budget', label: 'Бюджет', icon: Wallet });
       }
-      if (hasPermission(db, currentUser, 'deferred_manage') || hasPermission(db, currentUser, 'deferred_view_all') || hasPermission(db, currentUser, 'deferred_shipment')) {
+      if (isViewer || hasPermission(db, currentUser, 'deferred_manage') || hasPermission(db, currentUser, 'deferred_view_all') || hasPermission(db, currentUser, 'deferred_shipment')) {
         finItems.push({ id: 'deferred_payments', label: 'Отсрочки платежей', icon: Calendar });
       }
-      if (currentUser.role === 'cashier' || currentUser.role === 'admin') {
+      if (isViewer || currentUser.role === 'cashier' || currentUser.role === 'admin') {
         finItems.push({ id: 'cash_queue', label: 'Наличные от доставок', icon: Banknote });
       }
       if (finItems.length > 0) groups.push({ title: 'Финансы', items: finItems, collapsible: true, base: 'tk' });
@@ -5648,21 +5687,21 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     // ── АРЕНДА ОБОРУДОВАНИЯ ────────────────────
     if (mod('rental')) {
       const rentalItems = [];
-      if (hasPermission(db, currentUser, 'rental_equipment') || hasPermission(db, currentUser, 'rental_clients') || hasPermission(db, currentUser, 'rental_purchases') || hasPermission(db, currentUser, 'rental_revisions') || hasPermission(db, currentUser, 'rental_report')) {
+      if (isViewer || hasPermission(db, currentUser, 'rental_equipment') || hasPermission(db, currentUser, 'rental_clients') || hasPermission(db, currentUser, 'rental_purchases') || hasPermission(db, currentUser, 'rental_revisions') || hasPermission(db, currentUser, 'rental_report')) {
         rentalItems.push({ id: 'rental_home', label: 'Арендное оборудование', icon: Wrench });
       }
       if (rentalItems.length > 0) groups.push({ title: 'Аренда', items: rentalItems, collapsible: true, base: 'tk' });
     }
 
     // ── HR-КАЛЕНДАРЬ (отпуска и дни рождения) ────────────────────
-    if (mod('hr') && hasPermission(db, currentUser, 'hr_calendar_view')) {
+    if (mod('hr') && (isViewer || hasPermission(db, currentUser, 'hr_calendar_view'))) {
       groups.push({ title: 'HR', items: [
         { id: 'hr_calendar', label: 'Отпуска и дни рождения', icon: CalendarDays },
       ], collapsible: true, base: 'tk' });
     }
 
     // ── РАСПИСАНИЕ (по разрешению schedule_access) ────────────────────
-    if (mod('hr') && hasPermission(db, currentUser, 'schedule_access')) {
+    if (mod('hr') && (isViewer || hasPermission(db, currentUser, 'schedule_access'))) {
       groups.push({ title: 'Расписание', items: [
         { id: 'schedule', label: 'Регулярные задачи', icon: Calendar },
       ], collapsible: true, base: 'tk' });
@@ -5729,10 +5768,11 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
           )}
         </div>
 
-        {currentUser?.is_super_admin && (
+        {(currentUser?.is_super_admin || myOrgAccess.length > 1) && (
           <div className="mx-3 mb-2 px-2 py-1.5 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
             <div className="flex items-center gap-1.5 mb-1" style={{ fontSize: 10, fontWeight: 600, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               <Building2 size={11} /> Организация
+              {isViewer && <span style={{ color: '#F59E0B', marginLeft: 4 }}>(просмотр)</span>}
             </div>
             <select
               value={platformMode ? 'platform' : (currentOrgId || '')}
@@ -5740,10 +5780,12 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
               className="w-full rounded-md border px-2 py-1 text-xs font-semibold"
               style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', borderColor: 'var(--mc-border)' }}
             >
-              <option value="platform">Платформа</option>
-              {organizations.map(o => (
-                <option key={o.id} value={o.id}>{o.name}{o.is_demo ? ' (demo)' : ''}</option>
-              ))}
+              {currentUser?.is_super_admin && <option value="platform">Платформа</option>}
+              {organizations.map(o => {
+                const acc = myOrgAccess.find(a => a.org_id === o.id);
+                const viewerTag = acc?.role === 'viewer' && o.id !== currentUser?.org_id ? ' (просмотр)' : '';
+                return <option key={o.id} value={o.id}>{o.name}{o.is_demo ? ' (demo)' : ''}{viewerTag}</option>;
+              })}
             </select>
           </div>
         )}
@@ -5873,10 +5915,11 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
               <button onClick={() => setMobileMenuOpen(false)} style={{ color: 'var(--mc-muted)', marginTop: 2 }}><X size={20} /></button>
             </div>
 
-            {currentUser?.is_super_admin && (
+            {(currentUser?.is_super_admin || myOrgAccess.length > 1) && (
               <div className="mx-3 mb-2 px-2 py-1.5 rounded-lg" style={{ background: 'var(--mc-active-item)' }}>
                 <div className="flex items-center gap-1.5 mb-1" style={{ fontSize: 10, fontWeight: 600, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   <Building2 size={11} /> Организация
+                  {isViewer && <span style={{ color: '#F59E0B', marginLeft: 4 }}>(просмотр)</span>}
                 </div>
                 <select
                   value={platformMode ? 'platform' : (currentOrgId || '')}
@@ -5884,10 +5927,12 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
                   className="w-full rounded-md border px-2 py-1 text-xs font-semibold"
                   style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', borderColor: 'var(--mc-border)' }}
                 >
-                  <option value="platform">Платформа</option>
-                  {organizations.map(o => (
-                    <option key={o.id} value={o.id}>{o.name}{o.is_demo ? ' (demo)' : ''}</option>
-                  ))}
+                  {currentUser?.is_super_admin && <option value="platform">Платформа</option>}
+                  {organizations.map(o => {
+                    const acc = myOrgAccess.find(a => a.org_id === o.id);
+                    const viewerTag = acc?.role === 'viewer' && o.id !== currentUser?.org_id ? ' (просмотр)' : '';
+                    return <option key={o.id} value={o.id}>{o.name}{o.is_demo ? ' (demo)' : ''}{viewerTag}</option>;
+                  })}
                 </select>
               </div>
             )}
@@ -6190,6 +6235,7 @@ function Screen({ ctx }) {
   const { route, effectiveRole, currentUser, db } = ctx;
   switch (route.name) {
     case 'home':
+      if (effectiveRole === 'viewer') return <DashboardHome ctx={ctx} title="Главная — Просмотр" />;
       if (effectiveRole === 'admin') return <AdminHome ctx={ctx} />;
       if (effectiveRole === 'b2b') return <DashboardHome ctx={ctx} title="Главная — B2B" />;
       if (effectiveRole === 'sales') return <DashboardHome ctx={ctx} title="Главная — Продажи" />;
@@ -10188,8 +10234,87 @@ function ExportScreen({ ctx }) {
    ADMIN: ПОЛЬЗОВАТЕЛИ
    ═════════════════════════════════════════════════════════════════════════ */
 
+function OrgAccessBlock({ user, organizations, onAdd, onRemove }) {
+  const [accessList, setAccessList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [addingOrg, setAddingOrg] = useState('');
+  const [addingRole, setAddingRole] = useState('viewer');
+  const ACCESS_ROLES = [
+    { key: 'viewer', label: 'Просмотр' },
+    { key: 'admin', label: 'Админ' },
+    { key: 'manager', label: 'Менеджер' },
+  ];
+  useEffect(() => {
+    supabase.from('user_org_access').select('org_id, role').eq('user_id', user.id)
+      .then(({ data }) => { setAccessList(data || []); setLoading(false); });
+  }, [user.id]);
+  const otherOrgs = organizations.filter(o => o.id !== user.org_id && !accessList.some(a => a.org_id === o.id));
+  const extraAccess = accessList.filter(a => a.org_id !== user.org_id);
+  return (
+    <div className="rounded-lg p-3" style={{ background: 'var(--mc-active-item)' }}>
+      <div className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--mc-text)' }}>
+        <Eye size={12} /> Дополнительный доступ
+      </div>
+      {loading ? <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Загрузка...</div> : (
+        <>
+          {extraAccess.length > 0 && (
+            <div className="space-y-1 mb-2">
+              {extraAccess.map(a => {
+                const org = organizations.find(o => o.id === a.org_id);
+                return (
+                  <div key={a.org_id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs" style={{ background: 'var(--mc-bg)', border: '1px solid var(--mc-border)' }}>
+                    <span className="font-semibold truncate">{org?.name || a.org_id}</span>
+                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: a.role === 'viewer' ? '#FEF3C7' : '#DCFCE7', color: a.role === 'viewer' ? '#92400E' : '#166534' }}>
+                      {ACCESS_ROLES.find(r => r.key === a.role)?.label || a.role}
+                    </span>
+                    <button onClick={async () => {
+                      const res = await onRemove(user.id, a.org_id);
+                      if (!res?.error) setAccessList(prev => prev.filter(x => x.org_id !== a.org_id));
+                    }} className="p-0.5" style={{ color: 'var(--mc-danger-text)' }}>
+                      <X size={14} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {otherOrgs.length > 0 && (
+            <div className="flex items-center gap-2">
+              <select value={addingOrg} onChange={e => setAddingOrg(e.target.value)}
+                className="flex-1 rounded-md border px-2 py-1 text-xs"
+                style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', borderColor: 'var(--mc-border)' }}>
+                <option value="">Добавить орг...</option>
+                {otherOrgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+              <select value={addingRole} onChange={e => setAddingRole(e.target.value)}
+                className="rounded-md border px-2 py-1 text-xs"
+                style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', borderColor: 'var(--mc-border)' }}>
+                {ACCESS_ROLES.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+              </select>
+              <button disabled={!addingOrg} onClick={async () => {
+                if (!addingOrg) return;
+                const res = await onAdd(user.id, addingOrg, addingRole);
+                if (!res?.error) {
+                  setAccessList(prev => [...prev, { org_id: addingOrg, role: addingRole }]);
+                  setAddingOrg('');
+                }
+              }} className="px-3 py-1 rounded-lg text-xs font-semibold text-white"
+                style={{ background: addingOrg ? '#297b8a' : '#A8A8AE' }}>
+                +
+              </button>
+            </div>
+          )}
+          {otherOrgs.length === 0 && extraAccess.length === 0 && (
+            <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Нет дополнительных организаций</div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function AdminUsersScreen({ ctx }) {
-  const { db, currentUser, updateUserRole, updateUserOrg, updateUserName, deactivateUser, activateUser, updateUserTgNotif, setPinForUser, resetPinForUser, showToast, resetDB, organizations } = ctx;
+  const { db, currentUser, updateUserRole, updateUserOrg, updateUserName, deactivateUser, activateUser, updateUserTgNotif, setPinForUser, resetPinForUser, showToast, resetDB, organizations, addOrgAccess, removeOrgAccess } = ctx;
 
   const isAdmin = currentUser.role === 'admin';
   const isDirector = currentUser.role === 'director';
@@ -10271,6 +10396,8 @@ function AdminUsersScreen({ ctx }) {
               return res;
             } : null}
             organizations={currentUser.is_super_admin ? organizations : null}
+            onAddOrgAccess={currentUser.is_super_admin ? addOrgAccess : null}
+            onRemoveOrgAccess={currentUser.is_super_admin ? removeOrgAccess : null}
           />
         ))}
       </div>
@@ -10278,7 +10405,7 @@ function AdminUsersScreen({ ctx }) {
   );
 }
 
-function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActivate, onToggleTgNotif, onSetPin, onResetPin, onEditName, onChangeOrg, organizations }) {
+function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActivate, onToggleTgNotif, onSetPin, onResetPin, onEditName, onChangeOrg, organizations, onAddOrgAccess, onRemoveOrgAccess }) {
   const [open, setOpen] = useState(false);
   const [pinFormOpen, setPinFormOpen] = useState(false);
   const [pinValue, setPinValue] = useState('');
@@ -10355,6 +10482,10 @@ function UserRow({ user, db, allowedRoleKeys, onChangeRole, onDeactivate, onActi
                 ))}
               </select>
             </div>
+          )}
+          {/* Дополнительный доступ к организациям */}
+          {onAddOrgAccess && organizations && organizations.length > 1 && (
+            <OrgAccessBlock user={user} organizations={organizations} onAdd={onAddOrgAccess} onRemove={onRemoveOrgAccess} />
           )}
           {/* Имя */}
           {nameEditing && onEditName && (
