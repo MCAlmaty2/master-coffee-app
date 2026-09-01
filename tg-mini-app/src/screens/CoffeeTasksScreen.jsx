@@ -5,7 +5,7 @@ import {
   Repeat, Clock, ExternalLink, CheckCircle, AlertCircle,
   Eye, Building2, Users, History,
 } from 'lucide-react';
-import { deleteRow } from '../supabase/sync';
+import { deleteRow, upsertRow } from '../supabase/sync';
 import { supabase } from '../supabase/client';
 
 const TZ = 'Asia/Almaty';
@@ -282,21 +282,23 @@ function CoffeeTasksScreen({ ctx }) {
   const doneCount = filteredItems.filter(i => i.done).length;
   const totalCount = filteredItems.length;
 
-  const toggleDone = (taskId) => {
+  const toggleDone = async (taskId) => {
     const task = (db.coffeeTasks || []).find(t => t.id === taskId);
+    if (!task) return;
+    let updatedTask;
+    if (task.status === 'done' || task.status === 'confirmed') {
+      updatedTask = { ...task, status: 'pending', completed_at: null, confirmed_by: null, confirmed_at: null };
+    } else if (task.requires_confirmation) {
+      updatedTask = { ...task, status: 'awaiting_confirmation', completed_at: new Date().toISOString(), completed_by: currentUser.id };
+    } else {
+      updatedTask = { ...task, status: 'done', completed_at: new Date().toISOString() };
+    }
+    await upsertRow('coffeeTasks', updatedTask).catch(() => {});
     setDb(d => {
       const updated = { ...d };
-      updated.coffeeTasks = (d.coffeeTasks || []).map(t => {
-        if (t.id !== taskId) return t;
-        if (t.status === 'done' || t.status === 'confirmed') {
-          return { ...t, status: 'pending', completed_at: null, confirmed_by: null, confirmed_at: null };
-        }
-        if (t.requires_confirmation) {
-          return { ...t, status: 'awaiting_confirmation', completed_at: new Date().toISOString(), completed_by: currentUser.id };
-        }
-        return { ...t, status: 'done', completed_at: new Date().toISOString() };
-      });
-      if (task && task.requires_confirmation && task.status === 'pending' && task.created_by !== currentUser.id) {
+      updated.coffeeTasks = (d.coffeeTasks || []).map(t => t.id === taskId ? updatedTask : t);
+      if (syncSnapshotRef) syncSnapshotRef.current.coffeeTasks = updated.coffeeTasks;
+      if (task.requires_confirmation && task.status === 'pending' && task.created_by !== currentUser.id) {
         const n = notify({
           recipient_id: task.created_by, title: '✅ Задача выполнена',
           body: `${task.title} — ожидает подтверждения`,
@@ -308,25 +310,29 @@ function CoffeeTasksScreen({ ctx }) {
     });
   };
 
-  const confirmTask = (taskId) => {
-    setDb(d => ({
-      ...d,
-      coffeeTasks: (d.coffeeTasks || []).map(t => {
-        if (t.id !== taskId) return t;
-        return { ...t, status: 'confirmed', confirmed_by: currentUser.id, confirmed_at: new Date().toISOString() };
-      }),
-    }));
+  const confirmTask = async (taskId) => {
+    const task = (db.coffeeTasks || []).find(t => t.id === taskId);
+    if (!task) return;
+    const updatedTask = { ...task, status: 'confirmed', confirmed_by: currentUser.id, confirmed_at: new Date().toISOString() };
+    await upsertRow('coffeeTasks', updatedTask).catch(() => {});
+    setDb(d => {
+      const updated = (d.coffeeTasks || []).map(t => t.id === taskId ? updatedTask : t);
+      if (syncSnapshotRef) syncSnapshotRef.current.coffeeTasks = updated;
+      return { ...d, coffeeTasks: updated };
+    });
     showToast('Задача подтверждена');
   };
 
-  const rejectConfirmation = (taskId) => {
-    setDb(d => ({
-      ...d,
-      coffeeTasks: (d.coffeeTasks || []).map(t => {
-        if (t.id !== taskId) return t;
-        return { ...t, status: 'pending', completed_at: null, completed_by: null };
-      }),
-    }));
+  const rejectConfirmation = async (taskId) => {
+    const task = (db.coffeeTasks || []).find(t => t.id === taskId);
+    if (!task) return;
+    const updatedTask = { ...task, status: 'pending', completed_at: null, completed_by: null };
+    await upsertRow('coffeeTasks', updatedTask).catch(() => {});
+    setDb(d => {
+      const updated = (d.coffeeTasks || []).map(t => t.id === taskId ? updatedTask : t);
+      if (syncSnapshotRef) syncSnapshotRef.current.coffeeTasks = updated;
+      return { ...d, coffeeTasks: updated };
+    });
     showToast('Задача отклонена — не выполнено');
   };
 
@@ -350,7 +356,7 @@ function CoffeeTasksScreen({ ctx }) {
     showToast('Регулярная задача удалена');
   };
 
-  const saveTask = (form) => {
+  const saveTask = async (form) => {
     const base = {
       title: form.title.trim(),
       description: form.description?.trim() || '',
@@ -366,16 +372,21 @@ function CoffeeTasksScreen({ ctx }) {
     };
     const ids = form.assignee_ids || [form.assignee_id];
     if (editTask) {
-      setDb(d => ({
-        ...d,
-        coffeeTasks: (d.coffeeTasks || []).map(t => t.id === editTask.id ? { ...t, ...base, assignee_id: ids[0] } : t),
-      }));
+      const updatedTask = { ...editTask, ...base, assignee_id: ids[0] };
+      await upsertRow('coffeeTasks', updatedTask).catch(() => {});
+      setDb(d => {
+        const updated = (d.coffeeTasks || []).map(t => t.id === editTask.id ? updatedTask : t);
+        if (syncSnapshotRef) syncSnapshotRef.current.coffeeTasks = updated;
+        return { ...d, coffeeTasks: updated };
+      });
       showToast('Задача обновлена');
     } else {
       const newTasks = ids.map(aid => ({
         id: uid(), ...base, assignee_id: aid,
         status: 'pending', created_by: currentUser.id, created_at: new Date().toISOString(),
+        org_id: ctx.currentOrgId,
       }));
+      await Promise.all(newTasks.map(t => upsertRow('coffeeTasks', t).catch(() => {})));
       const notifs = [];
       newTasks.forEach(t => {
         if (t.assignee_id !== currentUser.id) {
@@ -389,11 +400,15 @@ function CoffeeTasksScreen({ ctx }) {
           if (n) notifs.push(n);
         }
       });
-      setDb(d => ({
-        ...d,
-        coffeeTasks: [...(d.coffeeTasks || []), ...newTasks],
-        ...(notifs.length ? { notifications: [...(d.notifications || []), ...notifs] } : {}),
-      }));
+      setDb(d => {
+        const updated = [...(d.coffeeTasks || []), ...newTasks];
+        if (syncSnapshotRef) syncSnapshotRef.current.coffeeTasks = updated;
+        return {
+          ...d,
+          coffeeTasks: updated,
+          ...(notifs.length ? { notifications: [...(d.notifications || []), ...notifs] } : {}),
+        };
+      });
       showToast(ids.length > 1 ? `Задача назначена ${ids.length} сотрудникам` : 'Задача добавлена');
     }
     setShowAdd(false);
@@ -433,7 +448,7 @@ function CoffeeTasksScreen({ ctx }) {
     showToast('Регулярная задача создана');
   };
 
-  const generateTwi = (roleKey, period) => {
+  const generateTwi = async (roleKey, period) => {
     const tpl = TWI_TEMPLATES[roleKey];
     if (!tpl) return;
     const assignee = coffeeUsers.find(u => u.role === roleKey);
@@ -446,6 +461,7 @@ function CoffeeTasksScreen({ ctx }) {
           id: uid(), title: t.title, category: t.category,
           assignee_id: assigneeId, date: week[t.day - 1] || selectedDate,
           status: 'pending', created_by: currentUser.id, created_at: new Date().toISOString(),
+          org_id: ctx.currentOrgId,
         });
       });
     } else {
@@ -454,10 +470,16 @@ function CoffeeTasksScreen({ ctx }) {
           id: uid(), title: t.title, category: t.category,
           assignee_id: assigneeId, date: selectedDate,
           status: 'pending', created_by: currentUser.id, created_at: new Date().toISOString(),
+          org_id: ctx.currentOrgId,
         });
       });
     }
-    setDb(d => ({ ...d, coffeeTasks: [...(d.coffeeTasks || []), ...tasks] }));
+    await Promise.all(tasks.map(t => upsertRow('coffeeTasks', t).catch(() => {})));
+    setDb(d => {
+      const updated = [...(d.coffeeTasks || []), ...tasks];
+      if (syncSnapshotRef) syncSnapshotRef.current.coffeeTasks = updated;
+      return { ...d, coffeeTasks: updated };
+    });
     setShowTwi(false);
     showToast(`Создано ${tasks.length} задач из TWI-шаблона`);
   };
