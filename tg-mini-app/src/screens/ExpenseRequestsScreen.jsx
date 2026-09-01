@@ -278,6 +278,7 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
   const [showReject, setShowReject] = useState(false);
   const [showImage, setShowImage] = useState(null);
   const [showCashModal, setShowCashModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editAmount, setEditAmount] = useState('');
   const [editDesc, setEditDesc] = useState('');
@@ -353,24 +354,42 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
   };
 
   const handleApprove = async () => {
-    const result = await ctx.approveExpense(expenseId);
-    if (result.error) { showToast(result.error, 'error'); return; }
-    showToast('Заявка одобрена');
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const result = await ctx.approveExpense(expenseId);
+      if (result.error) { showToast(result.error, 'error'); return; }
+      showToast('Заявка одобрена');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleReject = async () => {
+    if (submitting) return;
     if (!rejectReason.trim()) { showToast('Укажите причину отклонения', 'error'); return; }
-    const result = await ctx.rejectExpense(expenseId, rejectReason.trim());
-    if (result.error) { showToast(result.error, 'error'); return; }
-    setShowReject(false);
-    showToast('Заявка отклонена');
+    setSubmitting(true);
+    try {
+      const result = await ctx.rejectExpense(expenseId, rejectReason.trim());
+      if (result.error) { showToast(result.error, 'error'); return; }
+      setShowReject(false);
+      showToast('Заявка отклонена');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handlePay = async (cashOp) => {
-    const result = await ctx.payExpense(expenseId, cashOp);
-    if (result.error) { showToast(result.error, 'error'); return; }
-    setShowCashModal(false);
-    showToast('Деньги выданы, расход записан в кассу');
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const result = await ctx.payExpense(expenseId, cashOp);
+      if (result.error) { showToast(result.error, 'error'); return; }
+      setShowCashModal(false);
+      showToast('Деньги выданы, расход записан в кассу');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -510,23 +529,23 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
 
             {canApprove && (
               <div className="space-y-2">
-                <button onClick={handleApprove}
+                <button onClick={handleApprove} disabled={submitting}
                   className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-                  style={{ background: '#22C55E', color: '#fff' }}>
+                  style={{ background: '#22C55E', color: '#fff', opacity: submitting ? 0.6 : 1 }}>
                   <Check size={18} /> Одобрить
                 </button>
-                <button onClick={() => setShowReject(true)}
+                <button onClick={() => setShowReject(true)} disabled={submitting}
                   className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-                  style={{ background: '#EF4444', color: '#fff' }}>
+                  style={{ background: '#EF4444', color: '#fff', opacity: submitting ? 0.6 : 1 }}>
                   <XCircle size={18} /> Отклонить
                 </button>
               </div>
             )}
 
             {canPay && (
-              <button onClick={() => setShowCashModal(true)}
+              <button onClick={() => setShowCashModal(true)} disabled={submitting}
                 className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-                style={{ background: '#3390EC', color: '#fff' }}>
+                style={{ background: '#3390EC', color: '#fff', opacity: submitting ? 0.6 : 1 }}>
                 <Banknote size={18} /> Выдать деньги из кассы
               </button>
             )}
@@ -557,10 +576,10 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
               className="w-full px-3 py-2.5 rounded-lg outline-none text-sm resize-none mb-3"
               style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }} />
             <div className="flex gap-2">
-              <button onClick={() => setShowReject(false)} className="flex-1 py-2.5 rounded-lg text-sm font-semibold"
+              <button onClick={() => setShowReject(false)} disabled={submitting} className="flex-1 py-2.5 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}>Отмена</button>
-              <button onClick={handleReject} className="flex-1 py-2.5 rounded-lg text-sm font-bold"
-                style={{ background: '#EF4444', color: '#fff' }}>Отклонить</button>
+              <button onClick={handleReject} disabled={submitting} className="flex-1 py-2.5 rounded-lg text-sm font-bold"
+                style={{ background: '#EF4444', color: '#fff', opacity: submitting ? 0.6 : 1 }}>Отклонить</button>
             </div>
           </div>
         </div>

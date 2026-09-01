@@ -12158,6 +12158,7 @@ function StartTaskModal({ task, onClose, onStart }) {
   const [timeFrom, setTimeFrom] = useState(task.visit_time    || '10:00');
   const [timeTo,   setTimeTo]   = useState(task.visit_time_end || (task.visit_time ? frM(toM(task.visit_time) + (task.duration_min || 60)) : '11:00'));
   const [duration, setDuration] = useState(task.duration_min  || 60);
+  const invalidRange = timeFrom && timeTo && toM(timeTo) <= toM(timeFrom);
 
   const handleFrom = (val) => {
     setTimeFrom(val);
@@ -12195,12 +12196,18 @@ function StartTaskModal({ task, onClose, onStart }) {
             ))}
           </div>
         </div>
+        {invalidRange && (
+          <div className="text-xs p-3 rounded-lg" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
+            Время «По» должно быть позже времени «С».
+          </div>
+        )}
         <div className="text-xs p-3 rounded-lg" style={{ background: 'var(--mc-warning-bg)', color: 'var(--mc-warning-text)' }}>
           Закрыть задачу можно будет только в день визита.
         </div>
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>Отмена</button>
-          <button onClick={() => onStart(date, timeFrom, duration, timeTo)} className="flex-1 py-2.5 rounded-lg font-semibold text-white" style={{ background: '#F59E0B' }}>Взять</button>
+          <button onClick={() => onStart(date, timeFrom, duration, timeTo)} disabled={invalidRange}
+            className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50" style={{ background: '#F59E0B' }}>Взять</button>
         </div>
       </div>
     </Modal>
@@ -12215,10 +12222,11 @@ function RescheduleTaskModal({ task, onClose, onReschedule }) {
   const [timeFrom, setTimeFrom] = useState(task.visit_time     || '');
   const [timeTo,   setTimeTo]   = useState(task.visit_time_end || '');
   const [reason,   setReason]   = useState('');
+  const invalidRange = timeFrom && timeTo && toM(timeTo) <= toM(timeFrom);
 
   const handleFrom = (val) => {
     setTimeFrom(val);
-    if (val && timeTo) { const d = toM(timeTo) - toM(val); if (d > 0) { /* сохраняем диапазон */ } }
+    if (val && timeTo) { const d = toM(timeTo) - toM(val); if (d <= 0 && task.duration_min) setTimeTo(frM(toM(val) + task.duration_min)); }
     else if (val && task.duration_min) setTimeTo(frM(toM(val) + task.duration_min));
   };
   const handleTo = (val) => {
@@ -12248,13 +12256,18 @@ function RescheduleTaskModal({ task, onClose, onReschedule }) {
             style={{ border: '1px solid var(--mc-border)' }}
           />
         </div>
+        {invalidRange && (
+          <div className="text-xs p-3 rounded-lg" style={{ background: 'var(--mc-danger-bg)', color: 'var(--mc-danger-text)' }}>
+            Время «По» должно быть позже времени «С».
+          </div>
+        )}
         <div className="flex gap-2 pt-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-lg font-semibold" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
             Отмена
           </button>
           <button
             onClick={() => onReschedule(date, timeFrom, reason, timeTo)}
-            disabled={!date}
+            disabled={!date || invalidRange}
             className="flex-1 py-2.5 rounded-lg font-semibold text-white disabled:opacity-50"
             style={{ background: '#297b8a' }}
           >
