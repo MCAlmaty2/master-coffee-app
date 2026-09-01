@@ -18,7 +18,13 @@ let _orgId = null;
 export function setOrgIdHeader(orgId) { _orgId = orgId || null; }
 
 const orgScopedFetch = (input, init = {}) => {
-  if (!_orgId) return fetch(input, init);
+  // Edge Functions (functions/v1/...) выполняются под service_role и не подчиняются
+  // RLS/org_isolation — им заголовок не нужен. Хуже того: их CORS не разрешает
+  // произвольный x-org-id в Access-Control-Allow-Headers, так что с этим заголовком
+  // preflight-запрос браузера отклоняется целиком (ломает send-telegram, upload-receipt
+  // и т.д. после входа, когда _orgId уже установлен).
+  const url = typeof input === 'string' ? input : input?.url || '';
+  if (!_orgId || url.includes('/functions/v1/')) return fetch(input, init);
   const headers = new Headers(init.headers || {});
   headers.set('x-org-id', _orgId);
   return fetch(input, { ...init, headers });

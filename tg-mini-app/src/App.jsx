@@ -1744,6 +1744,23 @@ function App() {
     sendReport(entry);
   };
 
+  // update().eq(...).select() при несовпадении RLS (org-контекст, гонка и т.п.) не кидает
+  // ошибку — просто возвращает пустой массив, и вызывающий код по ошибке может принять
+  // это за успех (именно так один раз "успешно" одобренная заявка на расход через пару
+  // секунд снова стала "на подтверждении" — запись физически не сохранилась).
+  // Обычному пользователю показываем нейтральный toast, супер-админу — детали через
+  // reportError (пишет в error_reports + шлёт личным сообщением в Telegram).
+  const checkUpdated = (rows, source, details) => {
+    if (rows && rows.length > 0) return rows[0];
+    reportError({
+      kind: 'sync',
+      source,
+      message: `${source}: update() не задел ни одной строки — вероятно, org-контекст разошёлся с записью`,
+      details,
+    });
+    return null;
+  };
+
   const dismissError = (id) => setErrors(prev => prev.filter(e => e.id !== id));
   const dismissAllErrors = () => setErrors([]);
   const markErrorResolved = async (errorId) => {
@@ -1941,8 +1958,8 @@ function App() {
     }
     const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
     if (dbErr) return { error: dbErr.message };
-    if (!updData?.length) return { error: 'Не удалось обновить заявку' };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'orders.changeStatus', { orderId, newStatus });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       const orders = d.orders.map(o => o.id === orderId ? dbRow : o);
       const author = d.users.find(u => u.id === order.created_by);
@@ -2032,7 +2049,8 @@ function App() {
     };
     const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
     if (dbErr) return { error: dbErr.message };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'orders.closePickupOrder', { orderId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
       return {
@@ -2071,7 +2089,8 @@ function App() {
     };
     const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
     if (dbErr) return { error: dbErr.message };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'orders.markDelivered', { orderId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
       return {
@@ -2109,7 +2128,8 @@ function App() {
     };
     const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
     if (dbErr) return { error: dbErr.message };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'orders.changeDeliveryMethod', { orderId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
       return { ...d, orders: d.orders.map(o => o.id === orderId ? dbRow : o) };
@@ -2159,7 +2179,8 @@ function App() {
     };
     const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
     if (dbErr) return { error: dbErr.message };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'orders.editOrder', { orderId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
       return { ...d, orders: d.orders.map(o => o.id === orderId ? dbRow : o) };
@@ -2199,7 +2220,8 @@ function App() {
     upd.log = [...order.log, { event: 'revert', from: fromStatus, to: prevStatus, actor: currentUser.id, at: new Date().toISOString() }];
     const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
     if (dbErr) return { error: dbErr.message };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'orders.revertLastAction', { orderId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
       return { ...d, orders: d.orders.map(o => o.id === orderId ? dbRow : o) };
@@ -2227,7 +2249,8 @@ function App() {
     };
     const { data: updData, error: dbErr } = await supabase.from('orders').update(upd).eq('id', orderId).select();
     if (dbErr) return { error: dbErr.message };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'orders.cancelOrder', { orderId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       syncSnapshotRef.current.orders = (syncSnapshotRef.current.orders || []).map(o => o.id === orderId ? dbRow : o);
       return {
@@ -2875,8 +2898,8 @@ function App() {
     const upd = { status: 'approved', approved_by: currentUser.id, approved_at: now, approval_comment: (comment || '').trim() || null, log: newLog };
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
-    if (!updData?.length) return { error: 'Не удалось обновить запись' };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'writeOffs.approveWriteOff', { writeOffId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => w.id === writeOffId ? dbRow : w);
       const newNotifs = [];
@@ -2918,8 +2941,8 @@ function App() {
     const upd = { status: 'rejected', approved_by: currentUser.id, approved_at: now, approval_comment: comment.trim(), log: newLog };
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
-    if (!updData?.length) return { error: 'Не удалось обновить запись' };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'writeOffs.rejectWriteOff', { writeOffId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => w.id === writeOffId ? dbRow : w);
       const newNotifs = [makeNotif(d, {
@@ -2952,8 +2975,8 @@ function App() {
     const upd = { status: 'invoiced', doc_no: trimmed, doc_total: total, invoiced_by: currentUser.id, invoiced_at: now, log: newLog };
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
-    if (!updData?.length) return { error: 'Не удалось обновить запись' };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'writeOffs.completeWriteOff', { writeOffId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => w.id === writeOffId ? dbRow : w);
       const author = d.users.find(u => u.id === wo.created_by);
@@ -2996,8 +3019,8 @@ function App() {
     const upd = { status: 'prepared', pickup_code: code, prepared_by: currentUser.id, prepared_at: now, log: newLog };
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
-    if (!updData?.length) return { error: 'Не удалось обновить запись' };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'writeOffs.prepareWriteOff', { writeOffId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => w.id === writeOffId ? dbRow : w);
       const newNotifs = [makeNotif(d, {
@@ -3029,8 +3052,8 @@ function App() {
     const upd = { status: 'delivered', delivered_by: currentUser.id, delivered_at: now, completed_by: currentUser.id, completed_at: now, log: newLog };
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
-    if (!updData?.length) return { error: 'Не удалось обновить запись' };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'writeOffs.deliverWriteOff', { writeOffId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       const updatedList = d.writeOffs.map(w => w.id === writeOffId ? dbRow : w);
       const newNotifs = [makeNotif(d, {
@@ -3055,8 +3078,8 @@ function App() {
     const upd = { status: 'rejected', approval_comment: 'Отменено автором', approved_by: currentUser.id, approved_at: now, log: newLog };
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', writeOffId).select();
     if (dbErr) return { error: dbErr.message };
-    if (!updData?.length) return { error: 'Не удалось обновить запись' };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'writeOffs.cancelWriteOff', { writeOffId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => ({
       ...d,
       writeOffs: d.writeOffs.map(w => w.id === writeOffId ? dbRow : w),
@@ -3142,7 +3165,8 @@ function App() {
     const upd = { status: 'approved', approved_by: currentUser.id, approved_by_name: approverName, approved_at: now, updated_at: now };
     const { data: updData, error: dbErr } = await supabase.from('expense_requests').update(upd).eq('id', expenseId).select();
     if (dbErr) return { error: dbErr.message };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'expenseRequests.approveExpense', { expenseId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       syncSnapshotRef.current.expenseRequests = (syncSnapshotRef.current.expenseRequests || []).map(r => r.id === expenseId ? dbRow : r);
       const newNotifs = [makeNotif(d, {
@@ -3173,7 +3197,8 @@ function App() {
     const upd = { status: 'rejected', approved_by: currentUser.id, approved_by_name: approverName, approved_at: now, reject_reason: reason.trim(), updated_at: now };
     const { data: updData, error: dbErr } = await supabase.from('expense_requests').update(upd).eq('id', expenseId).select();
     if (dbErr) return { error: dbErr.message };
-    const dbRow = updData[0];
+    const dbRow = checkUpdated(updData, 'expenseRequests.rejectExpense', { expenseId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       syncSnapshotRef.current.expenseRequests = (syncSnapshotRef.current.expenseRequests || []).map(r => r.id === expenseId ? dbRow : r);
       const newNotifs = [makeNotif(d, {
@@ -3475,7 +3500,8 @@ function App() {
     ]);
     if (cashRes.error) return { error: cashRes.error.message };
     if (expRes.error) return { error: expRes.error.message };
-    const dbRow = expRes.data[0];
+    const dbRow = checkUpdated(expRes.data, 'expenseRequests.payExpense', { expenseId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
       syncSnapshotRef.current.expenseRequests = (syncSnapshotRef.current.expenseRequests || []).map(r => r.id === expenseId ? dbRow : r);
       syncSnapshotRef.current.cashOperations = [cashOp, ...(syncSnapshotRef.current.cashOperations || [])];
@@ -13094,7 +13120,7 @@ function WriteOffProductPickerModal({ db, onPick, onClose }) {
 }
 
 function WriteOffDetailScreen({ ctx, writeOffId }) {
-  const { db, currentUser, goBack, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, showToast, setDb, syncSnapshotRef } = ctx;
+  const { db, currentUser, goBack, approveWriteOff, rejectWriteOff, completeWriteOff, cancelWriteOff, showToast, setDb, syncSnapshotRef, reportError } = ctx;
   const wo = db.writeOffs.find(w => w.id === writeOffId);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -13156,7 +13182,11 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
     const { data: updData, error: dbErr } = await supabase.from('write_offs').update(upd).eq('id', wo.id).select();
     if (dbErr) { showToast(dbErr.message); return; }
     const dbRow = updData?.[0];
-    if (!dbRow) { showToast('Не удалось обновить запись'); return; }
+    if (!dbRow) {
+      reportError({ kind: 'sync', source: 'writeOffs.saveEdits', message: 'writeOffs.saveEdits: update() не задел ни одной строки — вероятно, org-контекст разошёлся с записью', details: { writeOffId: wo.id } });
+      showToast('Не удалось сохранить, попробуйте ещё раз');
+      return;
+    }
     setDb(d => ({
       ...d,
       writeOffs: d.writeOffs.map(w => w.id === wo.id ? dbRow : w),
@@ -13409,7 +13439,10 @@ function WriteOffDetailScreen({ ctx, writeOffId }) {
           const { data: updData, error: dbErr } = await supabase.from('write_offs').update({ doc_total: val, log: newLog }).eq('id', wo.id).select();
           if (dbErr) return showToast(dbErr.message);
           const dbRow = updData?.[0];
-          if (!dbRow) return showToast('Не удалось обновить запись');
+          if (!dbRow) {
+            reportError({ kind: 'sync', source: 'writeOffs.editDocTotal', message: 'writeOffs.editDocTotal: update() не задел ни одной строки — вероятно, org-контекст разошёлся с записью', details: { writeOffId: wo.id } });
+            return showToast('Не удалось сохранить, попробуйте ещё раз');
+          }
           setDb(d => ({ ...d, writeOffs: d.writeOffs.map(w => w.id === wo.id ? dbRow : w) }));
           syncSnapshotRef.current.writeOffs = (syncSnapshotRef.current.writeOffs || []).map(w => w.id === wo.id ? dbRow : w);
           setEditTotalOpen(false);
