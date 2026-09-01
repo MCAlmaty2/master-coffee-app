@@ -919,6 +919,9 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 МБ на файл (огранич�
 const DOC_NO_RE = /^00ЦТ-\d{4,7}$/;
 function isValidDocNo(s) { return DOC_NO_RE.test((s || '').trim()); }
 
+// Разрешаем в качестве ссылки на документ только http(s) — блокируем javascript:/data: и т.п.
+function isSafeUrl(s) { return typeof s === 'string' && /^https?:\/\//i.test(s.trim()); }
+
 /* ═════════════════════════════════════════════════════════════════════════
    ХРАНИЛИЩЕ (localStorage)
    ═════════════════════════════════════════════════════════════════════════ */
@@ -13650,6 +13653,16 @@ function FileOrUrlInput({ label, value, onChange, hint }) {
   // value: { type: 'url'|'file', name, value } | null
   const [mode, setMode] = useState(value?.type || 'url');
   const [error, setError] = useState('');
+  const [urlText, setUrlText] = useState(value?.type === 'url' ? value.value : '');
+
+  const onUrlChange = (e) => {
+    const v = e.target.value;
+    setUrlText(v);
+    if (!v) { setError(''); onChange(null); return; }
+    if (!isSafeUrl(v)) { setError('Ссылка должна начинаться с http:// или https://'); onChange(null); return; }
+    setError('');
+    onChange({ type: 'url', name: v.split('/').pop() || 'Документ', value: v });
+  };
 
   const onFile = (e) => {
     const f = e.target.files?.[0];
@@ -13680,8 +13693,8 @@ function FileOrUrlInput({ label, value, onChange, hint }) {
       </div>
       {mode === 'url' ? (
         <input
-          value={value?.type === 'url' ? value.value : ''}
-          onChange={e => onChange(e.target.value ? { type: 'url', name: e.target.value.split('/').pop() || 'Документ', value: e.target.value } : null)}
+          value={urlText}
+          onChange={onUrlChange}
           placeholder="https://drive.google.com/file/d/..."
           className="w-full px-3 py-2.5 rounded-lg outline-none text-sm"
           style={{ border: '1px solid var(--mc-border)' }}
@@ -13707,6 +13720,9 @@ function FileOrUrlInput({ label, value, onChange, hint }) {
 function DocLink({ doc }) {
   if (!doc) return <span style={{ color: '#A8A8AE' }}>—</span>;
   if (doc.type === 'url') {
+    if (!isSafeUrl(doc.value)) {
+      return <span style={{ color: '#EB5757' }}>⚠️ Небезопасная ссылка</span>;
+    }
     return (
       <a href={doc.value} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 text-sm font-semibold underline" style={{ color: '#297b8a' }}>
         🔗 {doc.name || 'Открыть ссылку'}
@@ -14595,17 +14611,19 @@ function AdminTelegramScreen({ ctx }) {
     }
     setTestSending(true);
     try {
+      // Сохраняем настройки перед тестом — edge function читает токен из БД, а не из тела запроса
+      // (bot_token не должен светиться в теле HTTP-запроса/логах на каждый тест).
+      await updateTelegramSettings(form);
       const { data, error } = await supabase.functions.invoke('send-telegram', {
         body: {
           chat_id: form.group_chat_id,
           text: '✅ Тест MasterCoffee CRM\nTelegram-уведомления работают.',
-          bot_token: form.bot_token,
         },
       });
       if (error || data?.error) {
         showToast(`Ошибка: ${error?.message || data?.error}`);
       } else {
-        showToast('Тестовое сообщение отправлено!');
+        showToast('Настройки сохранены, тестовое сообщение отправлено!');
       }
     } catch (e) {
       showToast(`Ошибка отправки: ${e.message}`);
