@@ -1101,12 +1101,12 @@ function validateOrderForm(form) {
     const name = (form.full_name || '').trim();
     if (!name) errors.full_name = 'Укажите ФИО';
     else if (name.length < 3) errors.full_name = 'Минимум 3 символа';
-    else if (name.length > 21) errors.full_name = 'Максимум 21 символ';
+    else if (name.length > 100) errors.full_name = 'Максимум 100 символов';
   } else {
     const company = (form.company_name || '').trim();
     if (!company) errors.company_name = 'Укажите наименование юр. лица';
     else if (company.length < 3) errors.company_name = 'Минимум 3 символа';
-    else if (company.length > 21) errors.company_name = 'Максимум 21 символ';
+    else if (company.length > 100) errors.company_name = 'Максимум 100 символов';
     const bin = (form.bin || '').trim();
     if (!bin) errors.bin = 'Укажите БИН/ИИН';
     else if (!BIN_RE.test(bin)) errors.bin = 'БИН/ИИН — ровно 12 цифр';
@@ -8347,14 +8347,14 @@ function EditOrderModal({ order, ctx, onClose, onSave }) {
           {/* Клиент */}
           {isLegal ? (
             <>
-              <div style={{ marginBottom: 10 }}><label style={lbl}>Наименование</label><input style={fld} value={form.company_name} onChange={e => upd('company_name', e.target.value)} maxLength={21} /></div>
+              <div style={{ marginBottom: 10 }}><label style={lbl}>Наименование</label><input style={fld} value={form.company_name} onChange={e => upd('company_name', e.target.value)} maxLength={100} /></div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
                 <div><label style={lbl}>БИН</label><input style={fld} value={form.bin} onChange={e => upd('bin', e.target.value.replace(/\D/g, '').slice(0, 12))} /></div>
                 <div><label style={lbl}>Контакт</label><input style={fld} value={form.contact_person} onChange={e => upd('contact_person', e.target.value)} /></div>
               </div>
             </>
           ) : (
-            <div style={{ marginBottom: 10 }}><label style={lbl}>ФИО</label><input style={fld} value={form.full_name} onChange={e => upd('full_name', e.target.value)} maxLength={21} /></div>
+            <div style={{ marginBottom: 10 }}><label style={lbl}>ФИО</label><input style={fld} value={form.full_name} onChange={e => upd('full_name', e.target.value)} maxLength={100} /></div>
           )}
           <div style={{ marginBottom: 10 }}><label style={lbl}>Телефон</label><input style={fld} value={form.phone} onChange={e => upd('phone', e.target.value)} /></div>
           <div style={{ marginBottom: 10 }}><label style={lbl}>{isLegal ? 'Юр. адрес' : 'Адрес'}</label><textarea rows={2} style={{ ...fld, resize: 'vertical' }} value={form.address} onChange={e => upd('address', e.target.value)} /></div>
@@ -8761,10 +8761,10 @@ function CreateOrderScreen({ ctx }) {
                 <Users size={14} /> Выбрать из базы клиентов
               </button>
               {form.client_type === 'individual' ? (
-                <SiteInput label="ФИО" value={form.full_name} onChange={v => update({ full_name: v })} error={errors.full_name} placeholder="Иванов Иван Иванович" maxLength={21} />
+                <SiteInput label="ФИО" value={form.full_name} onChange={v => update({ full_name: v })} error={errors.full_name} placeholder="Иванов Иван Иванович" maxLength={100} />
               ) : (
                 <>
-                  <SiteInput label="Наименование юр. лица" value={form.company_name} onChange={v => update({ company_name: v })} error={errors.company_name} placeholder='ТОО "Coffee Boom"' maxLength={21} />
+                  <SiteInput label="Наименование юр. лица" value={form.company_name} onChange={v => update({ company_name: v })} error={errors.company_name} placeholder='ТОО "Coffee Boom"' maxLength={100} />
                   <SiteInput label="БИН/ИИН" value={form.bin} onChange={v => update({ bin: v.replace(/\D/g, '').slice(0, 12) })} error={errors.bin} placeholder="180440019877" />
                   <SiteInput label="Контактное лицо" value={form.contact_person} onChange={v => update({ contact_person: v })} error={errors.contact_person} placeholder="Касымов Ержан" />
                 </>
@@ -9739,7 +9739,7 @@ function CreateQuickScreen({ ctx }) {
                 <input
                   value={form.client_name || ''}
                   onChange={e => update({ client_name: e.target.value })}
-                  maxLength={21}
+                  maxLength={100}
                   className="w-full px-3 py-2 rounded-lg outline-none"
                   style={{ border: `1px solid ${errors.client_name ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 15 }}
                 />
@@ -11376,7 +11376,7 @@ function CreateTaskScreen({ ctx }) {
           {!isInternal && !isTasting && !isTraining && (
             <Card title="Информация о клиенте">
               <div className="space-y-3">
-                <SiteInput label="Наименование компании или клиента" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Coffee Boom Almaty" maxLength={21} />
+                <SiteInput label="Наименование компании или клиента" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Coffee Boom Almaty" maxLength={100} />
                 <SiteInput label="Адрес" value={form.address} onChange={v => update({ address: v })} error={errors.address} placeholder="г. Алматы, ул. Абая 150" />
                 <SiteInput label="Номер телефона" value={form.phone} onChange={v => update({ phone: v })} error={errors.phone} placeholder="+7 777 ..." />
               </div>
@@ -11386,7 +11386,7 @@ function CreateTaskScreen({ ctx }) {
           {isTasting && (
             <Card title="Информация о дегустации">
               <div className="space-y-3">
-                <SiteInput label="Наименование заведения *" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Coffee House, кафе «Уют»..." maxLength={21} />
+                <SiteInput label="Наименование заведения *" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Coffee House, кафе «Уют»..." maxLength={100} />
                 <SiteInput label="Контактное лицо" value={form.tasting_contact || ''} onChange={v => update({ tasting_contact: v })} placeholder="Иванов Иван" />
                 <SiteInput label="Телефон" value={form.phone} onChange={v => update({ phone: v })} placeholder="+7 777 ..." />
                 <div>
@@ -11502,7 +11502,7 @@ function CreateTaskScreen({ ctx }) {
           {isTraining && (
             <Card title="Ученик / клиент">
               <div className="space-y-3">
-                <SiteInput label="ФИО ученика *" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Иванов Иван" maxLength={21} />
+                <SiteInput label="ФИО ученика *" value={form.client_name} onChange={v => update({ client_name: v })} error={errors.client_name} placeholder="Иванов Иван" maxLength={100} />
                 <SiteInput label="Телефон *" value={form.phone} onChange={v => update({ phone: v })} error={errors.phone} placeholder="+7 777 ..." />
                 <SiteInput label="Контактное лицо (если отличается)" value={form.training_contact || ''} onChange={v => update({ training_contact: v })} placeholder="Менеджер, родитель..." />
               </div>
@@ -15376,7 +15376,7 @@ function CreateGrindScreen({ ctx }) {
         <Card title="Контрагент">
           <input type="text" placeholder="ТОО / ИП / имя клиента"
             value={form.client_name} onChange={e => update({ client_name: e.target.value })}
-            maxLength={21}
+            maxLength={100}
             className="w-full px-3 py-2.5 rounded-lg outline-none"
             style={fieldStyle('client_name')} />
         </Card>

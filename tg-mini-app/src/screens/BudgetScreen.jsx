@@ -11,12 +11,14 @@ function getMonthKey(year, month) {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
 
-function getMonthRange(year, month) {
-  const start = `${year}-${String(month).padStart(2, '0')}-01`;
-  const nextMonth = month === 12 ? 1 : month + 1;
-  const nextYear = month === 12 ? year + 1 : year;
-  const end = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
-  return { start, end };
+// Timestamps в БД — UTC ISO. Asia/Almaty = UTC+5 круглый год (без перехода на летнее
+// время), поэтому месяц/день по местному времени можно получить фиксированным сдвигом —
+// сравнивать сырые UTC-строки с границами месяца напрямую нельзя: запись, сделанная в
+// первые ~5 часов местных суток, попадёт в предыдущий UTC-день/месяц.
+function almatyMonthKey(iso) {
+  if (!iso) return null;
+  const d = new Date(new Date(iso).getTime() + 5 * 60 * 60 * 1000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
 function PageHeader({ title, subtitle, onBack }) {
@@ -117,15 +119,13 @@ export default function BudgetScreen({ ctx }) {
   }, [db.budgetEntries, monthKey]);
 
   const data = useMemo(() => {
-    const { start, end } = getMonthRange(year, month);
-
     const writeoffTotal = (db.writeOffs || [])
-      .filter(w => w.doc_total > 0 && w.invoiced_at && w.invoiced_at >= start && w.invoiced_at < end)
+      .filter(w => w.doc_total > 0 && almatyMonthKey(w.invoiced_at) === monthKey)
       .reduce((sum, w) => sum + Number(w.doc_total), 0);
 
     const expenseByBudgetKey = {};
     (db.expenseRequests || [])
-      .filter(e => e.status === 'paid' && e.paid_at && e.paid_at >= start && e.paid_at < end)
+      .filter(e => e.status === 'paid' && almatyMonthKey(e.paid_at) === monthKey)
       .forEach(e => {
         const budgetKey = catToBudget[e.category] || 'other';
         expenseByBudgetKey[budgetKey] = (expenseByBudgetKey[budgetKey] || 0) + Number(e.amount);
@@ -141,7 +141,7 @@ export default function BudgetScreen({ ctx }) {
     (db.cashOperations || [])
       .filter(op =>
         (op.type === 'expense' || op.type === 'return') &&
-        op.created_at && op.created_at >= start && op.created_at < end &&
+        almatyMonthKey(op.created_at) === monthKey &&
         !linkedCashOpIds.has(op.id)
       )
       .forEach(op => {

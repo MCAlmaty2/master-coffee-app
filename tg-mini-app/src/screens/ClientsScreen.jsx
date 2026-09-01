@@ -443,7 +443,7 @@ export function ClientEditScreen({ ctx, clientId }) {
         notes:           form.notes.trim()          || null,
         preferred_items: form.preferred_items || [],
         addresses:       (form.addresses || []).filter(a => a.address?.trim()),
-        created_by:     currentUser.id,
+        created_by:     existing ? existing.created_by : currentUser.id,
         updated_at:     now,
         ...(!existing && { created_at: now }),
         org_id:         ctx.currentOrgId,
