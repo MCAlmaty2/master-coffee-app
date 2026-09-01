@@ -260,7 +260,7 @@ export function ClientSpecialPricesScreen({ ctx }) {
   const filters = [
     { id: 'all', label: `Все (${specialPrices.length})` },
     { id: 'pending', label: `Ожидают (${specialPrices.filter(s => s.status === 'pending').length})` },
-    { id: 'active', label: `Активные (${specialPrices.filter(s => s.status === 'active' || s.status === 'approved').length})` },
+    { id: 'active', label: `Активные (${specialPrices.filter(s => s.status === 'active').length})` },
     { id: 'expired', label: `Истекшие (${specialPrices.filter(s => s.status === 'expired').length})` },
   ];
 

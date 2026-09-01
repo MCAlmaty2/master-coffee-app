@@ -4,7 +4,7 @@
  * становится фактом «Выручка» в отчёте ОП (Выполнение плана).
  * Доступ: report_edit (admin / senior_manager / director).
  */
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { supabase } from '../supabase/client';
 
@@ -96,10 +96,16 @@ export function DailyRevenueScreen({ ctx }) {
     return { amount, sales, deliv, pickup, avg: sales ? amount / sales : 0 };
   }, [rows, selectedMonth]);
 
+  // byDateRef держит самое свежее состояние синхронно (не дожидаясь ре-рендера),
+  // чтобы два быстрых сохранения подряд (разные поля одного дня) не читали устаревший
+  // снимок byDate из замыкания и не затирали друг друга.
+  const byDateRef = useRef(byDate);
+  useEffect(() => { byDateRef.current = byDate; }, [byDate]);
+
   const saveCell = useCallback(async (dateStr, field, rawVal) => {
     if (!canEdit) return;
     const val = parseFloat(rawVal) || 0;
-    const existing = byDate[dateStr];
+    const existing = byDateRef.current[dateStr];
     const row = {
       date: dateStr,
       month: dateStr.slice(0, 7),
@@ -114,12 +120,13 @@ export function DailyRevenueScreen({ ctx }) {
     };
     const { error } = await supabase.from('daily_revenue').upsert(row, { onConflict: 'date' });
     if (error) { showToast('Ошибка: ' + error.message); return; }
+    byDateRef.current = { ...byDateRef.current, [dateStr]: row };
     setDb(d => {
       const updated = [...(d.dailyRevenue || []).filter(r => r.date !== dateStr), row];
       if (syncSnapshotRef) syncSnapshotRef.current.dailyRevenue = updated;
       return { ...d, dailyRevenue: updated };
     });
-  }, [byDate, canEdit, currentUser, setDb, showToast]);
+  }, [canEdit, currentUser, setDb, showToast]);
 
   return (
     <div>

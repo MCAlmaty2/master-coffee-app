@@ -107,11 +107,17 @@ export default function CashScreen({ ctx }) {
     });
     if (!hasDiff) { setEditingBalance(false); return; }
     const total = DENOMINATIONS.reduce((s, d) => s + d * delta[d], 0);
+    // calcSafeBalance применяет bills как +count для income и −count для expense —
+    // чтобы баланс сейфа считался верно при любом знаке total, для expense-корректировки
+    // нужно хранить bills с обратным знаком (тогда −(−delta) = +delta, как и для income).
+    const isExpense = total < 0;
+    const signedBills = {};
+    DENOMINATIONS.forEach(d => { signedBills[d] = isExpense ? -delta[d] : delta[d]; });
     const userName = currentUser ? `${(currentUser.first_name || '')} ${(currentUser.last_name || '').charAt(0)}.`.trim() : '';
     const adj = {
       id: crypto.randomUUID(),
-      type: 'income',
-      bills: delta,
+      type: isExpense ? 'expense' : 'income',
+      bills: signedBills,
       total: Math.abs(total),
       description: total === 0 ? 'Размен купюр' : 'Корректировка остатка',
       category: '',

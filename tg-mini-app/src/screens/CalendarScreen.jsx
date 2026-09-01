@@ -265,7 +265,7 @@ function EventCard({ task: t, db, currentUser, mode, navigate, compact, colIdx =
           </div>
           {!compact && height > 50 && assignee && (
             <div style={{ fontSize: 9, color: 'var(--mc-muted)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-              {assignee.first_name[0]}.{assignee.last_name[0]}.
+              {assignee?.first_name?.[0]}.{assignee?.last_name?.[0]}.
             </div>
           )}
         </>
@@ -604,7 +604,7 @@ export function FieldCalendarScreen({ ctx }) {
           ] : []),
           ...fieldUsers.map(u => ({
             id:    u.id,
-            label: `${u.first_name} ${u.last_name[0]}.`,
+            label: `${u.first_name} ${u.last_name?.[0] || ''}.`,
             color: getUserTaskColor(u.id, db),
           })),
         ].map(f => {
@@ -712,7 +712,7 @@ export function FieldHome({ ctx }) {
           {[
             { id: 'all',  label: 'Все' },
             { id: 'mine', label: 'Мои' },
-            ...colleagues.map(u => ({ id: u.id, label: `${u.first_name} ${u.last_name[0]}.`, color: getUserTaskColor(u.id, db) })),
+            ...colleagues.map(u => ({ id: u.id, label: `${u.first_name} ${u.last_name?.[0] || ''}.`, color: getUserTaskColor(u.id, db) })),
           ].map(f => {
             const active = filter === f.id;
             const color  = f.color || '#297b8a';
