@@ -117,6 +117,17 @@ export async function verifyPin(pin) {
   return data;
 }
 
+// Проверяет подпись Telegram Mini App initData на сервере (HMAC по бот-токену) и
+// возвращает найденного/только что созданного пользователя. В отличие от
+// initDataUnsafe.user, initData подписана Telegram — подделать её без бот-токена нельзя.
+export async function verifyTelegramLogin(initData) {
+  const { data, error } = await supabase.functions.invoke('verify-telegram-login', {
+    body: { initData },
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function setWebTokenInDb(userId, token) {
   const { error } = await supabase
     .from('users')

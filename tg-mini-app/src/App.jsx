@@ -43,6 +43,7 @@ import {
   setWebTokenInDb,
   setPinHashInDb,
   verifyPin,
+  verifyTelegramLogin,
 } from './supabase/users';
 import {
   fetchAllProducts,
@@ -1764,39 +1765,60 @@ function App() {
 
   /* ═══════════ Авторизация — ТОЛЬКО через Telegram ═══════════ */
 
+  // Уведомляет всех активных админов о новом запросе на доступ (только при первом входе).
+  const notifyAdminsOfAccessRequest = (user, tgUser) => {
+    const admins = db.users.filter(u => u.role === 'admin' && u.active);
+    if (admins.length === 0) return;
+    setDb(d => ({
+      ...d,
+      notifications: [
+        ...admins.map(a => makeNotif(d, {
+          recipient_id: a.id,
+          link_kind: 'access', link_id: '',
+          title: 'Новый запрос на доступ',
+          body: `${user.first_name} ${user.last_name || ''} (Telegram @${tgUser.username || tgUser.id}) запросил доступ`,
+        })).filter(Boolean),
+        ...d.notifications,
+      ],
+      telegramLog: [
+        makeTgLogEntry(d, 'access_request', { first_name: user.first_name, last_name: user.last_name || '', username: tgUser.username || String(tgUser.id) }),
+        ...d.telegramLog,
+      ],
+    }));
+  };
+
   // Вход через Telegram: автоматически. Если юзера нет — создаём pending.
   // Возвращаем { ok | pending | error } чтобы AuthScreen показал нужный UI.
-  const loginViaTelegram = async (tgUser) => {
+  //
+  // initData — подписанная Telegram строка (tgWebApp.initData). Если она передана,
+  // подлинность пользователя проверяется на сервере (edge function verify-telegram-login)
+  // по HMAC-подписи с бот-токеном — initDataUnsafe.user сам по себе НЕ подписан и может
+  // быть подделан на клиенте. Без initData (только в dev-режиме, VITE_DEV_TELEGRAM_ID,
+  // без реального Telegram — проверять подпись неоткуда) используем старый флоу.
+  const loginViaTelegram = async (tgUser, initData) => {
     if (!tgUser || !tgUser.id) return { error: 'Не удалось получить данные пользователя из Telegram' };
     try {
-      let user = await findUserByTelegramId(tgUser.id);
-      if (!user) {
-        // Первый вход — создаём pending и уведомляем админа
-        user = await createPendingUserFromTelegram(tgUser, _currentOrgId);
-        // Создать уведомление для всех админов
-        const admins = db.users.filter(u => u.role === 'admin' && u.active);
-        if (admins.length > 0) {
-          setDb(d => ({
-            ...d,
-            notifications: [
-              ...admins.map(a => makeNotif(d, {
-                recipient_id: a.id,
-                link_kind: 'access', link_id: '',
-                title: 'Новый запрос на доступ',
-                body: `${user.first_name} ${user.last_name || ''} (Telegram @${tgUser.username || tgUser.id}) запросил доступ`,
-              })).filter(Boolean),
-              ...d.notifications,
-            ],
-            telegramLog: [
-              makeTgLogEntry(d, 'access_request', { first_name: user.first_name, last_name: user.last_name || '', username: tgUser.username || String(tgUser.id) }),
-              ...d.telegramLog,
-            ],
-          }));
+      let user, justCreated;
+      if (initData) {
+        const result = await verifyTelegramLogin(initData);
+        if (result?.error) return { error: result.error };
+        user = result?.user || null;
+        if (!user) return { error: 'Сервер не вернул данные пользователя' };
+        justCreated = !!result?.justCreated;
+        if (result?.pending) {
+          if (justCreated) notifyAdminsOfAccessRequest(user, tgUser);
+          return { pending: true, user };
         }
-        return { pending: true, user };
-      }
-      if (!user.active) {
-        return { pending: true, user };
+      } else {
+        user = await findUserByTelegramId(tgUser.id);
+        if (!user) {
+          user = await createPendingUserFromTelegram(tgUser, _currentOrgId);
+          notifyAdminsOfAccessRequest(user, tgUser);
+          return { pending: true, user };
+        }
+        if (!user.active) {
+          return { pending: true, user };
+        }
       }
       setSession({ user_id: user.id });
       const { data: meRow } = await supabase
@@ -4885,15 +4907,18 @@ function App() {
     }
 
     // ── Telegram: обычный флоу ────────────────────────────────────────────────
+    // tgWebApp.initData — подписанная строка, только она передаётся на верификацию.
+    // initDataUnsafe.user используется лишь как оптимистичное отображение до ответа сервера.
     let tgUser = tgWebApp?.initDataUnsafe?.user || null;
+    const realInitData = tgWebApp?.initData || null;
     const devId = import.meta.env.VITE_DEV_TELEGRAM_ID;
-    if (!tgUser && devId) {
+    if (!tgUser && !realInitData && devId) {
       tgUser = { id: Number(devId), first_name: 'DevUser', last_name: '', username: 'dev' };
     }
     if (!tgUser?.id) return;
 
     (async () => {
-      const res = await loginViaTelegram(tgUser);
+      const res = await loginViaTelegram(tgUser, realInitData);
       if (res.ok) {
         showToast(`С возвращением, ${res.user.first_name}`);
       } else if (res.pending) {
