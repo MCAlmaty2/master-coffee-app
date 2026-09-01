@@ -352,22 +352,22 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
     showToast('Расход обновлён');
   };
 
-  const handleApprove = () => {
-    const result = ctx.approveExpense(expenseId);
+  const handleApprove = async () => {
+    const result = await ctx.approveExpense(expenseId);
     if (result.error) { showToast(result.error, 'error'); return; }
     showToast('Заявка одобрена');
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!rejectReason.trim()) { showToast('Укажите причину отклонения', 'error'); return; }
-    const result = ctx.rejectExpense(expenseId, rejectReason.trim());
+    const result = await ctx.rejectExpense(expenseId, rejectReason.trim());
     if (result.error) { showToast(result.error, 'error'); return; }
     setShowReject(false);
     showToast('Заявка отклонена');
   };
 
-  const handlePay = (cashOp) => {
-    const result = ctx.payExpense(expenseId, cashOp);
+  const handlePay = async (cashOp) => {
+    const result = await ctx.payExpense(expenseId, cashOp);
     if (result.error) { showToast(result.error, 'error'); return; }
     setShowCashModal(false);
     showToast('Деньги выданы, расход записан в кассу');

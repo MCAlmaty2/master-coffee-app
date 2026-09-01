@@ -27,6 +27,7 @@ import BudgetScreen from './screens/BudgetScreen';
 import MppKanbanScreen from './screens/MppKanbanScreen';
 import { DeferredPaymentScreen, DeferredPaymentHomeBanner } from './screens/DeferredPaymentScreen';
 import { RentalEquipmentScreen, RentalHomeBanner } from './screens/RentalEquipmentScreen';
+import { VolumePriceTiersScreen, ClientSpecialPricesScreen } from './screens/PricingScreen';
 import OrgManagementScreen from './screens/OrgManagementScreen';
 import PlatformUsersScreen from './screens/PlatformUsersScreen';
 import {
@@ -3106,16 +3107,19 @@ function App() {
     return { ok: true, request: newReq };
   };
 
-  const approveExpense = (expenseId) => {
+  const approveExpense = async (expenseId) => {
     if (!hasPermission(db, currentUser, 'expense_approve')) return { error: 'Нет прав одобрять заявки на расход' };
     const req = (db.expenseRequests || []).find(r => r.id === expenseId);
     if (!req) return { error: 'Заявка не найдена' };
     if (req.status !== 'pending') return { error: 'Можно одобрить только ожидающие заявки' };
+    const approverName = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь';
+    const now = new Date().toISOString();
+    const upd = { status: 'approved', approved_by: currentUser.id, approved_by_name: approverName, approved_at: now, updated_at: now };
+    const { data: updData, error: dbErr } = await supabase.from('expense_requests').update(upd).eq('id', expenseId).select();
+    if (dbErr) return { error: dbErr.message };
+    const dbRow = updData[0];
     setDb(d => {
-      const updatedList = (d.expenseRequests || []).map(r => {
-        if (r.id !== expenseId) return r;
-        return { ...r, status: 'approved', approved_by: currentUser.id, approved_by_name: `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь', approved_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-      });
+      syncSnapshotRef.current.expenseRequests = (syncSnapshotRef.current.expenseRequests || []).map(r => r.id === expenseId ? dbRow : r);
       const newNotifs = [makeNotif(d, {
         recipient_id: req.requester_id,
         title: 'Расход одобрен',
@@ -3128,29 +3132,32 @@ function App() {
         amount: String(req.amount),
         description: req.description.slice(0, 80),
       });
-      return { ...d, expenseRequests: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
+      return { ...d, expenseRequests: d.expenseRequests.map(r => r.id === expenseId ? dbRow : r), notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
     });
     return { ok: true };
   };
 
-  const rejectExpense = (expenseId, reason) => {
+  const rejectExpense = async (expenseId, reason) => {
     if (!hasPermission(db, currentUser, 'expense_approve')) return { error: 'Нет прав отклонять заявки на расход' };
     if (!reason?.trim()) return { error: 'Укажите причину отклонения' };
     const req = (db.expenseRequests || []).find(r => r.id === expenseId);
     if (!req) return { error: 'Заявка не найдена' };
     if (req.status !== 'pending') return { error: 'Отклонить можно только ожидающие заявки' };
+    const approverName = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь';
+    const now = new Date().toISOString();
+    const upd = { status: 'rejected', approved_by: currentUser.id, approved_by_name: approverName, approved_at: now, reject_reason: reason.trim(), updated_at: now };
+    const { data: updData, error: dbErr } = await supabase.from('expense_requests').update(upd).eq('id', expenseId).select();
+    if (dbErr) return { error: dbErr.message };
+    const dbRow = updData[0];
     setDb(d => {
-      const updatedList = (d.expenseRequests || []).map(r => {
-        if (r.id !== expenseId) return r;
-        return { ...r, status: 'rejected', approved_by: currentUser.id, approved_by_name: `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь', approved_at: new Date().toISOString(), reject_reason: reason.trim(), updated_at: new Date().toISOString() };
-      });
+      syncSnapshotRef.current.expenseRequests = (syncSnapshotRef.current.expenseRequests || []).map(r => r.id === expenseId ? dbRow : r);
       const newNotifs = [makeNotif(d, {
         recipient_id: req.requester_id,
         title: 'Расход отклонён',
         body: `${req.request_number}: причина — ${reason.trim().slice(0, 80)}`,
         link_kind: 'expense', link_id: req.id,
       })];
-      return { ...d, expenseRequests: updatedList, notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
+      return { ...d, expenseRequests: d.expenseRequests.map(r => r.id === expenseId ? dbRow : r), notifications: [...newNotifs.filter(Boolean), ...d.notifications] };
     });
     return { ok: true };
   };
@@ -3415,12 +3422,14 @@ function App() {
     return { ok: true, id };
   };
 
-  const payExpense = (expenseId, cashOpData) => {
+  const payExpense = async (expenseId, cashOpData) => {
     if (!hasPermission(db, currentUser, 'expense_pay')) return { error: 'Нет прав на выдачу денег' };
     const req = (db.expenseRequests || []).find(r => r.id === expenseId);
     if (!req) return { error: 'Заявка не найдена' };
     if (req.status !== 'approved') return { error: 'Выдать можно только одобренные заявки' };
     const cashOpId = crypto.randomUUID();
+    const payerName = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь';
+    const now = new Date().toISOString();
     const cashOp = {
       id: cashOpId,
       type: 'expense',
@@ -3430,16 +3439,21 @@ function App() {
       description: cashOpData?.description || `Чек ${req.request_number}: ${req.description}`,
       bills: cashOpData?.bills || {},
       created_by: currentUser.id,
-      created_by_name: `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь',
-      created_at: new Date().toISOString(),
+      created_by_name: payerName,
+      created_at: now,
       org_id: _currentOrgId,
     };
-    const payerName = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Пользователь';
+    const expUpd = { status: 'paid', paid_by: currentUser.id, paid_by_name: payerName, paid_at: now, cash_operation_id: cashOpId, updated_at: now };
+    const [cashRes, expRes] = await Promise.all([
+      supabase.from('cash_operations').upsert([cashOp], { onConflict: 'id' }),
+      supabase.from('expense_requests').update(expUpd).eq('id', expenseId).select(),
+    ]);
+    if (cashRes.error) return { error: cashRes.error.message };
+    if (expRes.error) return { error: expRes.error.message };
+    const dbRow = expRes.data[0];
     setDb(d => {
-      const updatedList = (d.expenseRequests || []).map(r => {
-        if (r.id !== expenseId) return r;
-        return { ...r, status: 'paid', paid_by: currentUser.id, paid_by_name: payerName, paid_at: new Date().toISOString(), cash_operation_id: cashOpId, updated_at: new Date().toISOString() };
-      });
+      syncSnapshotRef.current.expenseRequests = (syncSnapshotRef.current.expenseRequests || []).map(r => r.id === expenseId ? dbRow : r);
+      syncSnapshotRef.current.cashOperations = [cashOp, ...(syncSnapshotRef.current.cashOperations || [])];
       const newNotifs = [makeNotif(d, {
         recipient_id: req.requester_id,
         title: 'Деньги выданы',
@@ -3452,7 +3466,7 @@ function App() {
         amount: String(req.amount),
         requester: req.requester_name,
       });
-      return { ...d, expenseRequests: updatedList, cashOperations: [cashOp, ...(d.cashOperations || [])], notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
+      return { ...d, expenseRequests: d.expenseRequests.map(r => r.id === expenseId ? dbRow : r), cashOperations: [cashOp, ...(d.cashOperations || [])], notifications: [...newNotifs.filter(Boolean), ...d.notifications], telegramLog: [tgEntry, ...d.telegramLog] };
     });
     return { ok: true };
   };
@@ -3693,6 +3707,56 @@ function App() {
     const row = { id, location_type: data.location_type, location_id: data.location_id || null, conducted_by: currentUser.id, revision_date: data.revision_date || todayISO(), checklist: data.checklist || [], result: data.result || null, notes: data.notes || null, created_at: todayISO(), org_id: _currentOrgId };
     setDb(d => ({ ...d, rentalRevisions: [row, ...(d.rentalRevisions || [])] }));
     return { ok: true, id };
+  };
+
+  /* ═══════════ Ценообразование ═══════════ */
+
+  const createVolumeTier = async (data) => {
+    if (!hasPermission(db, currentUser, 'products_edit')) return { error: 'Нет прав' };
+    const id = uid();
+    const row = { id, ...data, created_at: new Date().toISOString() };
+    setDb(d => ({ ...d, volumePriceTiers: [...(d.volumePriceTiers || []), row] }));
+    upsertRow('volumePriceTiers', row).catch(() => {});
+    return { ok: true, id };
+  };
+  const updateVolumeTier = async (id, data) => {
+    if (!hasPermission(db, currentUser, 'products_edit')) return { error: 'Нет прав' };
+    setDb(d => ({ ...d, volumePriceTiers: (d.volumePriceTiers || []).map(t => t.id === id ? { ...t, ...data } : t) }));
+    upsertRow('volumePriceTiers', { id, ...data }).catch(() => {});
+    return { ok: true };
+  };
+  const deleteVolumeTier = async (id) => {
+    if (!hasPermission(db, currentUser, 'products_edit')) return { error: 'Нет прав' };
+    setDb(d => ({ ...d, volumePriceTiers: (d.volumePriceTiers || []).filter(t => t.id !== id) }));
+    supabase.from('volume_price_tiers').delete().eq('id', id).then(() => {});
+    return { ok: true };
+  };
+  const createSpecialPrice = async (data) => {
+    const id = uid();
+    const row = { id, ...data, status: 'pending', created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    setDb(d => ({ ...d, clientSpecialPrices: [...(d.clientSpecialPrices || []), row] }));
+    upsertRow('clientSpecialPrices', row).catch(() => {});
+    const admin = db.users.find(u => u.role === 'admin' && u.org_id === _currentOrgId);
+    if (admin) {
+      const mgr = db.users.find(u => u.id === currentUser.id);
+      const product = db.products.find(p => p.id === data.product_id);
+      sendPrivateTelegram(admin, `📋 <b>Запрос на спец. цену</b>\nКлиент: ${data.client_name}\nТовар: ${product?.name || '—'}\nЦена: ${data.special_price} ₸\nСрок: ${data.valid_months} мес\nОт: ${mgr ? `${mgr.first_name} ${mgr.last_name || ''}`.trim() : '—'}`);
+    }
+    return { ok: true, id };
+  };
+  const approveSpecialPrice = async (id) => {
+    if (currentUser.role !== 'admin' && !currentUser.is_super_admin) return { error: 'Только админ может одобрять' };
+    const now = new Date().toISOString();
+    setDb(d => ({ ...d, clientSpecialPrices: (d.clientSpecialPrices || []).map(s => s.id === id ? { ...s, status: 'approved', approved_by: currentUser.id, approved_at: now, updated_at: now } : s) }));
+    upsertRow('clientSpecialPrices', { id, status: 'approved', approved_by: currentUser.id, approved_at: now, updated_at: now }).catch(() => {});
+    return { ok: true };
+  };
+  const rejectSpecialPrice = async (id) => {
+    if (currentUser.role !== 'admin' && !currentUser.is_super_admin) return { error: 'Только админ может отклонять' };
+    const now = new Date().toISOString();
+    setDb(d => ({ ...d, clientSpecialPrices: (d.clientSpecialPrices || []).map(s => s.id === id ? { ...s, status: 'rejected', updated_at: now } : s) }));
+    upsertRow('clientSpecialPrices', { id, status: 'rejected', updated_at: now }).catch(() => {});
+    return { ok: true };
   };
 
   /* ═══════════ Подарки клиентам ═══════════ */
@@ -4728,6 +4792,7 @@ function App() {
     createRentalClient, updateRentalClient,
     createRentalPurchase, updateRentalPurchase,
     createRentalMovement, createRentalRevision,
+    createVolumeTier, updateVolumeTier, deleteVolumeTier, createSpecialPrice, approveSpecialPrice, rejectSpecialPrice,
     createMppDeal, updateMppDeal, addMppActivity, deleteMppDeal,
     createMppTask, completeMppTask, addMppDealProduct, removeMppDealProduct, addMppComment,
     createGrindRequest, takeGrindRequest, markGrindReady, cancelGrindRequest,
@@ -5649,6 +5714,18 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       groups.push({ title: 'Товары', items: prodItems, collapsible: true, base: 'tk' });
     }
 
+    // ── ЦЕНООБРАЗОВАНИЕ ────────────────────────────
+    if (mod('sales')) {
+      const pricingItems = [];
+      if (isViewer || role === 'admin' || role === 'director' || hasPermission(db, currentUser, 'products_edit')) {
+        pricingItems.push({ id: 'volume_prices', label: 'Прайс по объёму', icon: Tag });
+      }
+      if (isViewer || role === 'admin' || role === 'b2b' || role === 'sales' || role === 'director') {
+        pricingItems.push({ id: 'special_prices', label: 'Спец. цены клиентов', icon: Wallet });
+      }
+      if (pricingItems.length > 0) groups.push({ title: 'Ценообразование', items: pricingItems, collapsible: true, base: 'tk' });
+    }
+
     // ── КОФЕЙНИ ────────────────────────────
     if (mod('coffeeshops')) {
     const coffeeItems = [];
@@ -6334,6 +6411,9 @@ function Screen({ ctx }) {
     case 'rental_movement_form':
     case 'rental_revision_form':
       return <RentalEquipmentScreen ctx={ctx} />;
+    // ─── Ценообразование ───
+    case 'volume_prices': return <VolumePriceTiersScreen ctx={ctx} />;
+    case 'special_prices': return <ClientSpecialPricesScreen ctx={ctx} />;
     // ─── Клиенты ───
     case 'clients':       return <ClientsScreen ctx={ctx} />;
     case 'client_detail': return <ClientDetailScreen ctx={ctx} clientId={route.clientId} />;
