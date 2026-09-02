@@ -60,6 +60,7 @@ export const SYNC_TABLES = {
   rentalRevisions:    { table: 'rental_revisions',    pk: 'id' },
   volumePriceTiers:   { table: 'volume_price_tiers',  pk: 'id', base: 'tk' },
   clientSpecialPrices: { table: 'client_special_prices', pk: 'id', base: 'tk' },
+  roundPoints:        { table: 'round_points',        pk: 'id', base: 'tk' },
 };
 
 /**

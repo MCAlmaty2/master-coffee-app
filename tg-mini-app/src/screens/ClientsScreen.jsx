@@ -201,11 +201,32 @@ export function ClientDetailScreen({ ctx, clientId }) {
   const orders = useMemo(() => client ? getClientOrders(client, db.orders) : [], [client, db.orders]);
   const [addrPickerOpen, setAddrPickerOpen] = useState(false);
 
+  const monthVolume = useMemo(() => {
+    if (!client) return null;
+    const ym = new Date().toISOString().slice(0, 7);
+    const monthOrders = orders.filter(o => (o.created_at || '').slice(0, 7) === ym && o.status !== 'cancelled');
+    if (monthOrders.length === 0) return null;
+    const byItem = {};
+    let totalAmount = 0;
+    monthOrders.forEach(o => {
+      (o.items || []).forEach(it => {
+        const key = `${it.name}|${it.unit || ''}`;
+        byItem[key] = byItem[key] || { name: it.name, unit: it.unit || '', qty: 0 };
+        byItem[key].qty += Number(it.quantity) || 0;
+      });
+      totalAmount += Number(o.total_amount) || 0;
+    });
+    return { ordersCount: monthOrders.length, totalAmount, items: Object.values(byItem) };
+  }, [client, orders]);
+
+  const linkedRental = client ? (db.rentalClients || []).find(rc => rc.client_id === client.id) : null;
+
   if (!client) return <div style={{ padding: 24, color: 'var(--mc-muted)', textAlign: 'center' }}>Клиент не найден</div>;
 
   const lastOrder = orders[0];
 
   const clientFields = {
+    client_id:      client.id,
     client_type:    client.type,
     company_name:   client.type === 'legal'      ? client.name : '',
     full_name:      client.type === 'individual' ? client.name : '',
@@ -289,7 +310,33 @@ export function ClientDetailScreen({ ctx, clientId }) {
         {client.type === 'legal' && <FieldRow label="БИН/ИИН"       value={client.bin} />}
         {client.type === 'legal' && <FieldRow label="Контактное лицо" value={client.contact_person} />}
         {client.notes && <FieldRow label="Заметки" value={client.notes} />}
+        {linkedRental && (
+          <div style={{ paddingTop: 6 }}>
+            <button onClick={() => navigate({ name: 'rental_client_detail', clientId: linkedRental.id })}
+              style={{ fontSize: 12, fontWeight: 600, color: '#297b8a', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              Также в аренде оборудования →
+            </button>
+          </div>
+        )}
       </div>
+
+      {monthVolume && (
+        <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>
+            Объём закупа в этом месяце
+          </div>
+          {monthVolume.items.map((it, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 12 }}>
+              <span style={{ color: 'var(--mc-text)' }}>{it.name}</span>
+              <span style={{ color: 'var(--mc-muted)', fontWeight: 600 }}>{it.qty} {it.unit}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6, marginTop: 4, borderTop: '1px solid var(--mc-border-light)', fontSize: 13 }}>
+            <span style={{ color: 'var(--mc-muted)' }}>{monthVolume.ordersCount} {monthVolume.ordersCount === 1 ? 'заказ' : 'заказов'}</span>
+            <span style={{ color: '#297b8a', fontWeight: 700 }}>{fmtNum(monthVolume.totalAmount)} ₸</span>
+          </div>
+        </div>
+      )}
 
       {/* Банк */}
       {client.type === 'legal' && (client.bank || client.bik || client.account_number) && (
@@ -398,16 +445,17 @@ function OrderHistoryRow({ order: o, onClick }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const emptyClient = {
-  type: 'legal', name: '', bin: '', address: '', phone: '',
+  type: 'legal', name: '', bin: '', address: '', phone: '', city: 'almaty',
   contact_person: '', bank: '', kbe: '', bik: '',
   account_number: '', notes: '', preferred_items: [], addresses: [],
 };
 
-export function ClientEditScreen({ ctx, clientId }) {
+export function ClientEditScreen({ ctx, clientId, route }) {
   const { db, navigate, currentUser, showToast, setDb, syncSnapshotRef } = ctx;
   const existing = clientId ? (db.clients || []).find(c => c.id === clientId) : null;
+  const prefill = route?.prefill;
 
-  const [form, setForm]   = useState(existing ? { ...emptyClient, ...existing } : { ...emptyClient });
+  const [form, setForm]   = useState(existing ? { ...emptyClient, ...existing } : { ...emptyClient, ...(prefill || {}) });
   const [errors, setErr]  = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -434,6 +482,7 @@ export function ClientEditScreen({ ctx, clientId }) {
         name:            form.name.trim(),
         bin:             form.bin.trim()            || null,
         address:         form.address.trim()        || null,
+        city:            form.city === 'region' ? 'region' : 'almaty',
         phone:           form.phone.trim()          || null,
         contact_person:  form.contact_person.trim() || null,
         bank:            form.bank.trim()           || null,
@@ -457,6 +506,42 @@ export function ClientEditScreen({ ctx, clientId }) {
         if (syncSnapshotRef) syncSnapshotRef.current.clients = updated;
         return { ...d, clients: updated };
       });
+
+      // Клиент создан из карточки точки обхода — связываем с НЕЙ вместо создания дубликата точки.
+      if (!existing && route?.returnTo?.name === 'round_point_detail' && route.returnTo.pointId) {
+        await ctx.linkRoundPointToClient(route.returnTo.pointId, row.id);
+        showToast('Клиент добавлен и связан с точкой', 'success');
+        navigate(route.returnTo);
+        setSaving(false);
+        return;
+      }
+
+      // Новый клиент по городу Алматы — автоматически заводим точку обхода для бариста/техника.
+      if (!existing && row.city === 'almaty') {
+        const point = {
+          id: uid(),
+          name: row.name,
+          address: row.address,
+          phone: row.phone,
+          status: 'partner',
+          city: 'almaty',
+          client_id: row.id,
+          responsible_barista_id: null,
+          responsible_technician_id: null,
+          recruited_by: null,
+          notes: null,
+          ready_for_partner: false,
+          created_by: currentUser.id,
+          created_at: now,
+          updated_at: now,
+          org_id: ctx.currentOrgId,
+        };
+        supabase.from('round_points').insert([point]).then(({ error: rpError }) => {
+          if (rpError) return;
+          setDb(d => ({ ...d, roundPoints: [point, ...(d.roundPoints || [])] }));
+        });
+      }
+
       showToast(existing ? 'Клиент обновлён' : 'Клиент добавлен', 'success');
       navigate(existing ? { name: 'client_detail', clientId: row.id } : { name: 'clients' });
     } catch (err) {
@@ -496,6 +581,17 @@ export function ClientEditScreen({ ctx, clientId }) {
         {isLegal && <EditField label="Контактное лицо" value={form.contact_person} onChange={v => upd({ contact_person: v })} placeholder="Касымов Ержан" />}
         <EditField label="Телефон" value={form.phone} onChange={v => upd({ phone: v })} placeholder="+7 777 123 45 67" type="tel" />
         <EditField label={isLegal ? 'Юр. адрес' : 'Адрес'} value={form.address} onChange={v => upd({ address: v })} placeholder="г. Алматы, ул. Абая 150" multiline />
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--mc-muted)', marginBottom: 6 }}>Город</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[['almaty', 'Алматы'], ['region', 'Регион']].map(([v, l]) => (
+              <button key={v} onClick={() => upd({ city: v })}
+                style={{ flex: 1, padding: '8px 4px', background: (form.city || 'almaty') === v ? '#297b8a' : 'var(--mc-active-item)', color: (form.city || 'almaty') === v ? '#fff' : 'var(--mc-muted)', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
         <EditField label="Заметки" value={form.notes} onChange={v => upd({ notes: v })} placeholder="Любая доп. информация" multiline />
       </div>
 

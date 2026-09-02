@@ -5,7 +5,7 @@ import {
   ChevronRight, Trash2, Eye, Users, ArrowRight, Hash, ChevronDown,
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
-  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt, Wallet, Wrench,
+  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt, Wallet, Wrench, MapPin,
 } from 'lucide-react';
 import { supabase, setOrgIdHeader } from './supabase/client';
 import { orgHasModule } from './modules';
@@ -28,6 +28,7 @@ import MppKanbanScreen from './screens/MppKanbanScreen';
 import { DeferredPaymentScreen, DeferredPaymentHomeBanner } from './screens/DeferredPaymentScreen';
 import { RentalEquipmentScreen, RentalHomeBanner } from './screens/RentalEquipmentScreen';
 import { VolumePriceTiersScreen, ClientSpecialPricesScreen } from './screens/PricingScreen';
+import { RoundPointsScreen, RoundPointDetailScreen, RoundPointFormScreen } from './screens/RoundPointsScreen';
 import OrgManagementScreen from './screens/OrgManagementScreen';
 import PlatformUsersScreen from './screens/PlatformUsersScreen';
 import {
@@ -551,6 +552,8 @@ const PERMISSIONS = {
   products_edit:        { group: 'Товары', label: 'Редактировать и добавлять товары / прайс' },
   // Ценообразование
   volume_prices_edit:   { group: 'Ценообразование', label: 'Управлять прайс-листом по объёму (пороги, вставка из таблицы, сроки)' },
+  // Точки обхода
+  rounds_manage_all:    { group: 'Точки обхода', label: 'Редактировать любые точки обхода (не только свои)' },
   // Подарки
   gift_create:          { group: 'Подарки', label: 'Создавать заявки на подарки' },
   gift_approve:         { group: 'Подарки', label: 'Одобрять / отклонять заявки на подарки' },
@@ -604,13 +607,13 @@ function defaultPermissionsFor(roleKey) {
       // admin всё равно имеет всё, но для согласованности — все права
       return Object.keys(PERMISSIONS);
     case 'director':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'volume_prices_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_approve', 'expense_view_all', 'budget_view', 'mpp_manage', 'mpp_view'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'volume_prices_edit', 'rounds_manage_all', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_approve', 'expense_view_all', 'budget_view', 'mpp_manage', 'mpp_view'];
     case 'senior_manager':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'volume_prices_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_view_all', 'mpp_manage', 'mpp_view'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'volume_prices_edit', 'rounds_manage_all', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_view_all', 'mpp_manage', 'mpp_view'];
     case 'courier':
       return ['delivery_courier'];
     case 'b2b':
-      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'volume_prices_edit', 'gift_create', 'expense_create', 'mpp_manage'];
+      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'volume_prices_edit', 'rounds_manage_all', 'gift_create', 'expense_create', 'mpp_manage'];
     case 'sales':
       return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'gift_create', 'shipment_view', 'shipment_edit', 'expense_create', 'mpp_manage'];
     case 'warehouse':
@@ -1938,10 +1941,77 @@ function App() {
     } catch { /* fallback: используем localMax */ }
     const lastNum = Math.max(localMax, dbMax);
     const nextNum = String(lastNum + 1).padStart(3, '0');
+
+    // Клиент не выбран из базы вручную — ищем по БИН/названию, иначе заводим нового
+    // и сразу закрепляем за ним цены из этой (первой) заявки.
+    let clientId = formData.client_id || null;
+    let newClientRow = null;
+    if (!clientId) {
+      const orderClientName = formData.client_type === 'individual' ? formData.full_name : formData.company_name;
+      const trimmedName = (orderClientName || '').trim();
+      if (trimmedName) {
+        const normPhone = normalizePhone(formData.phone) || '';
+        const existingClient = (db.clients || []).find(c => {
+          if (formData.client_type === 'legal' && formData.bin && formData.bin !== '000000000000' && c.bin === formData.bin) return true;
+          if (formData.client_type === 'individual' && normPhone && normPhone !== '+70000000000' && normalizePhone(c.phone) === normPhone) return true;
+          return c.name.trim().toLowerCase() === trimmedName.toLowerCase();
+        });
+        if (existingClient) {
+          clientId = existingClient.id;
+        } else {
+          const now = new Date().toISOString();
+          newClientRow = {
+            id: uid(),
+            type: formData.client_type,
+            name: trimmedName,
+            bin: (formData.bin && formData.bin !== '000000000000') ? formData.bin : null,
+            address: formData.address || null,
+            city: 'almaty',
+            phone: formData.phone || null,
+            contact_person: formData.contact_person || null,
+            bank: formData.bank || null,
+            bik: formData.bik || null,
+            account_number: formData.account_number || null,
+            notes: null,
+            preferred_items: (formData.items || []).map(it => ({ name: it.name, unit: it.unit, price: Number(it.price) || 0, product_id: it.product_id || '' })),
+            addresses: [],
+            created_by: currentUser.id,
+            created_at: now,
+            updated_at: now,
+            org_id: _currentOrgId,
+          };
+          clientId = newClientRow.id;
+        }
+      }
+    }
+
+    // Клиент должен реально существовать в БД до вставки заказа — иначе order.client_id
+    // сослался бы на несуществующую строку и нарушил внешний ключ (409 на orders).
+    if (newClientRow) {
+      const { error: clientErr } = await supabase.from('clients').insert([newClientRow]);
+      if (clientErr) {
+        clientId = null; // не удалось создать клиента — заявку всё равно создаём, но без привязки
+      } else {
+        setDb(d => ({ ...d, clients: [newClientRow, ...(d.clients || [])] }));
+        const point = {
+          id: uid(), name: newClientRow.name, address: newClientRow.address, phone: newClientRow.phone,
+          status: 'partner', city: 'almaty', client_id: newClientRow.id,
+          responsible_barista_id: null, responsible_technician_id: null, recruited_by: null, notes: null,
+          ready_for_partner: false, created_by: currentUser.id, created_at: newClientRow.created_at, updated_at: newClientRow.created_at,
+          org_id: _currentOrgId,
+        };
+        supabase.from('round_points').insert([point]).then(({ error: rpError }) => {
+          if (rpError) return;
+          setDb(d => ({ ...d, roundPoints: [point, ...(d.roundPoints || [])] }));
+        });
+      }
+    }
+
     const order = {
       id: uid(),
       order_number: `${year}-${nextNum}`,
       ...formData,
+      client_id: clientId,
       total_amount: (formData.items || []).reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0),
       status: 'new',
       created_at: new Date().toISOString(),
@@ -1953,6 +2023,7 @@ function App() {
     const { data: insData, error: insErr } = await supabase.from('orders').insert([order]).select();
     if (insErr) return { error: insErr.message };
     const dbRow = insData?.[0] || order;
+
     setDb(d => {
       const notifRecipients = d.users.filter(u =>
         ['b2b', 'admin'].includes(u.role) && u.active && u.id !== currentUser.id
@@ -2557,7 +2628,7 @@ function App() {
     const task = {
       id: uid(),
       task_number: taskNumber,
-      kind: data.kind || 'visit',        // 'visit' | 'install' | 'internal' | 'tasting' | 'training'
+      kind: data.kind || 'visit',        // 'visit' | 'install' | 'internal' | 'tasting' | 'training' | 'round'
       department: data.department, // 'barista' | 'technician'
       assignee_id: data.assignee_id, // обязательно — конкретный исполнитель
       client_name: data.client_name.trim(),
@@ -2593,6 +2664,8 @@ function App() {
         training_prepaid: !!data.training_prepaid,
         training_contact: (data.training_contact || '').trim(),
         training_days: TRAINING_COURSES[data.training_course]?.days || 1,
+      } : data.kind === 'round' ? {
+        round_point_id: data.round_point_id,
       } : {},
       status: hasTime ? 'in_work' : 'new',
       created_at: new Date().toISOString(),
@@ -3977,7 +4050,15 @@ function App() {
     if (!existing) return { error: 'Не найден' };
     setDb(d => {
       const fresh = (d.rentalClients || []).find(c => c.id === clientId) || existing;
-      const updated = { ...fresh, ...data, manager_id: data.manager_id || null, technician_id: data.technician_id || null, plan_kg: Number(data.plan_kg) || 0, plan_price_per_kg: Number(data.plan_price_per_kg) || 0, purchase_day: Number(data.purchase_day) || null, updated_at: todayISO() };
+      const updated = {
+        ...fresh, ...data,
+        manager_id: data.manager_id !== undefined ? (data.manager_id || null) : fresh.manager_id,
+        technician_id: data.technician_id !== undefined ? (data.technician_id || null) : fresh.technician_id,
+        plan_kg: data.plan_kg !== undefined ? (Number(data.plan_kg) || 0) : fresh.plan_kg,
+        plan_price_per_kg: data.plan_price_per_kg !== undefined ? (Number(data.plan_price_per_kg) || 0) : fresh.plan_price_per_kg,
+        purchase_day: data.purchase_day !== undefined ? (Number(data.purchase_day) || null) : fresh.purchase_day,
+        updated_at: todayISO(),
+      };
       return { ...d, rentalClients: (d.rentalClients || []).map(c => c.id === clientId ? updated : c) };
     });
     return { ok: true };
@@ -4133,6 +4214,151 @@ function App() {
     const now = new Date().toISOString();
     setDb(d => ({ ...d, clientSpecialPrices: (d.clientSpecialPrices || []).map(s => s.id === id ? { ...s, status: 'rejected', updated_at: now } : s) }));
     upsertRow('clientSpecialPrices', { id, status: 'rejected', updated_at: now }).catch(() => {});
+    return { ok: true };
+  };
+
+  /* ═══════════ Точки обхода (бариста/техник) ═══════════ */
+
+  const canEditRoundPoint = (point) => {
+    if (!point) return false;
+    if (currentUser.role === 'admin' || currentUser.role === 'director') return true;
+    if (hasPermission(db, currentUser, 'rounds_manage_all')) return true;
+    if (!FIELD_ROLES.includes(currentUser.role)) return false;
+    return (!point.responsible_barista_id && !point.responsible_technician_id)
+      || point.responsible_barista_id === currentUser.id
+      || point.responsible_technician_id === currentUser.id
+      || point.recruited_by === currentUser.id
+      || point.created_by === currentUser.id;
+  };
+
+  const createRoundPoint = async (data) => {
+    const canCreate = FIELD_ROLES.includes(currentUser.role) || currentUser.role === 'admin' || currentUser.role === 'director' || hasPermission(db, currentUser, 'rounds_manage_all');
+    if (!canCreate) return { error: 'Нет прав на добавление точек обхода' };
+    if (!data.name?.trim()) return { error: 'Укажите название точки' };
+    const id = uid();
+    const now = new Date().toISOString();
+    const isField = FIELD_ROLES.includes(currentUser.role);
+    const row = {
+      id,
+      name: data.name.trim(),
+      address: (data.address || '').trim() || null,
+      phone: (data.phone || '').trim() || null,
+      status: data.status === 'partner' ? 'partner' : 'prospect',
+      city: data.city === 'region' ? 'region' : 'almaty',
+      client_id: data.client_id || null,
+      responsible_barista_id: currentUser.role === 'barista' ? currentUser.id : (data.responsible_barista_id || null),
+      responsible_technician_id: currentUser.role === 'technician' ? currentUser.id : (data.responsible_technician_id || null),
+      recruited_by: isField ? currentUser.id : (data.recruited_by || null),
+      notes: (data.notes || '').trim() || null,
+      ready_for_partner: false,
+      created_by: currentUser.id,
+      created_at: now,
+      updated_at: now,
+      org_id: _currentOrgId,
+    };
+    setDb(d => ({ ...d, roundPoints: [row, ...(d.roundPoints || [])] }));
+    upsertRow('roundPoints', row).catch(() => {});
+    return { ok: true, id };
+  };
+
+  const updateRoundPoint = async (id, patch) => {
+    const point = (db.roundPoints || []).find(p => p.id === id);
+    if (!canEditRoundPoint(point)) return { error: 'Нет прав на редактирование этой точки' };
+    const upd = { ...patch, updated_at: new Date().toISOString() };
+    setDb(d => ({ ...d, roundPoints: (d.roundPoints || []).map(p => p.id === id ? { ...p, ...upd } : p) }));
+    const { error } = await supabase.from('round_points').update(upd).eq('id', id).select();
+    if (error) return { error: error.message };
+    return { ok: true };
+  };
+
+  // Точка готова стать полноценным партнёром — уведомляет менеджеров, которые вручную заведут клиента.
+  const markRoundPointReadyForPartner = async (id) => {
+    const point = (db.roundPoints || []).find(p => p.id === id);
+    if (!point) return { error: 'Точка не найдена' };
+    const upd = { ready_for_partner: true, updated_at: new Date().toISOString() };
+    setDb(d => ({ ...d, roundPoints: (d.roundPoints || []).map(p => p.id === id ? { ...p, ...upd } : p) }));
+    const { error } = await supabase.from('round_points').update(upd).eq('id', id).select();
+    if (error) return { error: error.message };
+    const managers = (db.users || []).filter(u => u.org_id === _currentOrgId && u.id !== currentUser.id
+      && (u.role === 'admin' || u.role === 'director' || hasPermission(db, u, 'rounds_manage_all')));
+    setDb(d => {
+      const notifs = managers.map(m => makeNotif(d, {
+        recipient_id: m.id,
+        title: '🤝 Точка готова стать партнёром',
+        body: `${point.name}${point.address ? ' · ' + point.address : ''} — оформите клиента вручную`,
+        link_kind: 'round_point', link_id: id,
+      }));
+      return { ...d, notifications: [...notifs.filter(Boolean), ...(d.notifications || [])] };
+    });
+    managers.forEach(m => sendPrivateTelegram(m, `🤝 Точка «${point.name}» готова стать партнёром.\n${point.address || ''}\nОформите клиента вручную в CRM.`));
+    return { ok: true };
+  };
+
+  // Начать обход — создаёт задачу-визит, привязанную к точке; попадает в личный календарь бариста/техника.
+  const startRoundVisit = async (pointId, { visit_date, visit_time } = {}) => {
+    const point = (db.roundPoints || []).find(p => p.id === pointId);
+    if (!point) return { error: 'Точка не найдена' };
+    if (!FIELD_ROLES.includes(currentUser.role)) return { error: 'Обход может начать только бариста или техник' };
+    const task = await createTask({
+      kind: 'round',
+      department: currentUser.role,
+      assignee_id: currentUser.id,
+      client_name: point.name,
+      address: point.address || '—',
+      phone: point.phone || '',
+      problem: 'Обход точки',
+      visit_date: visit_date || todayISO(),
+      visit_time: visit_time || '',
+      round_point_id: pointId,
+    });
+    // Пишем задачу в Supabase напрямую и ЖДЁМ завершения — иначе при быстром
+    // "Иду сегодня" → "Зашёл" два fire-and-forget апсерта (создание и завершение)
+    // могут прийти не по порядку, и статус "выполнено" откатится обратно на "новая".
+    try { await supabase.from('tasks').upsert([task], { onConflict: 'id' }); } catch { /* диф-эффект досинхронизирует */ }
+    const patch = currentUser.role === 'barista'
+      ? { responsible_barista_id: point.responsible_barista_id || currentUser.id }
+      : { responsible_technician_id: point.responsible_technician_id || currentUser.id };
+    setDb(d => ({ ...d, roundPoints: (d.roundPoints || []).map(p => p.id === pointId ? { ...p, ...patch } : p) }));
+    upsertRow('roundPoints', { id: pointId, ...patch }).catch(() => {});
+    return { ok: true, taskId: task.id };
+  };
+
+  // Быстрая отметка "зашёл к партнёру" без комментария — переиспользует completeTask
+  // и сразу же пишет результат в Supabase напрямую (см. комментарий в startRoundVisit про гонку).
+  const logRoundVisitDone = async (taskId) => {
+    const r = completeTask(taskId, 'Обход выполнен');
+    if (r.error) return r;
+    const now = new Date().toISOString();
+    try { await supabase.from('tasks').update({ status: 'done', done_summary: 'Обход выполнен', done_at: now }).eq('id', taskId); } catch { /* диф-эффект досинхронизирует */ }
+    return r;
+  };
+
+  // Точка закрылась / партнёр перестал работать с нами — доступно менеджерам и любому бариста/технику на месте.
+  const closeRoundPoint = async (id, status) => {
+    if (!['closed', 'partner_left'].includes(status)) return { error: 'Некорректный статус' };
+    const point = (db.roundPoints || []).find(p => p.id === id);
+    if (!point) return { error: 'Точка не найдена' };
+    const canClose = currentUser.role === 'admin' || currentUser.role === 'director'
+      || FIELD_ROLES.includes(currentUser.role) || hasPermission(db, currentUser, 'rounds_manage_all');
+    if (!canClose) return { error: 'Нет прав' };
+    const label = status === 'closed' ? 'Точка закрылась' : 'Партнёр не работает с нами';
+    const who = `${currentUser.first_name} ${currentUser.last_name || ''}`.trim();
+    const note = `${label} · отметил ${who} · ${todayISO()}`;
+    const upd = { status, notes: point.notes ? `${point.notes}\n${note}` : note, updated_at: new Date().toISOString() };
+    setDb(d => ({ ...d, roundPoints: (d.roundPoints || []).map(p => p.id === id ? { ...p, ...upd } : p) }));
+    const { error } = await supabase.from('round_points').update(upd).eq('id', id).select();
+    if (error) return { error: error.message };
+    return { ok: true };
+  };
+
+  // Связать точку обхода с существующим клиентом (уже оформлен, есть реквизиты).
+  const linkRoundPointToClient = async (id, clientId) => {
+    const point = (db.roundPoints || []).find(p => p.id === id);
+    if (!canEditRoundPoint(point)) return { error: 'Нет прав на редактирование этой точки' };
+    const upd = { client_id: clientId, status: 'partner', updated_at: new Date().toISOString() };
+    setDb(d => ({ ...d, roundPoints: (d.roundPoints || []).map(p => p.id === id ? { ...p, ...upd } : p) }));
+    const { error } = await supabase.from('round_points').update(upd).eq('id', id).select();
+    if (error) return { error: error.message };
     return { ok: true };
   };
 
@@ -5171,6 +5397,8 @@ function App() {
     createRentalPurchase, updateRentalPurchase,
     createRentalMovement, createRentalRevision,
     createVolumeTier, updateVolumeTier, deleteVolumeTier, bulkReplaceVolumeTiers, extendVolumeTiers, createSpecialPrice, approveSpecialPrice, rejectSpecialPrice,
+    createRoundPoint, updateRoundPoint, markRoundPointReadyForPartner, startRoundVisit, canEditRoundPoint,
+    logRoundVisitDone, closeRoundPoint, linkRoundPointToClient,
     createMppDeal, updateMppDeal, addMppActivity, deleteMppDeal,
     createMppTask, completeMppTask, addMppDealProduct, removeMppDealProduct, addMppComment,
     createGrindRequest, takeGrindRequest, markGrindReady, cancelGrindRequest,
@@ -6000,8 +6228,8 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     main.push({ id: 'notifications', label: 'Уведомления', icon: Bell });
     groups.push({ title: 'Главное', items: main });
 
-    // ── ПЛАТФОРМА (только супер-админ) ────
-    if (currentUser.is_super_admin) {
+    // ── ПЛАТФОРМА (только супер-админ, только в режиме "Платформа" — не внутри каждой компании) ────
+    if (currentUser.is_super_admin && platformMode) {
       const platform = [];
       platform.push({ id: 'platform_orgs',    label: 'Организации',       icon: Building2 });
       platform.push({ id: 'platform_users',   label: 'Все пользователи',  icon: Users });
@@ -6040,6 +6268,15 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     if (isViewer || hasPermission(db, currentUser, 'mpp_manage') || hasPermission(db, currentUser, 'mpp_view')) {
       sales.push({ id: 'mpp_kanban', label: 'Воронка МПП', icon: Monitor });
     }
+    if (isViewer || hasPermission(db, currentUser, 'volume_prices_edit')) {
+      sales.push({ id: 'volume_prices', label: 'Прайс по объёму', icon: Tag });
+    }
+    if (isViewer || role === 'admin' || role === 'b2b' || role === 'sales' || role === 'director') {
+      sales.push({ id: 'special_prices', label: 'Спец. цены клиентов', icon: Wallet });
+    }
+    if (mod('rental') && (isViewer || hasPermission(db, currentUser, 'rental_equipment') || hasPermission(db, currentUser, 'rental_clients') || hasPermission(db, currentUser, 'rental_purchases') || hasPermission(db, currentUser, 'rental_revisions') || hasPermission(db, currentUser, 'rental_report'))) {
+      sales.push({ id: 'rental_home', label: 'Арендное оборудование', icon: Wrench });
+    }
     if (sales.length > 0) groups.push({ title: 'Отдел продаж', items: sales, collapsible: true, base: 'tk' });
     }
 
@@ -6052,6 +6289,9 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     }
     if (isViewer || FIELD_ROLES.includes(role) || isManager || hasPermission(db, currentUser, 'tasks_calendar_all')) {
       field.push({ id: 'field_calendar', label: 'Календарь команды', icon: Eye });
+    }
+    if (isViewer || FIELD_ROLES.includes(role) || role === 'admin' || role === 'director' || hasPermission(db, currentUser, 'rounds_manage_all')) {
+      field.push({ id: 'round_points', label: 'Точки обхода', icon: MapPin });
     }
     if (field.length > 0) groups.push({ title: 'Бариста и техники', items: field, collapsible: true, base: 'tk' });
     }
@@ -6095,18 +6335,6 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       groups.push({ title: 'Товары', items: prodItems, collapsible: true, base: 'tk' });
     }
 
-    // ── ЦЕНООБРАЗОВАНИЕ ────────────────────────────
-    if (mod('sales')) {
-      const pricingItems = [];
-      if (isViewer || hasPermission(db, currentUser, 'volume_prices_edit')) {
-        pricingItems.push({ id: 'volume_prices', label: 'Прайс по объёму', icon: Tag });
-      }
-      if (isViewer || role === 'admin' || role === 'b2b' || role === 'sales' || role === 'director') {
-        pricingItems.push({ id: 'special_prices', label: 'Спец. цены клиентов', icon: Wallet });
-      }
-      if (pricingItems.length > 0) groups.push({ title: 'Ценообразование', items: pricingItems, collapsible: true, base: 'tk' });
-    }
-
     // ── КОФЕЙНИ ────────────────────────────
     if (mod('coffeeshops')) {
     const coffeeItems = [];
@@ -6140,15 +6368,6 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
         finItems.push({ id: 'cash_queue', label: 'Наличные от доставок', icon: Banknote });
       }
       if (finItems.length > 0) groups.push({ title: 'Финансы', items: finItems, collapsible: true, base: 'tk' });
-    }
-
-    // ── АРЕНДА ОБОРУДОВАНИЯ ────────────────────
-    if (mod('rental')) {
-      const rentalItems = [];
-      if (isViewer || hasPermission(db, currentUser, 'rental_equipment') || hasPermission(db, currentUser, 'rental_clients') || hasPermission(db, currentUser, 'rental_purchases') || hasPermission(db, currentUser, 'rental_revisions') || hasPermission(db, currentUser, 'rental_report')) {
-        rentalItems.push({ id: 'rental_home', label: 'Арендное оборудование', icon: Wrench });
-      }
-      if (rentalItems.length > 0) groups.push({ title: 'Аренда', items: rentalItems, collapsible: true, base: 'tk' });
     }
 
     // ── HR-КАЛЕНДАРЬ (отпуска и дни рождения) ────────────────────
@@ -6798,7 +7017,11 @@ function Screen({ ctx }) {
     // ─── Клиенты ───
     case 'clients':       return <ClientsScreen ctx={ctx} />;
     case 'client_detail': return <ClientDetailScreen ctx={ctx} clientId={route.clientId} />;
-    case 'client_edit':   return <ClientEditScreen ctx={ctx} clientId={route.clientId ?? null} />;
+    case 'client_edit':   return <ClientEditScreen ctx={ctx} clientId={route.clientId ?? null} route={route} />;
+    // ─── Точки обхода ───
+    case 'round_points':       return <RoundPointsScreen ctx={ctx} />;
+    case 'round_point_detail': return <RoundPointDetailScreen ctx={ctx} pointId={route.pointId} />;
+    case 'round_point_form':   return <RoundPointFormScreen ctx={ctx} pointId={route.pointId ?? null} />;
     default: return <div className="p-6">Не найдено</div>;
   }
 }
@@ -8983,6 +9206,7 @@ function CreateOrderScreen({ ctx }) {
   const setForm = setOrderDraft;
   const [errors, setErrors] = useState({});
   const [showClientPicker, setShowClientPicker] = useState(false);
+  const [clientAddressChoices, setClientAddressChoices] = useState(null);
 
   const isGrindable = (productId) => {
     const p = products.find(x => x.id === productId);
@@ -9002,20 +9226,31 @@ function CreateOrderScreen({ ctx }) {
     const preferredAsItems = (client.preferred_items || []).map(pi => ({
       ...pi, quantity: pi.quantity || 1, product_id: pi.product_id || '',
     }));
-    update({
+    const fields = {
+      client_id:      client.id,
       client_type:    client.type,
       company_name:   client.type === 'legal'      ? client.name : '',
       full_name:      client.type === 'individual' ? client.name : '',
       bin:            client.bin            || '',
       contact_person: client.contact_person || '',
       phone:          client.phone          || '',
-      address:        client.address        || '',
       bank:           client.bank           || '',
       bik:            client.bik            || '',
       account_number: client.account_number || '',
       ...(preferredAsItems.length > 0 ? { items: preferredAsItems } : {}),
-    });
+    };
     setShowClientPicker(false);
+    // Несколько адресов у клиента — дать выбрать, а не молча брать только основной.
+    const allAddresses = [
+      ...(client.address ? [{ label: 'Основной', address: client.address }] : []),
+      ...(client.addresses || []).filter(a => a.address?.trim()),
+    ];
+    if (allAddresses.length > 1) {
+      update(fields);
+      setClientAddressChoices(allAddresses);
+      return;
+    }
+    update({ ...fields, address: client.address || '' });
     showToast('Данные клиента подставлены');
   };
   const addItem = () => navigate({
@@ -9034,6 +9269,7 @@ function CreateOrderScreen({ ctx }) {
       return;
     }
     const payload = {
+      client_id: form.client_id || null,
       client_type: form.client_type,
       ...(form.client_type === 'individual'
         ? { full_name: form.full_name.trim() }
@@ -9055,6 +9291,7 @@ function CreateOrderScreen({ ctx }) {
       comment: form.comment.trim(),
     };
     const order = await createOrder(payload);
+    if (order?.error) { showToast(order.error); return; }
     // Автоматически создаём заявки на помол для товаров с grind_type
     const grindItems = form.items.filter(it => it.grind_type);
     for (const it of grindItems) {
@@ -9332,6 +9569,25 @@ function CreateOrderScreen({ ctx }) {
       </div>
       {showClientPicker && (
         <ClientPickerModal ctx={ctx} onSelect={handleClientSelect} onClose={() => setShowClientPicker(false)} />
+      )}
+      {clientAddressChoices && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 9999, display: 'flex', alignItems: 'flex-end' }}
+          onClick={e => { if (e.target === e.currentTarget) setClientAddressChoices(null); }}>
+          <div style={{ background: 'var(--mc-surface)', width: '100%', borderRadius: '20px 20px 0 0', padding: '16px 16px 24px' }}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-bold text-sm" style={{ color: 'var(--mc-text)' }}>Выберите адрес</div>
+              <button onClick={() => setClientAddressChoices(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)' }}><X size={20} /></button>
+            </div>
+            {clientAddressChoices.map((a, i) => (
+              <button key={i} onClick={() => { update({ address: a.address }); setClientAddressChoices(null); showToast('Данные клиента подставлены'); }}
+                className="w-full text-left px-3 py-2.5 rounded-lg mb-2 text-sm"
+                style={{ border: '1px solid var(--mc-border)', color: 'var(--mc-text)' }}>
+                <div className="font-semibold">{a.label || `Адрес ${i + 1}`}</div>
+                <div style={{ color: 'var(--mc-muted)', fontSize: 12 }}>{a.address}</div>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -9888,6 +10144,7 @@ function CreateQuickScreen({ ctx }) {
       ...(form.doc_no ? { realization_doc_no: form.doc_no.trim() } : {}),
     };
     const order = await createOrder(payload, 'quick');
+    if (order?.error) { showToast(order.error); return; }
     changeStatus(order.id, 'in_work');
 
     // Автоматически создаём заявки на помол для товаров с выбранным grind_type
@@ -12005,7 +12262,7 @@ function TaskDetailScreen({ ctx, taskId }) {
 
   return (
     <div>
-      <PageHeader title={task.task_number} subtitle={`${task.kind === 'tasting' ? '🍵 Дегустация · ' : task.kind === 'install' ? '⚙️ Установка · ' : task.kind === 'training' ? '🎓 Обучение · ' : ''}${ROLES[task.department].label} · ${s.label}`} onBack={goBack} />
+      <PageHeader title={task.task_number} subtitle={`${task.kind === 'tasting' ? '🍵 Дегустация · ' : task.kind === 'install' ? '⚙️ Установка · ' : task.kind === 'training' ? '🎓 Обучение · ' : task.kind === 'round' ? '🚶 Обход · ' : ''}${ROLES[task.department].label} · ${s.label}`} onBack={goBack} />
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
@@ -12013,7 +12270,7 @@ function TaskDetailScreen({ ctx, taskId }) {
             <TaskTimeline status={task.status} />
           </Card>
 
-          <Card title={task.kind === 'tasting' ? 'Заведение' : task.kind === 'training' ? 'Ученик' : 'Клиент'}>
+          <Card title={task.kind === 'tasting' ? 'Заведение' : task.kind === 'training' ? 'Ученик' : task.kind === 'round' ? 'Точка обхода' : 'Клиент'}>
             <FieldRow label={task.kind === 'training' ? 'ФИО' : 'Наименование'} value={<strong style={{ color: 'var(--mc-text)' }}>{task.client_name}</strong>} />
             {task.kind !== 'training' && <FieldRow label="Адрес" value={task.address} />}
             <FieldRow label="Телефон" value={task.phone} />
@@ -12530,7 +12787,7 @@ function StartTaskModal({ task, onClose, onStart }) {
     <Modal onClose={onClose} title="Взять в работу">
       <div className="space-y-4">
         <div className="text-sm" style={{ color: 'var(--mc-muted)' }}>
-          Задача <strong style={{ color: 'var(--mc-text)' }}>{task.task_number}</strong> — {task.kind === 'internal' ? 'Внутренняя задача' : task.kind === 'install' ? `Установка у ${task.client_name}` : task.client_name}
+          Задача <strong style={{ color: 'var(--mc-text)' }}>{task.task_number}</strong> — {task.kind === 'internal' ? 'Внутренняя задача' : task.kind === 'install' ? `Установка у ${task.client_name}` : task.kind === 'round' ? `Обход: ${task.client_name}` : task.client_name}
         </div>
         <SiteInput label="Дата визита" type="date" value={date} onChange={setDate} />
         <div className="grid grid-cols-2 gap-2">
@@ -16595,6 +16852,7 @@ function NotificationsScreen({ ctx }) {
         case 'delivery_cash': return navigate({ name: 'cash_queue' });
         case 'shipment': return navigate({ name: 'shipment_registry' });
         case 'volume_price': return navigate({ name: 'volume_prices' });
+        case 'round_point': return navigate({ name: 'round_point_detail', pointId: n.link_id });
         case 'manager_task': return navigate({ name: 'manager_tasks' });
         case 'coffee_task': return navigate({ name: 'coffee_tasks' });
         case 'access':   return navigate({ name: 'admin_requests' });

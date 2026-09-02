@@ -2,9 +2,10 @@ import React, { useState, useMemo } from 'react';
 import {
   Plus, ChevronRight, ChevronLeft, Search, Wrench, User, Truck,
   Check, AlertTriangle, Edit3, Trash2, Package, ClipboardList, ClipboardPaste,
-  ArrowLeftRight, Coffee, Phone, MapPin,
+  ArrowLeftRight, Coffee, Phone, MapPin, Link2,
 } from 'lucide-react';
 import { EquipmentImportModal } from './RentalImportModal';
+import { ClientPickerModal } from './ClientsScreen';
 
 const TZ = 'Asia/Almaty';
 const inputCls = 'w-full px-3 py-2 rounded-lg outline-none text-sm';
@@ -422,8 +423,10 @@ function RentalClientDetailScreen({ ctx, clientId }) {
   const users = ctx.db.users || [];
   const isAdmin = ctx.currentUser?.role === 'admin' || ctx.currentUser?.role === 'director';
   const canManage = isAdmin || ctx.hasPermission('rental_clients');
+  const [pickerOpen, setPickerOpen] = useState(false);
   if (!client) return <div className="p-4 text-sm" style={{ color: 'var(--mc-muted)' }}>Клиент не найден</div>;
   const userName = (id) => { const u = users.find(x => x.id === id); return u ? (u.first_name || u.username || '—') : '—'; };
+  const linkedClient = client.client_id ? (ctx.db.clients || []).find(c => c.id === client.client_id) : null;
 
   return (
     <div className="p-4">
@@ -441,7 +444,33 @@ function RentalClientDetailScreen({ ctx, clientId }) {
         {client.purchase_day && <div className="mb-1">День закупа: {client.purchase_day}-е число</div>}
         <div>Менеджер: {userName(client.manager_id)} · Техник: {userName(client.technician_id)}</div>
         {client.contract_link && <a href={client.contract_link} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline block mt-1">Договор</a>}
+        <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--mc-border-light)' }}>
+          {linkedClient ? (
+            <div className="flex items-center justify-between gap-2">
+              <button onClick={() => ctx.navigate({ name: 'client_detail', clientId: linkedClient.id })} className="font-semibold" style={{ color: '#297b8a' }}>
+                <Link2 size={11} className="inline mr-1" />{linkedClient.name} →
+              </button>
+              {canManage && <button onClick={() => setPickerOpen(true)} style={{ color: 'var(--mc-muted)' }}>изменить</button>}
+            </div>
+          ) : canManage && (
+            <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1 font-semibold" style={{ color: '#297b8a' }}>
+              <Link2 size={11} />Связать с клиентом из базы
+            </button>
+          )}
+        </div>
       </div>
+      {pickerOpen && (
+        <ClientPickerModal
+          ctx={ctx}
+          onClose={() => setPickerOpen(false)}
+          onSelect={(c) => {
+            const r = ctx.updateRentalClient(client.id, { client_id: c.id });
+            if (r?.error) return ctx.showToast(r.error);
+            setPickerOpen(false);
+            ctx.showToast(`Связано с клиентом «${c.name}»`);
+          }}
+        />
+      )}
       <h3 className="font-semibold text-sm mb-2"><Package size={14} className="inline mr-1" />Оборудование у клиента ({equipment.length})</h3>
       {!equipment.length && <div className="text-xs py-2 mb-3" style={{ color: 'var(--mc-muted)' }}>Нет оборудования</div>}
       {equipment.map(e => (
