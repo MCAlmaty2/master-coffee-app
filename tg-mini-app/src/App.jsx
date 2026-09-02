@@ -6392,8 +6392,10 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       admin.push({ id: 'admin_requests', label: 'Запросы доступа',    icon: Bell });
       if (!currentUser.is_super_admin) {
         admin.push({ id: 'admin_telegram', label: 'Telegram-уведомления', icon: Send });
-        admin.push({ id: 'admin_release_notes', label: 'Что нового (рассылка)', icon: Send });
       }
+      // «Что нового» — доступен и супер-админу, привязан к org_id текущей открытой
+      // организации (при переключении между компаниями рассылки не пересекаются).
+      admin.push({ id: 'admin_release_notes', label: 'Что нового (рассылка)', icon: Send });
       admin.push({ id: 'admin_service',  label: 'Сервис · очистка',   icon: Settings });
       groups.push({ title: 'Администрирование', items: admin, collapsible: true, base: 'admin' });
     }
