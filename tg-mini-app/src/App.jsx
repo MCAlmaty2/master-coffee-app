@@ -14237,7 +14237,7 @@ function ContractCard({ contract, ctx }) {
       </div>
       <div className="flex items-center justify-between text-xs flex-wrap gap-2" style={{ color: '#A8A8AE' }}>
         <span>От: {author ? `${author.first_name} ${author.last_name[0]}.` : '—'}{taker ? ` · в работе у ${taker.first_name} ${taker.last_name[0]}.` : ''}</span>
-        <span>{contract.specification.length} поз. · {fmtNum(totalSum)} ₸</span>
+        <span>{(contract.specification || []).length} поз. · {fmtNum(totalSum)} ₸</span>
       </div>
       <div className="flex items-center justify-between text-[11px] mt-1.5" style={{ color: '#A8A8AE' }}>
         <span>Создана: {fmtDateTime(contract.created_at)}</span>
