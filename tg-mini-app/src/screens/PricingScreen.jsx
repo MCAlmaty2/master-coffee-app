@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Plus, Trash2, Check, X, ChevronDown, Search, Clock, CheckCircle2,
-  XCircle, AlertCircle, Edit3, Eye, Package, User,
+  XCircle, AlertCircle, Edit3, Eye, Package, User, ClipboardPaste, RefreshCw,
 } from 'lucide-react';
 
 const COFFEE_CAT = 'Кофе зерно';
@@ -43,6 +43,21 @@ export function VolumePriceTiersScreen({ ctx }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ min_kg: '', max_kg: '', price: '' });
   const [editId, setEditId] = useState(null);
+  const [showBulkImport, setShowBulkImport] = useState(false);
+
+  const today = todayISO();
+  const expiryStatus = (validUntil) => {
+    if (!validUntil) return null;
+    if (validUntil < today) return 'expired';
+    const soon = new Date(today + 'T00:00:00Z'); soon.setUTCDate(soon.getUTCDate() + 7);
+    if (validUntil <= soon.toISOString().slice(0, 10)) return 'soon';
+    return 'ok';
+  };
+  const EXPIRY_META = {
+    expired: { label: 'Истёк', color: '#EB5757', bg: '#FEE2E2' },
+    soon:    { label: 'Истекает скоро', color: '#F59E0B', bg: '#FEF3C7' },
+    ok:      { label: 'Активен', color: '#22C55E', bg: '#DCFCE7' },
+  };
 
   const productTiers = useMemo(
     () => selectedProduct ? tiers.filter(t => t.product_id === selectedProduct).sort((a, b) => a.min_kg - b.min_kg) : [],
@@ -85,9 +100,22 @@ export function VolumePriceTiersScreen({ ctx }) {
 
   const productsWithTiers = useMemo(() => {
     const tierMap = {};
-    tiers.forEach(t => { tierMap[t.product_id] = (tierMap[t.product_id] || 0) + 1; });
-    return coffeeProducts.map(p => ({ ...p, tierCount: tierMap[p.id] || 0 }));
+    const validUntilMap = {};
+    tiers.forEach(t => {
+      tierMap[t.product_id] = (tierMap[t.product_id] || 0) + 1;
+      if (t.valid_until && !validUntilMap[t.product_id]) validUntilMap[t.product_id] = t.valid_until;
+    });
+    return coffeeProducts.map(p => ({ ...p, tierCount: tierMap[p.id] || 0, validUntil: validUntilMap[p.id] || null }));
   }, [coffeeProducts, tiers]);
+
+  const extendOneYear = async (productId, currentValidUntil) => {
+    const base = currentValidUntil && currentValidUntil > today ? currentValidUntil : today;
+    const [y, m, d] = base.split('-').map(Number);
+    const newDate = new Date(Date.UTC(y + 1, m - 1, d)).toISOString().slice(0, 10);
+    const r = await ctx.extendVolumeTiers(productId, newDate);
+    if (r?.error) showToast(r.error);
+    else showToast(`Продлено до ${fmtDate(newDate)}`);
+  };
 
   return (
     <div>
@@ -111,6 +139,14 @@ export function VolumePriceTiersScreen({ ctx }) {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {(() => {
+                  const st = expiryStatus(p.validUntil);
+                  return st && st !== 'ok' ? (
+                    <span className="text-[10px] font-semibold rounded-full px-2 py-0.5" style={{ background: EXPIRY_META[st].bg, color: EXPIRY_META[st].color }}>
+                      {EXPIRY_META[st].label}
+                    </span>
+                  ) : null;
+                })()}
                 {p.tierCount > 0 && (
                   <span className="text-[10px] font-semibold rounded-full px-2 py-0.5" style={{ background: '#DCFCE7', color: '#166534' }}>
                     {p.tierCount} порогов
@@ -136,6 +172,33 @@ export function VolumePriceTiersScreen({ ctx }) {
             <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
               Базовая цена: {fmtNum(coffeeProducts.find(p => p.id === selectedProduct)?.price)} ₸/кг
             </div>
+            {(() => {
+              const productValidUntil = productTiers.find(t => t.valid_until)?.valid_until || null;
+              const st = expiryStatus(productValidUntil);
+              if (!st) return null;
+              const meta = EXPIRY_META[st];
+              return (
+                <div className="text-xs mt-1 flex items-center gap-1.5" style={{ color: meta.color }}>
+                  <Clock size={11} />
+                  {st === 'expired' ? 'Прайс истёк' : st === 'soon' ? 'Прайс истекает' : 'Действует до'} {fmtDate(productValidUntil)}
+                </div>
+              );
+            })()}
+          </div>
+
+          <div className="flex gap-2 mb-3">
+            <button onClick={() => setShowBulkImport(true)}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold text-white"
+              style={{ background: '#7C3AED' }}>
+              <ClipboardPaste size={13} /> Вставить из таблицы
+            </button>
+            {productTiers.length > 0 && (
+              <button onClick={() => extendOneYear(selectedProduct, productTiers.find(t => t.valid_until)?.valid_until)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold"
+                style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
+                <RefreshCw size={13} /> Продлить на год
+              </button>
+            )}
           </div>
 
           {productTiers.length > 0 && (
@@ -215,8 +278,119 @@ export function VolumePriceTiersScreen({ ctx }) {
               <Plus size={14} /> Добавить порог
             </button>
           )}
+
+          {showBulkImport && (
+            <BulkImportVolumeModal
+              product={coffeeProducts.find(p => p.id === selectedProduct)}
+              currentValidUntil={productTiers.find(t => t.valid_until)?.valid_until || null}
+              onClose={() => setShowBulkImport(false)}
+              showToast={showToast}
+              onConfirm={async (parsedTiers, validUntil) => {
+                const r = await ctx.bulkReplaceVolumeTiers(selectedProduct, parsedTiers, validUntil);
+                if (r?.error) { showToast(r.error); return; }
+                showToast(`Прайс обновлён: ${parsedTiers.length} ${parsedTiers.length === 1 ? 'порог' : 'порогов'}`);
+                setShowBulkImport(false);
+              }}
+            />
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Парсер вставки прайса по объёму из таблицы ─────────────── */
+function parseVolumeBulkText(text) {
+  const results = [];
+  for (const line of text.split('\n').map(l => l.trim()).filter(Boolean)) {
+    const cols = line.split('\t').length >= 2 ? line.split('\t') : line.split(/[;,]/);
+    if (cols.length < 2) continue;
+    const min = parseFloat(String(cols[0]).replace(',', '.'));
+    const maxRaw = (cols[1] || '').trim();
+    const max = maxRaw === '' || maxRaw.toLowerCase() === '∞' ? null : parseFloat(String(maxRaw).replace(',', '.'));
+    const price = parseFloat(String(cols[2] ?? '').replace(/\s/g, '').replace(',', '.'));
+    if (!isNaN(min) && !isNaN(price) && price > 0) results.push({ min_kg: min, max_kg: isNaN(max) ? null : max, price });
+  }
+  return results.sort((a, b) => a.min_kg - b.min_kg);
+}
+
+function BulkImportVolumeModal({ product, currentValidUntil, onClose, onConfirm, showToast }) {
+  const [text, setText] = useState('');
+  const [months, setMonths] = useState('12');
+  const [step, setStep] = useState('input');
+  const [parsed, setParsed] = useState([]);
+
+  const computeValidUntil = () => {
+    const n = Number(months) || 0;
+    if (n <= 0) return null;
+    const base = new Date();
+    const y = base.getFullYear(), m = base.getMonth(), d = base.getDate();
+    return new Date(Date.UTC(y, m + n, d)).toISOString().slice(0, 10);
+  };
+
+  const handleParse = () => {
+    const rows = parseVolumeBulkText(text);
+    if (rows.length === 0) { showToast?.('Не удалось разобрать строки. Формат: От(кг) TAB До(кг) TAB Цена'); return; }
+    setParsed(rows);
+    setStep('preview');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" style={{ background: 'rgba(0,0,0,.45)' }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-4" style={{ background: 'var(--mc-surface)', maxHeight: '85vh', overflowY: 'auto' }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm font-bold" style={{ color: 'var(--mc-text)' }}>Вставить прайс — {product?.name}</div>
+          <button onClick={onClose} style={{ color: 'var(--mc-muted)' }}><X size={18} /></button>
+        </div>
+
+        {step === 'input' ? (
+          <div className="space-y-3">
+            <div className="p-2.5 rounded-lg text-[11px]" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
+              Формат: <b>От (кг)</b> TAB <b>До (кг, пусто = ∞)</b> TAB <b>Цена</b>. Полностью заменит текущие пороги этого товара.
+            </div>
+            <textarea value={text} onChange={e => setText(e.target.value)} rows={7}
+              placeholder={'1\t9\t13990\n10\t49\t12990\n50\t\t11990'}
+              className="w-full px-3 py-2.5 rounded-lg outline-none text-sm font-mono"
+              style={{ border: '1px solid var(--mc-border)', resize: 'vertical' }} />
+            <div>
+              <label className="text-[10px] font-semibold block mb-0.5" style={{ color: 'var(--mc-muted)' }}>Срок действия (месяцев от сегодня, 0 = бессрочно)</label>
+              <input type="number" min="0" value={months} onChange={e => setMonths(e.target.value)}
+                className={inputCls} style={inputStyle} />
+              {currentValidUntil && <div className="text-[10px] mt-1" style={{ color: 'var(--mc-muted)' }}>Сейчас действует до {fmtDate(currentValidUntil)}</div>}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={onClose} className="flex-1 text-xs font-semibold py-2.5 rounded-lg" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>Отмена</button>
+              <button onClick={handleParse} disabled={!text.trim()} className="flex-1 text-xs font-semibold py-2.5 rounded-lg text-white" style={{ background: '#7C3AED' }}>Разобрать</button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--mc-border)' }}>
+              <table className="w-full text-xs">
+                <thead><tr style={{ background: 'var(--mc-active-item)' }}>
+                  <th className="text-left px-2 py-1.5" style={{ color: 'var(--mc-muted)' }}>Объём</th>
+                  <th className="text-right px-2 py-1.5" style={{ color: 'var(--mc-muted)' }}>Цена</th>
+                </tr></thead>
+                <tbody>
+                  {parsed.map((r, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid var(--mc-border)' }}>
+                      <td className="px-2 py-1.5" style={{ color: 'var(--mc-text)' }}>{r.max_kg != null ? `${r.min_kg}–${r.max_kg}` : `от ${r.min_kg}`}</td>
+                      <td className="px-2 py-1.5 text-right font-semibold" style={{ color: '#297b8a' }}>{fmtNum(r.price)} ₸</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
+              Действует до: <b style={{ color: 'var(--mc-text)' }}>{computeValidUntil() ? fmtDate(computeValidUntil()) : 'бессрочно'}</b>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setStep('input')} className="flex-1 text-xs font-semibold py-2.5 rounded-lg" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>Назад</button>
+              <button onClick={() => onConfirm(parsed, computeValidUntil())} className="flex-1 text-xs font-semibold py-2.5 rounded-lg text-white" style={{ background: '#297b8a' }}>Сохранить ({parsed.length})</button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

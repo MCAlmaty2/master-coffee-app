@@ -549,6 +549,8 @@ const PERMISSIONS = {
   shipment_pay:         { group: 'Отчёты', label: 'Отмечать оплату в реестре отгрузок (кассир)' },
   // Товары / прайс
   products_edit:        { group: 'Товары', label: 'Редактировать и добавлять товары / прайс' },
+  // Ценообразование
+  volume_prices_edit:   { group: 'Ценообразование', label: 'Управлять прайс-листом по объёму (пороги, вставка из таблицы, сроки)' },
   // Подарки
   gift_create:          { group: 'Подарки', label: 'Создавать заявки на подарки' },
   gift_approve:         { group: 'Подарки', label: 'Одобрять / отклонять заявки на подарки' },
@@ -602,13 +604,13 @@ function defaultPermissionsFor(roleKey) {
       // admin всё равно имеет всё, но для согласованности — все права
       return Object.keys(PERMISSIONS);
     case 'director':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_approve', 'expense_view_all', 'budget_view', 'mpp_manage', 'mpp_view'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'volume_prices_edit', 'schedule_access', 'gift_create', 'gift_approve', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_approve', 'expense_view_all', 'budget_view', 'mpp_manage', 'mpp_view'];
     case 'senior_manager':
-      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_view_all', 'mpp_manage', 'mpp_view'];
+      return ['orders_view_all', 'writeoff_create', 'writeoff_approve', 'writeoff_view_all', 'contract_create', 'contract_take', 'contract_view_all', 'grind_view_all', 'delivery_manage', 'delivery_view_all', 'report_edit', 'shipment_view', 'shipment_edit', 'products_edit', 'volume_prices_edit', 'schedule_access', 'gift_create', 'gift_process', 'gift_view_all', 'coffee_shipments_view', 'coffee_shipments_edit', 'coffee_shipments_pay', 'expense_create', 'expense_view_all', 'mpp_manage', 'mpp_view'];
     case 'courier':
       return ['delivery_courier'];
     case 'b2b':
-      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'gift_create', 'expense_create', 'mpp_manage'];
+      return ['orders_view_all', 'orders_create', 'orders_create_quick', 'orders_change_status', 'orders_archive_view', 'orders_export', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'grind_view_all', 'shipment_view', 'shipment_edit', 'volume_prices_edit', 'gift_create', 'expense_create', 'mpp_manage'];
     case 'sales':
       return ['orders_view_own', 'orders_create', 'tasks_view_own', 'tasks_create', 'tasks_calendar_all', 'contract_create', 'grind_create', 'gift_create', 'shipment_view', 'shipment_edit', 'expense_create', 'mpp_manage'];
     case 'warehouse':
@@ -1579,6 +1581,53 @@ function App() {
     const iv = setInterval(checkScheduleReminders, 60_000);
     return () => clearInterval(iv);
   }, [bootStatus.phase, db.scheduleTasks, db.users, session]);
+
+  // ─── Напоминание об истечении прайса по объёму — за 7 дней, менеджеру-создателю ───
+  // Нет серверного крона: проверка идёт с любого открытого сеанса, раз в час, а
+  // повторная отправка блокируется полем notified_at в самой БД (не localStorage —
+  // иначе разные сотрудники слали бы повторно каждый со своего устройства).
+  useEffect(() => {
+    if (bootStatus.phase !== 'ready') return;
+    if (!(db.volumePriceTiers || []).length) return;
+
+    const checkVolumePriceExpiry = () => {
+      const today = todayISO();
+      const warnFrom = (() => { const d = new Date(today + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 7); return d.toISOString().slice(0, 10); })();
+
+      const byProduct = {};
+      (db.volumePriceTiers || []).forEach(t => {
+        if (!t.valid_until) return;
+        (byProduct[t.product_id] ||= []).push(t);
+      });
+
+      Object.entries(byProduct).forEach(([productId, tiers]) => {
+        const validUntil = tiers[0].valid_until;
+        if (validUntil > warnFrom) return; // ещё не пора
+        if (tiers.every(t => t.notified_at)) return; // уже уведомляли по этому сроку
+
+        const creatorId = tiers.find(t => t.created_by)?.created_by;
+        const creator = creatorId ? db.users.find(u => u.id === creatorId) : null;
+        if (!creator) return;
+        const product = (db.products || []).find(p => p.id === productId);
+        const isExpired = validUntil < today;
+        const title = isExpired ? '⏰ Прайс по объёму истёк' : '⏰ Прайс по объёму скоро истекает';
+        const body = `${product?.name || 'Товар'}: ${isExpired ? 'истёк' : 'истекает'} ${fmtDate(validUntil)}. Продлить на тех же условиях или изменить цены?`;
+
+        const n = makeNotif(db, { recipient_id: creator.id, title, body, link_kind: 'volume_price', link_id: productId });
+        if (n) setDb(d => ({ ...d, notifications: [n, ...(d.notifications || [])] }));
+        sendPrivateTelegram(creator, `${title}\n${body}`);
+
+        const now = new Date().toISOString();
+        const ids = tiers.map(t => t.id);
+        supabase.from('volume_price_tiers').update({ notified_at: now }).in('id', ids).then(() => {});
+        setDb(d => ({ ...d, volumePriceTiers: (d.volumePriceTiers || []).map(t => ids.includes(t.id) ? { ...t, notified_at: now } : t) }));
+      });
+    };
+
+    checkVolumePriceExpiry();
+    const iv = setInterval(checkVolumePriceExpiry, 3600_000);
+    return () => clearInterval(iv);
+  }, [bootStatus.phase, db.volumePriceTiers, db.users, db.products]);
 
   const currentUser = session ? db.users.find(u => u.id === session.user_id) : null;
   const orgAccess = myOrgAccess.find(a => a.org_id === currentOrgId);
@@ -3993,23 +4042,70 @@ function App() {
   /* ═══════════ Ценообразование ═══════════ */
 
   const createVolumeTier = async (data) => {
-    if (!hasPermission(db, currentUser, 'products_edit')) return { error: 'Нет прав' };
+    if (!hasPermission(db, currentUser, 'volume_prices_edit')) return { error: 'Нет прав' };
     const id = uid();
-    const row = { id, ...data, created_at: new Date().toISOString() };
+    const row = { id, created_by: currentUser.id, ...data, created_at: new Date().toISOString() };
     setDb(d => ({ ...d, volumePriceTiers: [...(d.volumePriceTiers || []), row] }));
     upsertRow('volumePriceTiers', row).catch(() => {});
     return { ok: true, id };
   };
   const updateVolumeTier = async (id, data) => {
-    if (!hasPermission(db, currentUser, 'products_edit')) return { error: 'Нет прав' };
+    if (!hasPermission(db, currentUser, 'volume_prices_edit')) return { error: 'Нет прав' };
+    const existing = (db.volumePriceTiers || []).find(t => t.id === id);
     setDb(d => ({ ...d, volumePriceTiers: (d.volumePriceTiers || []).map(t => t.id === id ? { ...t, ...data } : t) }));
-    upsertRow('volumePriceTiers', { id, ...data }).catch(() => {});
+    upsertRow('volumePriceTiers', { ...existing, id, ...data }).catch(() => {});
     return { ok: true };
   };
   const deleteVolumeTier = async (id) => {
-    if (!hasPermission(db, currentUser, 'products_edit')) return { error: 'Нет прав' };
+    if (!hasPermission(db, currentUser, 'volume_prices_edit')) return { error: 'Нет прав' };
     setDb(d => ({ ...d, volumePriceTiers: (d.volumePriceTiers || []).filter(t => t.id !== id) }));
     supabase.from('volume_price_tiers').delete().eq('id', id).then(() => {});
+    return { ok: true };
+  };
+  // Массовая вставка/замена прайс-листа по объёму для одного товара — вставка из таблицы
+  // (1С/Excel) целиком заменяет текущие пороги этого товара новыми, с общим сроком
+  // действия. Продление — тот же вызов с теми же порогами и новым valid_until.
+  const bulkReplaceVolumeTiers = async (productId, tiers, validUntil) => {
+    if (!hasPermission(db, currentUser, 'volume_prices_edit')) return { error: 'Нет прав' };
+    if (!tiers?.length) return { error: 'Нет строк для сохранения' };
+    const oldIds = (db.volumePriceTiers || []).filter(t => t.product_id === productId).map(t => t.id);
+    const now = new Date().toISOString();
+    const newRows = tiers.map(t => ({
+      id: uid(),
+      product_id: productId,
+      min_kg: t.min_kg,
+      max_kg: t.max_kg,
+      price: t.price,
+      valid_until: validUntil || null,
+      notified_at: null,
+      created_by: currentUser.id,
+      org_id: _currentOrgId,
+      created_at: now,
+      updated_at: now,
+    }));
+    if (oldIds.length) await supabase.from('volume_price_tiers').delete().in('id', oldIds);
+    const { error } = await supabase.from('volume_price_tiers').insert(newRows);
+    if (error) return { error: error.message };
+    setDb(d => {
+      const updated = [...(d.volumePriceTiers || []).filter(t => t.product_id !== productId), ...newRows];
+      if (syncSnapshotRef) syncSnapshotRef.current.volumePriceTiers = updated;
+      return { ...d, volumePriceTiers: updated };
+    });
+    return { ok: true };
+  };
+  // Продлить срок действия без изменения цен — двигает valid_until у всех порогов товара.
+  const extendVolumeTiers = async (productId, newValidUntil) => {
+    if (!hasPermission(db, currentUser, 'volume_prices_edit')) return { error: 'Нет прав' };
+    const rows = (db.volumePriceTiers || []).filter(t => t.product_id === productId);
+    if (!rows.length) return { error: 'Нет порогов для этого товара' };
+    const patch = { valid_until: newValidUntil, notified_at: null };
+    const { error } = await supabase.from('volume_price_tiers').update(patch).in('id', rows.map(t => t.id)).select();
+    if (error) return { error: error.message };
+    setDb(d => {
+      const updated = (d.volumePriceTiers || []).map(t => t.product_id === productId ? { ...t, ...patch } : t);
+      if (syncSnapshotRef) syncSnapshotRef.current.volumePriceTiers = updated;
+      return { ...d, volumePriceTiers: updated };
+    });
     return { ok: true };
   };
   const createSpecialPrice = async (data) => {
@@ -5074,7 +5170,7 @@ function App() {
     createRentalClient, updateRentalClient,
     createRentalPurchase, updateRentalPurchase,
     createRentalMovement, createRentalRevision,
-    createVolumeTier, updateVolumeTier, deleteVolumeTier, createSpecialPrice, approveSpecialPrice, rejectSpecialPrice,
+    createVolumeTier, updateVolumeTier, deleteVolumeTier, bulkReplaceVolumeTiers, extendVolumeTiers, createSpecialPrice, approveSpecialPrice, rejectSpecialPrice,
     createMppDeal, updateMppDeal, addMppActivity, deleteMppDeal,
     createMppTask, completeMppTask, addMppDealProduct, removeMppDealProduct, addMppComment,
     createGrindRequest, takeGrindRequest, markGrindReady, cancelGrindRequest,
@@ -6002,7 +6098,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     // ── ЦЕНООБРАЗОВАНИЕ ────────────────────────────
     if (mod('sales')) {
       const pricingItems = [];
-      if (isViewer || role === 'admin' || role === 'director' || hasPermission(db, currentUser, 'products_edit')) {
+      if (isViewer || hasPermission(db, currentUser, 'volume_prices_edit')) {
         pricingItems.push({ id: 'volume_prices', label: 'Прайс по объёму', icon: Tag });
       }
       if (isViewer || role === 'admin' || role === 'b2b' || role === 'sales' || role === 'director') {
@@ -16498,6 +16594,7 @@ function NotificationsScreen({ ctx }) {
         case 'mpp_kanban': return navigate({ name: 'mpp_kanban' });
         case 'delivery_cash': return navigate({ name: 'cash_queue' });
         case 'shipment': return navigate({ name: 'shipment_registry' });
+        case 'volume_price': return navigate({ name: 'volume_prices' });
         case 'manager_task': return navigate({ name: 'manager_tasks' });
         case 'coffee_task': return navigate({ name: 'coffee_tasks' });
         case 'access':   return navigate({ name: 'admin_requests' });
