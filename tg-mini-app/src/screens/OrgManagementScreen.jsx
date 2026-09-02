@@ -137,7 +137,7 @@ export default function OrgManagementScreen({ ctx }) {
   };
 
   const formUI = (
-    <div className="rounded-xl p-5 mb-4" style={{ background: 'var(--mc-bg)', border: '1px solid var(--mc-border)' }}>
+    <div className="rounded-xl p-5 mb-4 max-w-xl" style={{ background: 'var(--mc-bg)', border: '1px solid var(--mc-border)' }}>
       <div className="grid gap-3">
         <div>
           <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>Название организации *</label>
@@ -235,7 +235,7 @@ export default function OrgManagementScreen({ ctx }) {
   );
 
   return (
-    <div className="p-4 lg:p-6 max-w-3xl">
+    <div className="p-4 lg:p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold" style={{ color: 'var(--mc-text)' }}>Организации</h1>
@@ -252,7 +252,7 @@ export default function OrgManagementScreen({ ctx }) {
 
       {creating && formUI}
 
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {organizations.map(org => {
           const b = org.branding || {};
           const modCount = Array.isArray(org.enabled_modules) ? org.enabled_modules.length : ALL_MODULES.length;

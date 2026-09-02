@@ -3642,6 +3642,236 @@ function App() {
     }
   };
 
+  /* ═══════════ Доставка ⇄ Реестр отгрузок ⇄ Отсрочка платежа (автосвязка) ═══════════
+     Реестр доставок обновляется 2 раза в день, реестр отгрузок — нерегулярно,
+     поэтому сопоставление запускается с ОБЕИХ сторон (после доставки заказа И после
+     любого изменения строки реестра отгрузок), а не один раз в момент события. */
+
+  const parseRegistryDate = (s) => {
+    const t = (s || '').trim();
+    const m = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+    if (m) {
+      const yyyy = m[3].length === 2 ? '20' + m[3] : m[3];
+      return `${yyyy}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+    return null;
+  };
+  const addDaysISO = (dateStr, days) => {
+    // Date.UTC вместо `new Date(dateStr + 'T00:00:00')` — последнее парсится в местном
+    // времени браузера и при .toISOString() (UTC) может съехать на день назад/вперёд
+    // для часовых поясов впереди UTC (Asia/Almaty, UTC+5).
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + Number(days || 0))).toISOString().slice(0, 10);
+  };
+  const normKey = (s) => (s || '').toString().trim().replace(/\s+/g, '').toLowerCase();
+  // delivery_orders.document — это фраза из 1С целиком ("Реализация товаров и услуг
+  // 00ЦТ-035934 от 02.09.2026 12:00:53"), а не голый номер — номер надо вытащить.
+  const extractDocNo = (s) => {
+    const m = (s || '').match(/00ЦТ-\d{4,7}/i);
+    return m ? m[0] : null;
+  };
+
+  // Шаг А (в обе стороны): сопоставляет доставленный заказ со строкой реестра отгрузок
+  // по номеру документа + сумме (имена/партнёры НЕ сравниваем — они из разных выгрузок).
+  const linkOneDeliveryRegistryPair = (order, registryRow) => {
+    if (!order || !registryRow) return false;
+    if (registryRow.linked_delivery_order_id) return false;
+    if (!order.document || order.document === 'ERRAND' || order.amount == null) return false;
+    const orderDocNo = extractDocNo(order.document);
+    if (!orderDocNo || normKey(orderDocNo) !== normKey(registryRow.doc_no)) return false;
+    if (Math.abs((Number(order.amount) || 0) - (Number(registryRow.amount) || 0)) > 0.01) return false;
+    // order.courier_id заполняется раньше (когда курьер берёт заказ) и надёжнее, чем
+    // delivered_by — последний может ещё не попасть в этот замкнутый снимок db, если
+    // tryLinkDeliveryToRegistry вызван сразу после setDb в том же тике.
+    const patch = { courier_id: order.courier_id || order.delivered_by || null, linked_delivery_order_id: order.id };
+    supabase.from('shipment_registry').update(patch).eq('id', registryRow.id).then(({ error }) => {
+      if (error) return;
+      setDb(d => {
+        const updated = (d.shipmentRegistry || []).map(r => r.id === registryRow.id ? { ...r, ...patch } : r);
+        if (syncSnapshotRef) syncSnapshotRef.current.shipmentRegistry = updated;
+        return { ...d, shipmentRegistry: updated };
+      });
+    });
+    return true;
+  };
+
+  // Вызывается сразу после отметки заказа доставленным.
+  const tryLinkDeliveryToRegistry = (deliveryOrderId) => {
+    const order = (db.deliveryOrders || []).find(o => o.id === deliveryOrderId);
+    if (!order) return;
+    const alreadyLinked = (db.shipmentRegistry || []).some(r => r.linked_delivery_order_id === deliveryOrderId);
+    if (alreadyLinked) return;
+    const match = (db.shipmentRegistry || []).find(r => linkOneDeliveryRegistryPair(order, r));
+    void match;
+  };
+
+  // Вызывается после добавления/правки строки реестра отгрузок — ищет среди уже
+  // доставленных, но ещё не привязанных заказов пару для этой строки (по номеру
+  // документа + сумме, а не просто "первый попавшийся доставленный заказ").
+  const tryLinkRegistryToDelivery = (registryRowId) => {
+    const row = (db.shipmentRegistry || []).find(r => r.id === registryRowId);
+    if (!row || row.linked_delivery_order_id || !row.doc_no) return;
+    const linkedOrderIds = new Set((db.shipmentRegistry || []).map(r => r.linked_delivery_order_id).filter(Boolean));
+    const candidate = (db.deliveryOrders || []).find(o =>
+      o.status === 'delivered' && !linkedOrderIds.has(o.id) &&
+      o.document && o.document !== 'ERRAND' && o.amount != null &&
+      normKey(extractDocNo(o.document)) === normKey(row.doc_no) &&
+      Math.abs((Number(o.amount) || 0) - (Number(row.amount) || 0)) < 0.01
+    );
+    if (!candidate) return;
+    linkOneDeliveryRegistryPair(candidate, row);
+  };
+
+  // Шаг Б: создаёт или обновляет запись в Отсрочке платежа по строке реестра отгрузок.
+  // Матчинг — по точному имени партнёра (= имя клиента в Отсрочке) и номеру документа.
+  // Оплата синхронизируется "жёстко" (=), а не прибавлением — чтобы не задваивать при
+  // повторном снятии/установке галочки "оплачено".
+  // Чистая функция решения (не трогает состояние) — что сделать со строкой реестра
+  // отгрузок относительно уже найденной (или нет) записи в Отсрочке платежа.
+  const computeDeferredAction = (row, client, existing) => {
+    const isPaid = !!row.paid;
+    const paidAmt = isPaid ? (Number(row.paid_amount) || Number(row.amount) || 0) : 0;
+    if (existing) {
+      const samePaid = (Number(existing.paid_amount) || 0) === paidAmt && !!existing.paid_at === isPaid;
+      if (samePaid) return null;
+      return {
+        type: 'update',
+        patch: {
+          paid_amount: paidAmt,
+          paid_at: isPaid ? (row.paid_at || new Date().toISOString()) : null,
+          paid_by: isPaid ? (row.paid_by || null) : null,
+        },
+      };
+    }
+    const shipmentDate = parseRegistryDate(row.doc_date) || todayISO();
+    const dueDate = addDaysISO(shipmentDate, client.default_days || 14);
+    return {
+      type: 'create',
+      shipment: {
+        id: uid(),
+        client_id: client.id,
+        shipment_date: shipmentDate,
+        amount: Number(row.amount) || 0,
+        invoice_no: row.doc_no,
+        deferral_days: client.default_days || 14,
+        due_date: dueDate,
+        comment: 'Авто из реестра отгрузок',
+        paid_amount: paidAmt,
+        paid_at: isPaid ? (row.paid_at || new Date().toISOString()) : null,
+        paid_by: isPaid ? (row.paid_by || null) : null,
+        log: [],
+        created_at: new Date().toISOString(),
+        created_by: currentUser.id,
+        org_id: _currentOrgId,
+      },
+    };
+  };
+
+  const reconcileShipmentToDeferred = (registryRowId) => {
+    const row = (db.shipmentRegistry || []).find(r => r.id === registryRowId);
+    if (!row || !row.doc_no || !row.partner) return;
+    const client = (db.deferredClients || []).find(c => c.active && normKey(c.name) === normKey(row.partner));
+    if (!client) return;
+    const existing = (db.deferredShipments || []).find(s => s.client_id === client.id && normKey(s.invoice_no) === normKey(row.doc_no));
+    const action = computeDeferredAction(row, client, existing);
+    if (!action) return;
+    if (action.type === 'update') {
+      const updatedRow = { ...existing, ...action.patch };
+      setDb(d => {
+        const updated = (d.deferredShipments || []).map(s => s.id === existing.id ? updatedRow : s);
+        if (syncSnapshotRef) syncSnapshotRef.current.deferredShipments = updated;
+        return { ...d, deferredShipments: updated };
+      });
+      upsertRow('deferredShipments', updatedRow).catch(() => {});
+    } else {
+      setDb(d => {
+        const updated = [action.shipment, ...(d.deferredShipments || [])];
+        if (syncSnapshotRef) syncSnapshotRef.current.deferredShipments = updated;
+        return { ...d, deferredShipments: updated };
+      });
+      upsertRow('deferredShipments', action.shipment).catch(() => {});
+    }
+  };
+
+  // Разовый прогон по всей текущей истории (кнопка "Проверить связи") — на случай
+  // данных, накопившихся до включения автосвязки, и как ручная перепроверка.
+  // ВАЖНО: копит изменения в локальных аккумуляторах по ходу одного прохода, а не
+  // перечитывает db.deferredShipments/db.shipmentRegistry на каждой строке — иначе при
+  // пачке строк, ссылающихся на одну и ту же запись в Отсрочке (например, дубль номера
+  // документа в самом реестре отгрузок), функция не видит "уже создано в этом же
+  // прогоне" и заводит дубликат.
+  const reconcileAllShipmentRegistry = () => {
+    let deferredAcc = [...(db.deferredShipments || [])];
+    const linkedOrderIds = new Set((db.shipmentRegistry || []).map(r => r.linked_delivery_order_id).filter(Boolean));
+    const toUpdateRegistry = [];
+    const toUpsertDeferred = [];
+
+    const finalRegistry = (db.shipmentRegistry || []).map(row => {
+      let r = row;
+      if (!r.linked_delivery_order_id && r.doc_no) {
+        const candidate = (db.deliveryOrders || []).find(o =>
+          o.status === 'delivered' && !linkedOrderIds.has(o.id) &&
+          o.document && o.document !== 'ERRAND' && o.amount != null &&
+          normKey(extractDocNo(o.document)) === normKey(r.doc_no) &&
+          Math.abs((Number(o.amount) || 0) - (Number(r.amount) || 0)) < 0.01
+        );
+        if (candidate) {
+          linkedOrderIds.add(candidate.id);
+          const patch = { courier_id: candidate.courier_id || candidate.delivered_by || null, linked_delivery_order_id: candidate.id };
+          r = { ...r, ...patch };
+          toUpdateRegistry.push({ id: r.id, patch });
+        }
+      }
+
+      if (r.doc_no && r.partner) {
+        const client = (db.deferredClients || []).find(c => c.active && normKey(c.name) === normKey(r.partner));
+        if (client) {
+          const existing = deferredAcc.find(s => s.client_id === client.id && normKey(s.invoice_no) === normKey(r.doc_no));
+          const action = computeDeferredAction(r, client, existing);
+          if (action?.type === 'update') {
+            deferredAcc = deferredAcc.map(s => s.id === existing.id ? { ...existing, ...action.patch } : s);
+            toUpsertDeferred.push({ ...existing, ...action.patch });
+          } else if (action?.type === 'create') {
+            deferredAcc = [action.shipment, ...deferredAcc];
+            toUpsertDeferred.push(action.shipment);
+          }
+        }
+      }
+      return r;
+    });
+
+    if (toUpdateRegistry.length === 0 && toUpsertDeferred.length === 0) return;
+
+    setDb(d => {
+      if (syncSnapshotRef) {
+        syncSnapshotRef.current.shipmentRegistry = finalRegistry;
+        syncSnapshotRef.current.deferredShipments = deferredAcc;
+      }
+      return { ...d, shipmentRegistry: finalRegistry, deferredShipments: deferredAcc };
+    });
+
+    // Батчами по 500 строк одним upsert-запросом каждая — при разовом прогоне по всей
+    // истории совпадений может быть тысячи, и слать по отдельному запросу на каждую
+    // было бы тысячами параллельных HTTP-запросов.
+    const chunk = (arr, size) => { const out = []; for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size)); return out; };
+    if (toUpdateRegistry.length) {
+      const fullRows = toUpdateRegistry.map(({ id }) => finalRegistry.find(r => r.id === id)).filter(Boolean);
+      chunk(fullRows, 500).forEach(batch => {
+        supabase.from('shipment_registry').upsert(batch, { onConflict: 'id' }).then(({ error }) => {
+          if (error) console.warn('[reconcileAll] shipment_registry upsert:', error.message);
+        });
+      });
+    }
+    if (toUpsertDeferred.length) {
+      chunk(toUpsertDeferred, 500).forEach(batch => {
+        supabase.from('deferred_shipments').upsert(batch, { onConflict: 'id' }).then(({ error }) => {
+          if (error) console.warn('[reconcileAll] deferred_shipments upsert:', error.message);
+        });
+      });
+    }
+  };
+
   /* ═══════════ Арендное оборудование ═══════════ */
 
   const createRentalEquipment = (data) => {
@@ -4839,6 +5069,7 @@ function App() {
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createExpenseRequest, approveExpense, rejectExpense, updateExpenseCategory, updateExpense, payExpense, updateCashOperation, updateBudgetPlan, createBudgetCategory,
     createDeferredClient, updateDeferredClient, createDeferredShipment, markDeferredShipmentPaid, deleteDeferredShipment,
+    tryLinkDeliveryToRegistry, tryLinkRegistryToDelivery, reconcileShipmentToDeferred, reconcileAllShipmentRegistry,
     createRentalEquipment, updateRentalEquipment, deleteRentalEquipment,
     createRentalClient, updateRentalClient,
     createRentalPurchase, updateRentalPurchase,
@@ -6137,8 +6368,8 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
             на мобильных убираем внешние отступы, чтобы они не выглядели "открыткой в рамке".
             На десктопе (lg) оступ p-8 оставляем для читаемости. */}
         <div className={FULL_BLEED_ROUTES.has(route.name)
-          ? 'lg:max-w-5xl lg:mx-auto lg:p-8 p-2 pt-3'
-          : 'max-w-5xl mx-auto p-4 sm:p-6 lg:p-8'
+          ? 'lg:max-w-[1600px] lg:mx-auto lg:p-6 p-2 pt-3'
+          : 'max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-6'
         }>
           <ScreenErrorBoundary
             routeKey={JSON.stringify(ctx.route)}

@@ -4,7 +4,7 @@
  * Кассир ставит I (оплачено). Все с доступом видят статистику.
  */
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Plus, ClipboardPaste, Trash2, Check, X, Banknote } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, ClipboardPaste, Trash2, Check, X, Banknote, RefreshCw } from 'lucide-react';
 import { supabase } from '../supabase/client';
 
 const TZ = 'Asia/Almaty';
@@ -122,7 +122,7 @@ const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID)
    ГЛАВНЫЙ ЭКРАН
 ───────────────────────────────────────────────────────────── */
 export function ShipmentRegistryScreen({ ctx }) {
-  const { db, currentUser, goBack, setDb, showToast, can, syncSnapshotRef } = ctx;
+  const { db, currentUser, goBack, setDb, showToast, can, syncSnapshotRef, reportError } = ctx;
 
   const canEdit = can ? can('shipment_edit') : CAN_EDIT_ROLES.includes(currentUser?.role);
   const canPay  = can ? can('shipment_pay')  : CAN_PAY_ROLES.includes(currentUser?.role);
@@ -218,6 +218,7 @@ export function ShipmentRegistryScreen({ ctx }) {
       if (syncSnapshotRef) syncSnapshotRef.current.shipmentRegistry = updated;
       return { ...d, shipmentRegistry: updated };
     });
+    newRows.forEach(r => { ctx.tryLinkRegistryToDelivery?.(r.id); ctx.reconcileShipmentToDeferred?.(r.id); });
     showToast(`Добавлено ${newRows.length} ${newRows.length === 1 ? 'строка' : 'строк'}`);
   };
 
@@ -234,13 +235,24 @@ export function ShipmentRegistryScreen({ ctx }) {
       patch.paid_at = value ? new Date().toISOString() : null;
       if (!value) patch.paid_amount = null;
     }
-    const { error } = await supabase.from('shipment_registry').update(patch).eq('id', id);
+    const { data, error } = await supabase.from('shipment_registry').update(patch).eq('id', id).select();
     if (error) { showToast('Ошибка: ' + error.message); return; }
+    if (!data?.length) {
+      reportError?.({ kind: 'sync', source: 'shipment_registry.updateField', message: 'shipment_registry.updateField: update() не задел ни одной строки', details: { id, field } });
+      showToast('Не удалось сохранить, попробуйте ещё раз');
+      return;
+    }
     setDb(d => {
       const updated = (d.shipmentRegistry || []).map(r => r.id === id ? { ...r, ...patch } : r);
       if (syncSnapshotRef) syncSnapshotRef.current.shipmentRegistry = updated;
       return { ...d, shipmentRegistry: updated };
     });
+    // Оплата/накладная/номер/сумма могли поступить намного позже создания строки —
+    // пересчитываем Отсрочку платежа при любой правке, а не только при первой связке.
+    if (['paid', 'paid_amount', 'invoice_returned', 'doc_no', 'amount', 'partner'].includes(field)) {
+      ctx.reconcileShipmentToDeferred?.(id);
+    }
+    if (['doc_no', 'amount'].includes(field)) ctx.tryLinkRegistryToDelivery?.(id);
   };
 
   const markPaid = async (id, paidAmount) => {
@@ -250,52 +262,20 @@ export function ShipmentRegistryScreen({ ctx }) {
       paid_by: currentUser.id,
       paid_at: new Date().toISOString(),
     };
-    const { error } = await supabase.from('shipment_registry').update(patch).eq('id', id);
+    const { data, error } = await supabase.from('shipment_registry').update(patch).eq('id', id).select();
     if (error) { showToast('Ошибка: ' + error.message); return; }
+    if (!data?.length) {
+      reportError?.({ kind: 'sync', source: 'shipment_registry.markPaid', message: 'shipment_registry.markPaid: update() не задел ни одной строки', details: { id } });
+      showToast('Не удалось сохранить, попробуйте ещё раз');
+      return;
+    }
     setDb(d => {
       const updated = (d.shipmentRegistry || []).map(r => r.id === id ? { ...r, ...patch } : r);
       if (syncSnapshotRef) syncSnapshotRef.current.shipmentRegistry = updated;
-
-      const row = updated.find(r => r.id === id);
-      const deferredShipments = linkDeferredPayment(d, row, paidAmount, currentUser.id);
-      if (syncSnapshotRef && deferredShipments !== d.deferredShipments) {
-        syncSnapshotRef.current.deferredShipments = deferredShipments;
-      }
-
-      return { ...d, shipmentRegistry: updated, deferredShipments };
+      return { ...d, shipmentRegistry: updated };
     });
+    ctx.reconcileShipmentToDeferred?.(id);
     showToast('Оплата подтверждена');
-  };
-
-  const linkDeferredPayment = (d, registryRow, paidAmount, userId) => {
-    if (!registryRow?.doc_no) return d.deferredShipments || [];
-    const shipments = d.deferredShipments || [];
-    const normalizeDocNo = (s) => (s || '').replace(/\s+/g, '').toLowerCase();
-    const regDocNo = normalizeDocNo(registryRow.doc_no);
-    const regAmount = Number(registryRow.amount) || 0;
-
-    const match = shipments.find(s => {
-      if (s.paid_at) return false;
-      if (normalizeDocNo(s.invoice_no) !== regDocNo) return false;
-      const sAmount = Number(s.amount) || 0;
-      if (Math.abs(sAmount - regAmount) > 0.01) return false;
-      return true;
-    });
-
-    if (!match) return shipments;
-
-    const prevPaid = Number(match.paid_amount) || 0;
-    const payAmt = Number(paidAmount) || regAmount;
-    const newPaid = Math.min(prevPaid + payAmt, Number(match.amount));
-    const fullyPaid = newPaid >= Number(match.amount);
-
-    const updated = {
-      ...match,
-      paid_amount: newPaid,
-      paid_at: fullyPaid ? todayISO() : null,
-      paid_by: fullyPaid ? userId : null,
-    };
-    return shipments.map(s => s.id === match.id ? updated : s);
   };
 
   const deleteRow = async (id) => {
@@ -323,10 +303,20 @@ export function ShipmentRegistryScreen({ ctx }) {
             </div>
           </div>
           {canEdit && (
-            <button onClick={() => setPasteOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#297b8a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-              <ClipboardPaste size={14} /> Вставить
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => {
+                ctx.reconcileAllShipmentRegistry?.();
+                showToast('Проверка связей запущена');
+              }}
+                title="Пересвязать доставки, реестр отгрузок и отсрочку платежа по всей истории"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                <RefreshCw size={14} /> Проверить связи
+              </button>
+              <button onClick={() => setPasteOpen(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#297b8a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                <ClipboardPaste size={14} /> Вставить
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -389,6 +379,7 @@ export function ShipmentRegistryScreen({ ctx }) {
                 <th style={th('left')}>Комментарий</th>
                 <th style={{ ...th('center'), background: '#5b21b6' }}>Накл.&nbsp;✓</th>
                 <th style={th('left')}>Доставка</th>
+                <th style={th('left')}>Курьер</th>
                 <th style={{ ...th('center'), background: '#166534' }}>Оплата&nbsp;✓</th>
                 {canEdit && <th style={th('center')}></th>}
               </tr>
@@ -409,6 +400,13 @@ export function ShipmentRegistryScreen({ ctx }) {
                       onChange={v => updateField(r.id, 'invoice_returned', v)} />
                   </td>
                   <td style={td('left', 'var(--mc-muted)')}>{r.delivery_date || '—'}</td>
+                  {/* Курьер — подтягивается автоматически при связке с реестром доставок */}
+                  <td style={td('left', 'var(--mc-muted)')}>
+                    {r.courier_id ? (() => {
+                      const c = db.users?.find(u => u.id === r.courier_id);
+                      return c ? `${c.first_name} ${c.last_name || ''}`.trim() : '—';
+                    })() : '—'}
+                  </td>
                   {/* I: оплачено (кассир) */}
                   <td style={td('center')}>
                     {r.paid ? (

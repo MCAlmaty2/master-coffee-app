@@ -25,11 +25,14 @@ const todayStr = () => {
   return d.toISOString().slice(0, 10);
 };
 const addDays = (dateStr, days) => {
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  // Date.UTC вместо `new Date(dateStr + 'T00:00:00')` — последнее парсится в местном
+  // времени браузера и при .toISOString() (UTC) может съехать на день для часовых
+  // поясов впереди UTC (Asia/Almaty, UTC+5).
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + Number(days || 0))).toISOString().slice(0, 10);
 };
 const daysDiff = (a, b) => Math.round((new Date(a) - new Date(b)) / 86400000);
+const normKey = (s) => (s || '').toString().trim().replace(/\s+/g, '').toLowerCase();
 
 function getShipmentStatus(s) {
   if (s.paid_at) return 'paid';
@@ -308,6 +311,13 @@ function ClientDetailScreen({ ctx, clientId }) {
             const daysLeft = status === 'not_due' ? daysDiff(s.due_date, today) : 0;
             const paidAmt = Number(s.paid_amount) || 0;
             const remaining = Number(s.amount) - paidAmt;
+            // Курьер и статус накладной живут в реестре отгрузок (shipment_registry),
+            // а не в самой отгрузке отсрочки — подтягиваем по номеру документа, чтобы
+            // не дублировать данные и не рассинхронизироваться.
+            const regRow = s.invoice_no
+              ? (db.shipmentRegistry || []).find(r => normKey(r.doc_no) === normKey(s.invoice_no))
+              : null;
+            const courier = regRow?.courier_id ? (db.users || []).find(u => u.id === regRow.courier_id) : null;
             return (
               <div key={s.id} className="rounded-xl p-4"
                 style={{ background: 'var(--mc-surface)', border: `1px solid ${status === 'overdue' ? 'var(--mc-danger-border)' : status === 'partial' ? 'var(--mc-purple-border)' : 'var(--mc-border)'}` }}>
@@ -344,6 +354,12 @@ function ClientDetailScreen({ ctx, clientId }) {
                   <div>Отсрочка: {s.deferral_days} дн.</div>
                   {s.paid_at && <div>Оплачено: <span style={{ color: '#22C55E' }}>{fmtDate(s.paid_at)} ({fmtNum(s.amount)} ₸)</span></div>}
                 </div>
+                {regRow && (
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mt-1" style={{ color: 'var(--mc-muted)' }}>
+                    <div>Накладная: <span style={{ color: regRow.invoice_returned ? '#22C55E' : 'var(--mc-text)' }}>{regRow.invoice_returned ? 'вернулась ✓' : 'не вернулась'}</span></div>
+                    <div>Курьер: <span style={{ color: 'var(--mc-text)' }}>{courier ? `${courier.first_name} ${courier.last_name || ''}`.trim() : '—'}</span></div>
+                  </div>
+                )}
                 {s.comment && <div className="text-xs mt-1.5 italic" style={{ color: 'var(--mc-muted)' }}>{s.comment}</div>}
                 {canManage && !s.paid_at && (
                   <div className="flex gap-2 mt-3">

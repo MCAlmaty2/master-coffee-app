@@ -1692,6 +1692,7 @@ export function CourierOrderDetailScreen({ ctx, orderId }) {
     }
 
     await finishRegistry(order.registry_id, orderId, 'delivered');
+    ctx.tryLinkDeliveryToRegistry?.(orderId);
     showToast('✓ Доставка отмечена', 'success');
     navigate({ name: 'courier_registry' });
     setSaving(false);
