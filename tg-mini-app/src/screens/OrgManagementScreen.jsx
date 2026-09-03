@@ -20,7 +20,7 @@ export default function OrgManagementScreen({ ctx }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: '', company_name: '', tagline: '', accent_color: '#297b8a',
-    logo_url: '', logo_hor_url: '', modules: [...DEFAULT_MODULES],
+    logo_url: '', logo_hor_url: '', modules: [...DEFAULT_MODULES], disabledBlocks: [],
   });
 
   if (!currentUser?.is_super_admin) {
@@ -45,7 +45,7 @@ export default function OrgManagementScreen({ ctx }) {
   const startCreate = () => {
     setForm({
       name: '', company_name: '', tagline: 'Operations Platform', accent_color: '#297b8a',
-      logo_url: '', logo_hor_url: '', modules: [...DEFAULT_MODULES],
+      logo_url: '', logo_hor_url: '', modules: [...DEFAULT_MODULES], disabledBlocks: [],
     });
     setCreating(true);
     setEditing(null);
@@ -61,6 +61,7 @@ export default function OrgManagementScreen({ ctx }) {
       logo_url: b.logo_url || '',
       logo_hor_url: b.logo_hor_url || '',
       modules: Array.isArray(org.enabled_modules) ? [...org.enabled_modules] : ALL_MODULES.map(m => m.key),
+      disabledBlocks: Array.isArray(org.disabled_blocks) ? [...org.disabled_blocks] : [],
     });
     setEditing(org.id);
     setCreating(false);
@@ -74,6 +75,15 @@ export default function OrgManagementScreen({ ctx }) {
       modules: f.modules.includes(key)
         ? f.modules.filter(m => m !== key)
         : [...f.modules, key],
+    }));
+  };
+
+  const toggleBlock = (key) => {
+    setForm(f => ({
+      ...f,
+      disabledBlocks: f.disabledBlocks.includes(key)
+        ? f.disabledBlocks.filter(b => b !== key)
+        : [...f.disabledBlocks, key],
     }));
   };
 
@@ -98,6 +108,7 @@ export default function OrgManagementScreen({ ctx }) {
           is_active: true,
           branding,
           enabled_modules: form.modules,
+          disabled_blocks: form.disabledBlocks,
           created_at: new Date().toISOString(),
         };
         const { error } = await supabase.from('organizations').insert(newOrg);
@@ -107,7 +118,7 @@ export default function OrgManagementScreen({ ctx }) {
         showToast(`Организация «${form.name.trim()}» создана`);
       } else if (editing) {
         const { error } = await supabase.from('organizations')
-          .update({ name: form.name.trim(), branding, enabled_modules: form.modules })
+          .update({ name: form.name.trim(), branding, enabled_modules: form.modules, disabled_blocks: form.disabledBlocks })
           .eq('id', editing);
         if (error) throw error;
         const { data: allOrgs } = await supabase.from('organizations').select('*').order('name');
@@ -194,26 +205,50 @@ export default function OrgManagementScreen({ ctx }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {ALL_MODULES.map(m => {
               const active = form.modules.includes(m.key);
+              const disabledCount = m.blocks.filter(bl => form.disabledBlocks.includes(bl.key)).length;
               return (
-                <button key={m.key} type="button" onClick={() => toggleModule(m.key)}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors"
-                  style={{
-                    background: active ? '#297b8a18' : 'var(--mc-active-item)',
-                    border: active ? '1.5px solid #297b8a' : '1.5px solid transparent',
-                  }}>
-                  <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
-                    style={{ background: active ? '#297b8a' : 'var(--mc-border)' }}>
-                    {active && <Check size={10} color="white" strokeWidth={3} />}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold truncate" style={{ color: active ? '#297b8a' : 'var(--mc-text)' }}>
-                      {m.label}
+                <div key={m.key} className="rounded-lg overflow-hidden" style={{ border: active ? '1.5px solid #297b8a' : '1.5px solid transparent' }}>
+                  <button type="button" onClick={() => toggleModule(m.key)}
+                    className="flex items-center gap-2 px-3 py-2 text-left transition-colors w-full"
+                    style={{ background: active ? '#297b8a18' : 'var(--mc-active-item)' }}>
+                    <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
+                      style={{ background: active ? '#297b8a' : 'var(--mc-border)' }}>
+                      {active && <Check size={10} color="white" strokeWidth={3} />}
                     </div>
-                    <div className="text-[10px] truncate" style={{ color: 'var(--mc-muted)' }}>
-                      {m.desc}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold truncate" style={{ color: active ? '#297b8a' : 'var(--mc-text)' }}>
+                        {m.label}
+                      </div>
+                      <div className="text-[10px] truncate" style={{ color: 'var(--mc-muted)' }}>
+                        {m.desc}
+                      </div>
                     </div>
-                  </div>
-                </button>
+                    {active && m.blocks.length > 1 && disabledCount > 0 && (
+                      <span className="text-[9px] font-semibold rounded-full px-1.5 py-0.5 flex-shrink-0"
+                        style={{ background: 'var(--mc-warning-bg, #FEF3C7)', color: 'var(--mc-warning-text, #92400E)' }}>
+                        −{disabledCount}
+                      </span>
+                    )}
+                  </button>
+                  {active && m.blocks.length > 1 && (
+                    <div className="px-3 py-2 flex flex-col gap-1" style={{ background: 'var(--mc-bg)' }}>
+                      {m.blocks.map(bl => {
+                        const blockActive = !form.disabledBlocks.includes(bl.key);
+                        return (
+                          <button key={bl.key} type="button" onClick={() => toggleBlock(bl.key)}
+                            className="flex items-center gap-2 text-left"
+                            style={{ opacity: blockActive ? 1 : 0.55 }}>
+                            <div className="w-3 h-3 rounded-sm flex items-center justify-center flex-shrink-0"
+                              style={{ background: blockActive ? '#297b8a' : 'var(--mc-border)' }}>
+                              {blockActive && <Check size={8} color="white" strokeWidth={3} />}
+                            </div>
+                            <span className="text-[11px]" style={{ color: 'var(--mc-text)' }}>{bl.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>

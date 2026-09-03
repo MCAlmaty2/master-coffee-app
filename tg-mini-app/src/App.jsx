@@ -8,7 +8,7 @@ import {
   Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt, Wallet, Wrench, MapPin,
 } from 'lucide-react';
 import { supabase, setOrgIdHeader } from './supabase/client';
-import { orgHasModule } from './modules';
+import { orgHasModule, orgBlockEnabled } from './modules';
 import { isDuplicate } from './errorMonitor';
 import { FieldCalendarScreen, FieldHome } from './screens/CalendarScreen';
 import { SalesReportScreen, SalesReportHomeTile } from './screens/SalesReportScreen';
@@ -6260,38 +6260,39 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     }
 
     const mod = (key) => orgHasModule(currentOrg, key);
+    const blockOn = (key) => orgBlockEnabled(currentOrg, key);
     const canNav = (perm) => isViewer || hasPermission(db, currentUser, perm);
 
     // ── ОТДЕЛ ПРОДАЖ ──────────────────────
     if (mod('sales')) {
     const sales = [];
-    if (isViewer || role === 'admin' || role === 'b2b' || role === 'sales' || role === 'warehouse'
-        || hasPermission(db, currentUser, 'orders_view_all') || hasPermission(db, currentUser, 'orders_view_own')) {
+    if (blockOn('orders_list') && (isViewer || role === 'admin' || role === 'b2b' || role === 'sales' || role === 'warehouse'
+        || hasPermission(db, currentUser, 'orders_view_all') || hasPermission(db, currentUser, 'orders_view_own'))) {
       sales.push({ id: 'orders_list', label: 'Заявки', icon: Inbox });
     }
-    if (isViewer || hasPermission(db, currentUser, 'grind_view_all') || hasPermission(db, currentUser, 'grind_create') || hasPermission(db, currentUser, 'grind_fulfill')) {
+    if (blockOn('grinds') && (isViewer || hasPermission(db, currentUser, 'grind_view_all') || hasPermission(db, currentUser, 'grind_create') || hasPermission(db, currentUser, 'grind_fulfill'))) {
       sales.push({ id: 'grinds', label: 'Помол кофе', icon: Coffee });
     }
-    if (isViewer || hasPermission(db, currentUser, 'contract_view_all') || hasPermission(db, currentUser, 'contract_create')) {
+    if (blockOn('contracts') && (isViewer || hasPermission(db, currentUser, 'contract_view_all') || hasPermission(db, currentUser, 'contract_create'))) {
       sales.push({ id: 'contracts', label: 'Договоры', icon: FileText });
     }
     if (isManager || role === 'director' || role === 'senior_manager') {
-      sales.push({ id: 'clients', label: 'Клиенты', icon: Users });
-      sales.push({ id: 'clients_report', label: 'Отчёт по клиентам', icon: FileText });
+      if (blockOn('clients')) sales.push({ id: 'clients', label: 'Клиенты', icon: Users });
+      if (blockOn('clients_report')) sales.push({ id: 'clients_report', label: 'Отчёт по клиентам', icon: FileText });
     }
-    if (isViewer || hasPermission(db, currentUser, 'shipment_view') || hasPermission(db, currentUser, 'shipment_edit')) {
+    if (blockOn('shipment_registry') && (isViewer || hasPermission(db, currentUser, 'shipment_view') || hasPermission(db, currentUser, 'shipment_edit'))) {
       sales.push({ id: 'shipment_registry', label: 'Реестр отгрузок', icon: Package });
     }
-    if (isViewer || hasPermission(db, currentUser, 'mpp_manage') || hasPermission(db, currentUser, 'mpp_view')) {
+    if (blockOn('mpp_kanban') && (isViewer || hasPermission(db, currentUser, 'mpp_manage') || hasPermission(db, currentUser, 'mpp_view'))) {
       sales.push({ id: 'mpp_kanban', label: 'Воронка МПП', icon: Monitor });
     }
-    if (isViewer || hasPermission(db, currentUser, 'volume_prices_edit')) {
+    if (blockOn('volume_prices') && (isViewer || hasPermission(db, currentUser, 'volume_prices_edit'))) {
       sales.push({ id: 'volume_prices', label: 'Прайс по объёму', icon: Tag });
     }
-    if (isViewer || role === 'admin' || role === 'b2b' || role === 'sales' || role === 'director') {
+    if (blockOn('special_prices') && (isViewer || role === 'admin' || role === 'b2b' || role === 'sales' || role === 'director')) {
       sales.push({ id: 'special_prices', label: 'Спец. цены клиентов', icon: Wallet });
     }
-    if (mod('rental') && (isViewer || hasPermission(db, currentUser, 'rental_equipment') || hasPermission(db, currentUser, 'rental_clients') || hasPermission(db, currentUser, 'rental_purchases') || hasPermission(db, currentUser, 'rental_revisions') || hasPermission(db, currentUser, 'rental_report'))) {
+    if (mod('rental') && blockOn('rental_home') && (isViewer || hasPermission(db, currentUser, 'rental_equipment') || hasPermission(db, currentUser, 'rental_clients') || hasPermission(db, currentUser, 'rental_purchases') || hasPermission(db, currentUser, 'rental_revisions') || hasPermission(db, currentUser, 'rental_report'))) {
       sales.push({ id: 'rental_home', label: 'Арендное оборудование', icon: Wrench });
     }
     if (sales.length > 0) groups.push({ title: 'Отдел продаж', items: sales, collapsible: true, base: 'tk' });
@@ -6300,14 +6301,14 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     // ── БАРИСТА И ТЕХНИКИ ────────────────
     if (mod('field')) {
     const field = [];
-    if (isViewer || FIELD_ROLES.includes(role) || isManager
-        || hasPermission(db, currentUser, 'tasks_view_own') || hasPermission(db, currentUser, 'tasks_self_assign')) {
+    if (blockOn('tasks_list') && (isViewer || FIELD_ROLES.includes(role) || isManager
+        || hasPermission(db, currentUser, 'tasks_view_own') || hasPermission(db, currentUser, 'tasks_self_assign'))) {
       field.push({ id: 'tasks_list', label: 'Задачи (выезд)', icon: ClipboardList });
     }
-    if (isViewer || FIELD_ROLES.includes(role) || isManager || hasPermission(db, currentUser, 'tasks_calendar_all')) {
+    if (blockOn('field_calendar') && (isViewer || FIELD_ROLES.includes(role) || isManager || hasPermission(db, currentUser, 'tasks_calendar_all'))) {
       field.push({ id: 'field_calendar', label: 'Календарь команды', icon: Eye });
     }
-    if (isViewer || FIELD_ROLES.includes(role) || role === 'admin' || role === 'director' || hasPermission(db, currentUser, 'rounds_manage_all')) {
+    if (blockOn('round_points') && (isViewer || FIELD_ROLES.includes(role) || role === 'admin' || role === 'director' || hasPermission(db, currentUser, 'rounds_manage_all'))) {
       field.push({ id: 'round_points', label: 'Точки обхода', icon: MapPin });
     }
     if (field.length > 0) groups.push({ title: 'Бариста и техники', items: field, collapsible: true, base: 'tk' });
@@ -6316,19 +6317,19 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     // ── СКЛАД И ДОСТАВКА ─────────────────
     if (mod('warehouse')) {
     const warehouse = [];
-    if (isViewer || hasPermission(db, currentUser, 'delivery_manage') || hasPermission(db, currentUser, 'delivery_view_all')) {
+    if (blockOn('delivery_registries') && (isViewer || hasPermission(db, currentUser, 'delivery_manage') || hasPermission(db, currentUser, 'delivery_view_all'))) {
       warehouse.push({ id: 'delivery_registries', label: 'Доставки', icon: Truck });
     }
-    if (!isViewer && hasPermission(db, currentUser, 'delivery_courier')) {
+    if (blockOn('courier_registry') && !isViewer && hasPermission(db, currentUser, 'delivery_courier')) {
       warehouse.push({ id: 'courier_registry', label: 'Мои доставки', icon: Truck });
     }
-    if (isViewer || ['cashier', 'director', 'senior_manager', 'warehouse'].includes(role)
-        || hasPermission(db, currentUser, 'writeoff_view_all') || hasPermission(db, currentUser, 'writeoff_create')) {
+    if (blockOn('writeoffs') && (isViewer || ['cashier', 'director', 'senior_manager', 'warehouse'].includes(role)
+        || hasPermission(db, currentUser, 'writeoff_view_all') || hasPermission(db, currentUser, 'writeoff_create'))) {
       warehouse.push({ id: 'writeoffs', label: 'Списания', icon: Trash2 });
     }
-    if (isViewer || hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
+    if (blockOn('gifts') && (isViewer || hasPermission(db, currentUser, 'gift_create') || hasPermission(db, currentUser, 'gift_approve')
         || hasPermission(db, currentUser, 'gift_process') || hasPermission(db, currentUser, 'gift_view_all')
-        || role === 'warehouse') {
+        || role === 'warehouse')) {
       warehouse.push({ id: 'gifts', label: 'Подарки', icon: Gift });
     }
     if (warehouse.length > 0) groups.push({ title: 'Склад и доставка', items: warehouse, collapsible: true, base: 'tk' });
@@ -6347,20 +6348,20 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     // ── ТОВАРЫ / ПРАЙС ────────────────────────────
     if (mod('products') && (isViewer || hasPermission(db, currentUser, 'products_edit'))) {
       const prodItems = [];
-      prodItems.push({ id: 'admin_products', label: 'Товары / прайс',     icon: Package });
-      prodItems.push({ id: 'admin_categories', label: 'Категории товаров', icon: Tag });
-      groups.push({ title: 'Товары', items: prodItems, collapsible: true, base: 'tk' });
+      if (blockOn('admin_products')) prodItems.push({ id: 'admin_products', label: 'Товары / прайс',     icon: Package });
+      if (blockOn('admin_categories')) prodItems.push({ id: 'admin_categories', label: 'Категории товаров', icon: Tag });
+      if (prodItems.length > 0) groups.push({ title: 'Товары', items: prodItems, collapsible: true, base: 'tk' });
     }
 
     // ── КОФЕЙНИ ────────────────────────────
     if (mod('coffeeshops')) {
     const coffeeItems = [];
-    if (isViewer || hasPermission(db, currentUser, 'coffee_shipments_view')
+    if (blockOn('coffee_shipments') && (isViewer || hasPermission(db, currentUser, 'coffee_shipments_view')
         || hasPermission(db, currentUser, 'coffee_shipments_edit')
-        || hasPermission(db, currentUser, 'coffee_shipments_pay')) {
+        || hasPermission(db, currentUser, 'coffee_shipments_pay'))) {
       coffeeItems.push({ id: 'coffee_shipments', label: 'Отгрузки кофеен', icon: Building2 });
     }
-    if (isViewer || hasPermission(db, currentUser, 'coffee_tasks_view') || hasPermission(db, currentUser, 'coffee_tasks_edit')) {
+    if (blockOn('coffee_tasks') && (isViewer || hasPermission(db, currentUser, 'coffee_tasks_view') || hasPermission(db, currentUser, 'coffee_tasks_edit'))) {
       coffeeItems.push({ id: 'coffee_tasks', label: 'Задачник', icon: ListTodo });
     }
     if (coffeeItems.length > 0) groups.push({ title: 'Кофейни', items: coffeeItems, collapsible: true, base: 'coffeeshop' });
@@ -6369,33 +6370,33 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     // ── ФИНАНСЫ (касса / подотчёт / расходы) ────────────────────────────
     if (mod('finance')) {
       const finItems = [];
-      if (isViewer || ['admin', 'director', 'cashier'].includes(currentUser.role)) {
+      if (blockOn('cash') && (isViewer || ['admin', 'director', 'cashier'].includes(currentUser.role))) {
         finItems.push({ id: 'cash', label: 'Касса / Подотчёт', icon: Banknote });
       }
-      if (isViewer || hasPermission(db, currentUser, 'expense_create') || hasPermission(db, currentUser, 'expense_approve') || hasPermission(db, currentUser, 'expense_pay') || hasPermission(db, currentUser, 'expense_view_all')) {
+      if (blockOn('expenses') && (isViewer || hasPermission(db, currentUser, 'expense_create') || hasPermission(db, currentUser, 'expense_approve') || hasPermission(db, currentUser, 'expense_pay') || hasPermission(db, currentUser, 'expense_view_all'))) {
         finItems.push({ id: 'expenses', label: 'Чеки расходов', icon: Receipt });
       }
-      if (isViewer || hasPermission(db, currentUser, 'budget_view')) {
+      if (blockOn('budget') && (isViewer || hasPermission(db, currentUser, 'budget_view'))) {
         finItems.push({ id: 'budget', label: 'Бюджет', icon: Wallet });
       }
-      if (isViewer || hasPermission(db, currentUser, 'deferred_manage') || hasPermission(db, currentUser, 'deferred_view_all') || hasPermission(db, currentUser, 'deferred_shipment')) {
+      if (blockOn('deferred_payments') && (isViewer || hasPermission(db, currentUser, 'deferred_manage') || hasPermission(db, currentUser, 'deferred_view_all') || hasPermission(db, currentUser, 'deferred_shipment'))) {
         finItems.push({ id: 'deferred_payments', label: 'Отсрочки платежей', icon: Calendar });
       }
-      if (isViewer || currentUser.role === 'cashier' || currentUser.role === 'admin') {
+      if (blockOn('cash_queue') && (isViewer || currentUser.role === 'cashier' || currentUser.role === 'admin')) {
         finItems.push({ id: 'cash_queue', label: 'Наличные от доставок', icon: Banknote });
       }
       if (finItems.length > 0) groups.push({ title: 'Финансы', items: finItems, collapsible: true, base: 'tk' });
     }
 
     // ── HR-КАЛЕНДАРЬ (отпуска и дни рождения) ────────────────────
-    if (mod('hr') && (isViewer || hasPermission(db, currentUser, 'hr_calendar_view'))) {
+    if (mod('hr') && blockOn('hr_calendar') && (isViewer || hasPermission(db, currentUser, 'hr_calendar_view'))) {
       groups.push({ title: 'HR', items: [
         { id: 'hr_calendar', label: 'Отпуска и дни рождения', icon: CalendarDays },
       ], collapsible: true, base: 'tk' });
     }
 
     // ── РАСПИСАНИЕ (по разрешению schedule_access) ────────────────────
-    if (mod('hr') && (isViewer || hasPermission(db, currentUser, 'schedule_access'))) {
+    if (mod('hr') && blockOn('schedule') && (isViewer || hasPermission(db, currentUser, 'schedule_access'))) {
       groups.push({ title: 'Расписание', items: [
         { id: 'schedule', label: 'Регулярные задачи', icon: Calendar },
       ], collapsible: true, base: 'tk' });
