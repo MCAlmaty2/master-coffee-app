@@ -1133,7 +1133,9 @@ function validateOrderForm(form) {
   else {
     const itemErrs = form.items.map((it) => {
       const e = {};
-      if (!it.product_id) e.product = 'Выберите товар';
+      // product_id нет у товаров, подставленных из «Закреплённых товаров» клиента
+      // (вписаны вручную, без привязки к прайсу) — это допустимо, если есть название.
+      if (!it.product_id && !String(it.name || '').trim()) e.product = 'Выберите товар';
       const q = Number(it.quantity);
       if (!q || q <= 0) e.quantity = '> 0';
       const p = Number(it.price);
@@ -1143,8 +1145,10 @@ function validateOrderForm(form) {
     if (itemErrs.some((e) => Object.keys(e).length > 0)) errors.itemErrors = itemErrs;
   }
   if (!form.delivery_method) errors.delivery_method = 'Выберите способ получения';
-  if (form.delivery_method === 'delivery' && (!form.delivery_address || form.delivery_address.trim().length < 8))
-    errors.delivery_address = 'Укажите адрес доставки (минимум 8 символов)';
+  // Адрес доставки — необязательное поле-уточнение (заполняется, только если отличается
+  // от основного адреса клиента); обязателен только если его начали заполнять частично.
+  if (form.delivery_address && form.delivery_address.trim().length > 0 && form.delivery_address.trim().length < 8)
+    errors.delivery_address = 'Минимум 8 символов';
   if (form.client_type === 'individual' && !form.payment_method) errors.payment_method = 'Выберите способ оплаты';
   if (!form.comment || form.comment.trim().length === 0) errors.comment = 'Заполните комментарий (или поставьте «—»)';
   return errors;
@@ -9453,6 +9457,7 @@ function CreateOrderScreen({ ctx }) {
                     </div>
                     <button onClick={() => removeItem(i)} style={{ color: '#EB5757' }}><Trash2 size={16} /></button>
                   </div>
+                  {itemErr.product && <div className="text-xs mb-2" style={{ color: '#EB5757' }}>{itemErr.product}</div>}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-xs" style={{ color: 'var(--mc-muted)' }}>Количество</label>
