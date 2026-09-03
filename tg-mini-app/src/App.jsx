@@ -1101,7 +1101,7 @@ function saveSession(s) {
    ВАЛИДАЦИЯ
    ═════════════════════════════════════════════════════════════════════════ */
 
-function validateOrderForm(form) {
+function validateOrderForm(form, role) {
   const errors = {};
   if (form.client_type === 'individual') {
     const name = (form.full_name || '').trim();
@@ -1150,7 +1150,8 @@ function validateOrderForm(form) {
   if (form.delivery_address && form.delivery_address.trim().length > 0 && form.delivery_address.trim().length < 8)
     errors.delivery_address = 'Минимум 8 символов';
   if (form.client_type === 'individual' && !form.payment_method) errors.payment_method = 'Выберите способ оплаты';
-  if (!form.comment || form.comment.trim().length === 0) errors.comment = 'Заполните комментарий (или поставьте «—»)';
+  // Для B2B-менеджера комментарий необязателен — он и так заполняет карточку клиента подробно.
+  if (role !== 'b2b' && (!form.comment || form.comment.trim().length === 0)) errors.comment = 'Заполните комментарий (или поставьте «—»)';
   return errors;
 }
 
@@ -9220,7 +9221,7 @@ function FieldRow({ label, value }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function CreateOrderScreen({ ctx }) {
-  const { db, goBack, navigate, createOrder, createGrindRequest, showToast, orderDraft, setOrderDraft, resetOrderDraft } = ctx;
+  const { db, currentUser, goBack, navigate, createOrder, createGrindRequest, showToast, orderDraft, setOrderDraft, resetOrderDraft } = ctx;
   const products = db.products || [];
   const form = orderDraft;
   const setForm = setOrderDraft;
@@ -9282,7 +9283,7 @@ function CreateOrderScreen({ ctx }) {
   const total = form.items.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0);
 
   const handleSubmit = async () => {
-    const e = validateOrderForm(form);
+    const e = validateOrderForm(form, currentUser.role);
     setErrors(e);
     if (Object.keys(e).length > 0) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
