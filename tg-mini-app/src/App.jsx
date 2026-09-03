@@ -1469,6 +1469,11 @@ function App() {
   // ─── Авто-синхронизация: когда меняются массивы в db — шлём diff в Supabase ───
   // Хранит снимок предыдущего состояния для каждого синхронизируемого ключа.
   const syncSnapshotRef = React.useRef({});
+  // Защита от «шторма» повторов: если upsert одной и той же записи стабильно падает
+  // (например, строка слишком большая и упирается в statement timeout), не откатываем
+  // snapshot чаще раза в минуту — иначе diff-эффект переретраит гигантский payload
+  // на каждом ре-рендере и кладёт сеть (ERR_INSUFFICIENT_RESOURCES) и БД.
+  const syncFailBackoffRef = React.useRef({});
   useEffect(() => {
     if (bootStatus.phase !== 'ready') return;
 
@@ -1515,6 +1520,15 @@ function App() {
               console.warn(`[sync] ${stateKey} ${id}: ${msg} (запись оставлена в локальном state)`);
               return;
             }
+            // Уже недавно ретраили эту же запись и снова не вышло — не откатываем snapshot
+            // (иначе следующий рендер тут же повторит тот же гигантский/битый upsert).
+            const backoffKey = `${stateKey}:${id}`;
+            const now = Date.now();
+            if (now < (syncFailBackoffRef.current[backoffKey] || 0)) {
+              console.warn(`[sync] ${stateKey} ${id}: повтор подавлен (backoff), см. предыдущую ошибку`);
+              return;
+            }
+            syncFailBackoffRef.current[backoffKey] = now + 60000;
             // Сетевая или другая ошибка — откатываем snapshot для этой записи,
             // чтобы sync diff повторил upsert при следующем рендере
             const snap = syncSnapshotRef.current[stateKey];
@@ -14923,7 +14937,7 @@ function ContractDetailScreen({ ctx, contractId }) {
             </div>
           </Card>
 
-          {cr.revisions.length > 0 && (
+          {(cr.revisions || []).length > 0 && (
             <Card title={`Версии и правки (${cr.revisions.length})`}>
               <div className="space-y-2">
                 {cr.revisions.map(rev => {
@@ -14961,10 +14975,10 @@ function ContractDetailScreen({ ctx, contractId }) {
           )}
 
           <Card title="История">
-            {cr.log.map((l, i) => {
+            {(cr.log || []).map((l, i) => {
               const actor = db.users.find(u => u.id === l.actor);
               return (
-                <div key={i} className="flex items-start gap-3 py-2" style={{ borderBottom: i < cr.log.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                <div key={i} className="flex items-start gap-3 py-2" style={{ borderBottom: i < (cr.log || []).length - 1 ? '1px solid #F1F5F9' : 'none' }}>
                   <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-muted)' }}>
                     {l.event === 'created' ? <Plus size={13} /> : l.event === 'revision' ? <FileText size={13} /> : <ArrowRight size={13} />}
                   </div>
