@@ -4379,7 +4379,7 @@ function App() {
     if (!hasPermission(db, currentUser, 'gift_create')) return { error: 'Нет прав на создание заявки на подарок' };
     if (!data.client_name?.trim()) return { error: 'Укажите клиента' };
     if (data.client_name.trim().length < 3) return { error: 'Имя клиента — минимум 3 символа' };
-    if (data.client_name.trim().length > 21) return { error: 'Имя клиента — максимум 21 символ' };
+    if (data.client_name.trim().length > 100) return { error: 'Имя клиента — максимум 100 символов' };
     const items = (data.items || []).filter(i => i && i.name && String(i.name).trim() && Number(i.quantity) > 0);
     if (items.length === 0) return { error: 'Добавьте хотя бы одну позицию' };
     if (data.delivery_type === 'delivery' && !data.address?.trim()) return { error: 'Укажите адрес доставки' };
@@ -10113,7 +10113,7 @@ function CreateQuickScreen({ ctx }) {
   const handleCreate = async () => {
     const e = {};
     if (!form.client_name || form.client_name.trim().length < 3) e.client_name = 'Минимум 3 символа';
-    else if (form.client_name.trim().length > 21) e.client_name = 'Максимум 21 символ';
+    else if (form.client_name.trim().length > 100) e.client_name = 'Максимум 100 символов';
     const items = form.items || [];
     if (items.length === 0) {
       e.items = 'Добавьте хотя бы один товар';
@@ -11700,20 +11700,20 @@ function CreateTaskScreen({ ctx }) {
     if (isTraining) {
       if (!form.training_course) e.training_course = 'Выберите курс обучения';
       if (!form.client_name || form.client_name.trim().length < 3) e.client_name = 'Минимум 3 символа';
-      else if (form.client_name.trim().length > 21) e.client_name = 'Максимум 21 символ';
+      else if (form.client_name.trim().length > 100) e.client_name = 'Максимум 100 символов';
       if (!form.phone || !normalizePhone(form.phone)) e.phone = 'Укажите телефон ученика';
       if (!form.visit_date || !form.visit_time) e.visit_time = 'Для обучения дата и время обязательны';
       if (courseInfo?.days === 1 && !form.training_prepaid) e.training_prepaid = 'Для однодневного курса необходима полная предоплата';
     } else if (isTasting) {
       if (!form.client_name || form.client_name.trim().length < 3) e.client_name = 'Минимум 3 символа';
-      else if (form.client_name.trim().length > 21) e.client_name = 'Максимум 21 символ';
+      else if (form.client_name.trim().length > 100) e.client_name = 'Максимум 100 символов';
       if ((form.tasting_location || 'school') === 'offsite' && (!form.address || form.address.trim().length < 4)) {
         e.address = 'Укажите адрес выездной дегустации';
       }
       if (!form.visit_date || !form.visit_time) e.visit_time = 'Для дегустации дата и время обязательны';
     } else if (!isInternal) {
       if (!form.client_name || form.client_name.trim().length < 3) e.client_name = 'Минимум 3 символа';
-      else if (form.client_name.trim().length > 21) e.client_name = 'Максимум 21 символ';
+      else if (form.client_name.trim().length > 100) e.client_name = 'Максимум 100 символов';
       if (!form.address || form.address.trim().length < 4) e.address = 'Укажите адрес';
       if (!form.phone || !normalizePhone(form.phone)) e.phone = 'Некорректный номер';
     }
