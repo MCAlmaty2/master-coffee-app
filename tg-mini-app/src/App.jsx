@@ -76,6 +76,7 @@ import {
   ClientDetailScreen,
   ClientEditScreen,
   ClientPickerModal,
+  ClientsReportScreen,
 } from './screens/ClientsScreen';
 
 /* ═════════════════════════════════════════════════════════════════════════
@@ -4146,10 +4147,15 @@ function App() {
   // Массовая вставка/замена прайс-листа по объёму для одного товара — вставка из таблицы
   // (1С/Excel) целиком заменяет текущие пороги этого товара новыми, с общим сроком
   // действия. Продление — тот же вызов с теми же порогами и новым valid_until.
-  const bulkReplaceVolumeTiers = async (productId, tiers, validUntil) => {
+  // clientId=null — общий прайс-лист (как раньше); clientId=uuid — индивидуальный
+  // прайс конкретного клиента (например, зафиксирован на старом прайс-листе) —
+  // хранится в той же таблице, но не смешивается с общими порогами этого товара.
+  const bulkReplaceVolumeTiers = async (productId, tiers, validUntil, clientId = null) => {
     if (!hasPermission(db, currentUser, 'volume_prices_edit')) return { error: 'Нет прав' };
     if (!tiers?.length) return { error: 'Нет строк для сохранения' };
-    const oldIds = (db.volumePriceTiers || []).filter(t => t.product_id === productId).map(t => t.id);
+    const oldIds = (db.volumePriceTiers || [])
+      .filter(t => t.product_id === productId && (t.client_id || null) === (clientId || null))
+      .map(t => t.id);
     const now = new Date().toISOString();
     const newRows = tiers.map(t => ({
       id: uid(),
@@ -4159,6 +4165,7 @@ function App() {
       price: t.price,
       valid_until: validUntil || null,
       notified_at: null,
+      client_id: clientId || null,
       created_by: currentUser.id,
       org_id: _currentOrgId,
       created_at: now,
@@ -4168,22 +4175,26 @@ function App() {
     const { error } = await supabase.from('volume_price_tiers').insert(newRows);
     if (error) return { error: error.message };
     setDb(d => {
-      const updated = [...(d.volumePriceTiers || []).filter(t => t.product_id !== productId), ...newRows];
+      const updated = [
+        ...(d.volumePriceTiers || []).filter(t => !(t.product_id === productId && (t.client_id || null) === (clientId || null))),
+        ...newRows,
+      ];
       if (syncSnapshotRef) syncSnapshotRef.current.volumePriceTiers = updated;
       return { ...d, volumePriceTiers: updated };
     });
     return { ok: true };
   };
-  // Продлить срок действия без изменения цен — двигает valid_until у всех порогов товара.
-  const extendVolumeTiers = async (productId, newValidUntil) => {
+  // Продлить срок действия без изменения цен — двигает valid_until у всех порогов товара
+  // (в рамках того же прайса — общего или конкретного клиента).
+  const extendVolumeTiers = async (productId, newValidUntil, clientId = null) => {
     if (!hasPermission(db, currentUser, 'volume_prices_edit')) return { error: 'Нет прав' };
-    const rows = (db.volumePriceTiers || []).filter(t => t.product_id === productId);
+    const rows = (db.volumePriceTiers || []).filter(t => t.product_id === productId && (t.client_id || null) === (clientId || null));
     if (!rows.length) return { error: 'Нет порогов для этого товара' };
     const patch = { valid_until: newValidUntil, notified_at: null };
     const { error } = await supabase.from('volume_price_tiers').update(patch).in('id', rows.map(t => t.id)).select();
     if (error) return { error: error.message };
     setDb(d => {
-      const updated = (d.volumePriceTiers || []).map(t => t.product_id === productId ? { ...t, ...patch } : t);
+      const updated = (d.volumePriceTiers || []).map(t => (t.product_id === productId && (t.client_id || null) === (clientId || null)) ? { ...t, ...patch } : t);
       if (syncSnapshotRef) syncSnapshotRef.current.volumePriceTiers = updated;
       return { ...d, volumePriceTiers: updated };
     });
@@ -6261,6 +6272,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     }
     if (isManager || role === 'director' || role === 'senior_manager') {
       sales.push({ id: 'clients', label: 'Клиенты', icon: Users });
+      sales.push({ id: 'clients_report', label: 'Отчёт по клиентам', icon: FileText });
     }
     if (isViewer || hasPermission(db, currentUser, 'shipment_view') || hasPermission(db, currentUser, 'shipment_edit')) {
       sales.push({ id: 'shipment_registry', label: 'Реестр отгрузок', icon: Package });
@@ -7015,9 +7027,11 @@ function Screen({ ctx }) {
       return <RentalEquipmentScreen ctx={ctx} />;
     // ─── Ценообразование ───
     case 'volume_prices': return <VolumePriceTiersScreen ctx={ctx} />;
+    case 'client_volume_prices': return <VolumePriceTiersScreen ctx={ctx} clientId={route.clientId} />;
     case 'special_prices': return <ClientSpecialPricesScreen ctx={ctx} />;
     // ─── Клиенты ───
     case 'clients':       return <ClientsScreen ctx={ctx} />;
+    case 'clients_report': return <ClientsReportScreen ctx={ctx} />;
     case 'client_detail': return <ClientDetailScreen ctx={ctx} clientId={route.clientId} />;
     case 'client_edit':   return <ClientEditScreen ctx={ctx} clientId={route.clientId ?? null} route={route} />;
     // ─── Точки обхода ───

@@ -205,21 +205,41 @@ export function ClientDetailScreen({ ctx, clientId }) {
     if (!client) return null;
     const ym = new Date().toISOString().slice(0, 7);
     const monthOrders = orders.filter(o => (o.created_at || '').slice(0, 7) === ym && o.status !== 'cancelled');
-    if (monthOrders.length === 0) return null;
     const byItem = {};
     let totalAmount = 0;
+    let totalKg = 0;
     monthOrders.forEach(o => {
       (o.items || []).forEach(it => {
-        const key = `${it.name}|${it.unit || ''}`;
-        byItem[key] = byItem[key] || { name: it.name, unit: it.unit || '', qty: 0 };
+        const key = `${it.product_id || it.name}|${it.unit || ''}`;
+        byItem[key] = byItem[key] || { name: it.name, unit: it.unit || '', qty: 0, product_id: it.product_id || null };
         byItem[key].qty += Number(it.quantity) || 0;
+        if ((it.unit || '').toLowerCase() === 'кг') totalKg += Number(it.quantity) || 0;
       });
       totalAmount += Number(o.total_amount) || 0;
     });
-    return { ordersCount: monthOrders.length, totalAmount, items: Object.values(byItem) };
+    return { ordersCount: monthOrders.length, totalAmount, totalKg, items: Object.values(byItem) };
   }, [client, orders]);
 
   const linkedRental = client ? (db.rentalClients || []).find(rc => rc.client_id === client.id) : null;
+  const individualTierCount = client ? (db.volumePriceTiers || []).filter(t => t.client_id === client.id).length : 0;
+
+  // Подсказка «до следующего порога скидки» — по товарам, купленным в этом месяце,
+  // с учётом индивидуального прайса клиента (если настроен) или общего.
+  const tierHints = useMemo(() => {
+    if (!client || !monthVolume) return [];
+    const hints = [];
+    monthVolume.items.forEach(it => {
+      if (!it.product_id || (it.unit || '').toLowerCase() !== 'кг') return;
+      const allTiers = db.volumePriceTiers || [];
+      const clientTiers = allTiers.filter(t => t.product_id === it.product_id && t.client_id === client.id);
+      const tiers = clientTiers.length > 0 ? clientTiers : allTiers.filter(t => t.product_id === it.product_id && !t.client_id);
+      if (tiers.length === 0) return;
+      const sorted = [...tiers].sort((a, b) => (Number(a.min_kg) || 0) - (Number(b.min_kg) || 0));
+      const next = sorted.find(t => (Number(t.min_kg) || 0) > it.qty);
+      if (next) hints.push({ name: it.name, need: Math.round(((Number(next.min_kg) || 0) - it.qty) * 10) / 10, price: next.price });
+    });
+    return hints;
+  }, [client, monthVolume, db.volumePriceTiers]);
 
   if (!client) return <div style={{ padding: 24, color: 'var(--mc-muted)', textAlign: 'center' }}>Клиент не найден</div>;
 
@@ -320,11 +340,14 @@ export function ClientDetailScreen({ ctx, clientId }) {
         )}
       </div>
 
-      {monthVolume && (
+      {monthVolume && (monthVolume.ordersCount > 0 || client.plan_kg > 0) && (
         <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>
             Объём закупа в этом месяце
           </div>
+          {monthVolume.items.length === 0 && (
+            <div style={{ fontSize: 12, color: 'var(--mc-muted)', padding: '4px 0' }}>Закупок пока не было</div>
+          )}
           {monthVolume.items.map((it, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 12 }}>
               <span style={{ color: 'var(--mc-text)' }}>{it.name}</span>
@@ -335,6 +358,32 @@ export function ClientDetailScreen({ ctx, clientId }) {
             <span style={{ color: 'var(--mc-muted)' }}>{monthVolume.ordersCount} {monthVolume.ordersCount === 1 ? 'заказ' : 'заказов'}</span>
             <span style={{ color: '#297b8a', fontWeight: 700 }}>{fmtNum(monthVolume.totalAmount)} ₸</span>
           </div>
+
+          {client.plan_kg > 0 && (() => {
+            const pct = Math.round((monthVolume.totalKg / client.plan_kg) * 100);
+            const color = pct >= 100 ? '#16a34a' : pct >= 70 ? '#D97706' : '#DC2626';
+            return (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--mc-border-light)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 5 }}>
+                  <span style={{ color: 'var(--mc-muted)' }}>План: {fmtNum(client.plan_kg)} кг/мес</span>
+                  <span style={{ fontWeight: 700, color }}>{monthVolume.totalKg} кг · {pct}%</span>
+                </div>
+                <div style={{ height: 6, borderRadius: 4, background: 'var(--mc-active-item)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: color, borderRadius: 4 }} />
+                </div>
+              </div>
+            );
+          })()}
+
+          {tierHints.length > 0 && (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--mc-border-light)' }}>
+              {tierHints.map((h, i) => (
+                <div key={i} style={{ fontSize: 11, color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '6px 9px', marginBottom: i < tierHints.length - 1 ? 6 : 0 }}>
+                  💡 {h.name}: ещё {h.need} кг до цены {fmtNum(h.price)} ₸/кг
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -359,6 +408,24 @@ export function ClientDetailScreen({ ctx, clientId }) {
               <span style={{ color: '#297b8a', fontWeight: 700, marginLeft: 12, whiteSpace: 'nowrap' }}>{fmtNum(pi.price)} тг</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Индивидуальный прайс по объёму (клиент зафиксирован на своём прайс-листе) */}
+      {canManage(currentUser) && (
+        <div style={{ background: individualTierCount > 0 ? '#FFFBEB' : 'var(--mc-surface)', border: `1px solid ${individualTierCount > 0 ? '#FDE68A' : 'var(--mc-border)'}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5 }}>Индивидуальный прайс по объёму</div>
+              <div style={{ fontSize: 12, color: individualTierCount > 0 ? '#92400E' : 'var(--mc-muted)', marginTop: 4 }}>
+                {individualTierCount > 0 ? `Настроен: ${individualTierCount} ${individualTierCount === 1 ? 'порог' : 'порогов'} — отличается от общего прайса` : 'Не настроен — цены как у всех'}
+              </div>
+            </div>
+            <button onClick={() => navigate({ name: 'client_volume_prices', clientId: client.id })}
+              style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, padding: '7px 12px', borderRadius: 8, background: individualTierCount > 0 ? '#F59E0B' : 'var(--mc-active-item)', color: individualTierCount > 0 ? '#fff' : 'var(--mc-text)', border: 'none', cursor: 'pointer' }}>
+              {individualTierCount > 0 ? 'Открыть' : 'Настроить'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -447,7 +514,7 @@ function OrderHistoryRow({ order: o, onClick }) {
 const emptyClient = {
   type: 'legal', name: '', bin: '', address: '', phone: '', city: 'almaty',
   contact_person: '', bank: '', kbe: '', bik: '',
-  account_number: '', notes: '', preferred_items: [], addresses: [],
+  account_number: '', notes: '', preferred_items: [], addresses: [], plan_kg: '',
 };
 
 export function ClientEditScreen({ ctx, clientId, route }) {
@@ -455,7 +522,25 @@ export function ClientEditScreen({ ctx, clientId, route }) {
   const existing = clientId ? (db.clients || []).find(c => c.id === clientId) : null;
   const prefill = route?.prefill;
 
-  const [form, setForm]   = useState(existing ? { ...emptyClient, ...existing } : { ...emptyClient, ...(prefill || {}) });
+  const [form, setForm]   = useState(() => {
+    const base = existing ? { ...emptyClient, ...existing } : { ...emptyClient, ...(prefill || {}) };
+    // Поля из БД могут быть null (не заполнены) — приводим к '' для текстовых полей,
+    // иначе form.X.trim() в validate()/handleSave() падает на null.
+    return {
+      ...base,
+      name:            base.name            || '',
+      bin:             base.bin             || '',
+      address:         base.address         || '',
+      phone:           base.phone           || '',
+      contact_person:  base.contact_person  || '',
+      bank:            base.bank            || '',
+      kbe:             base.kbe             || '',
+      bik:             base.bik             || '',
+      account_number:  base.account_number  || '',
+      notes:           base.notes           || '',
+      plan_kg:         base.plan_kg ?? '',
+    };
+  });
   const [errors, setErr]  = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -492,6 +577,7 @@ export function ClientEditScreen({ ctx, clientId, route }) {
         notes:           form.notes.trim()          || null,
         preferred_items: form.preferred_items || [],
         addresses:       (form.addresses || []).filter(a => a.address?.trim()),
+        plan_kg:         form.plan_kg !== '' && form.plan_kg != null ? Number(form.plan_kg) || null : null,
         created_by:     existing ? existing.created_by : currentUser.id,
         updated_at:     now,
         ...(!existing && { created_at: now }),
@@ -592,6 +678,7 @@ export function ClientEditScreen({ ctx, clientId, route }) {
             ))}
           </div>
         </div>
+        <EditField label="Плановый объём, кг/мес" value={form.plan_kg} onChange={v => upd({ plan_kg: v.replace(/[^\d.]/g, '') })} placeholder="Например, 50" type="number" />
         <EditField label="Заметки" value={form.notes} onChange={v => upd({ notes: v })} placeholder="Любая доп. информация" multiline />
       </div>
 
@@ -766,5 +853,176 @@ export function ClientPickerModal({ ctx, onSelect, onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ClientsReportScreen — объём закупа за месяц, дата последней покупки,
+// кто ещё не купил в этом месяце (подсказка менеджеру напомнить),
+// у кого настроен индивидуальный прайс по объёму.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export function ClientsReportScreen({ ctx }) {
+  const { db, navigate } = ctx;
+  const [search, setSearch] = useState('');
+  const [onlyAttention, setOnlyAttention] = useState(false);
+  const [onlyBelowPlan, setOnlyBelowPlan] = useState(false);
+
+  const ym = new Date().toISOString().slice(0, 7);
+
+  const rows = useMemo(() => {
+    const byClient = {};
+    (db.orders || []).forEach(o => {
+      if (!o.client_id || o.status === 'cancelled') return;
+      const cur = byClient[o.client_id] || { monthAmount: 0, monthKg: 0, lastDate: null };
+      const d = o.created_at || '';
+      if (!cur.lastDate || d > cur.lastDate) cur.lastDate = d;
+      if (d.slice(0, 7) === ym) {
+        cur.monthAmount += Number(o.total_amount) || 0;
+        (o.items || []).forEach(it => {
+          if ((it.unit || '').toLowerCase() === 'кг') cur.monthKg += Number(it.quantity) || 0;
+        });
+      }
+      byClient[o.client_id] = cur;
+    });
+    const withTiers = new Set((db.volumePriceTiers || []).filter(t => t.client_id).map(t => t.client_id));
+    return (db.clients || []).map(c => {
+      const agg = byClient[c.id];
+      const lastDate = agg?.lastDate || null;
+      const boughtThisMonth = !!lastDate && lastDate.slice(0, 7) === ym;
+      const monthKg = agg?.monthKg || 0;
+      const planKg = Number(c.plan_kg) || 0;
+      const planPct = planKg > 0 ? Math.round((monthKg / planKg) * 100) : null;
+      return {
+        client: c,
+        monthAmount: agg?.monthAmount || 0,
+        monthKg,
+        lastDate,
+        needsAttention: !boughtThisMonth,
+        belowPlan: planPct !== null && planPct < 100,
+        planPct,
+        hasIndividualPricing: withTiers.has(c.id),
+      };
+    });
+  }, [db.clients, db.orders, db.volumePriceTiers, ym]);
+
+  const filtered = useMemo(() => {
+    let list = rows;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const qDigits = q.replace(/\D/g, '');
+      list = list.filter(r =>
+        r.client.name.toLowerCase().includes(q) ||
+        (qDigits && (r.client.phone || '').replace(/\D/g, '').includes(qDigits))
+      );
+    }
+    if (onlyAttention) list = list.filter(r => r.needsAttention);
+    if (onlyBelowPlan) list = list.filter(r => r.belowPlan);
+    return list;
+  }, [rows, search, onlyAttention, onlyBelowPlan]);
+
+  const needAttention = useMemo(() =>
+    filtered.filter(r => r.needsAttention).sort((a, b) => (a.lastDate || '').localeCompare(b.lastDate || '')),
+    [filtered]);
+  const active = useMemo(() =>
+    filtered.filter(r => !r.needsAttention).sort((a, b) => b.monthAmount - a.monthAmount),
+    [filtered]);
+
+  const totalNeedsAttention = rows.filter(r => r.needsAttention).length;
+  const totalBelowPlan = rows.filter(r => r.belowPlan).length;
+
+  return (
+    <div>
+      <SHeader
+        title="Отчёт по клиентам"
+        subtitle={`${rows.length} клиентов · ${totalNeedsAttention} не купили в этом месяце${totalBelowPlan > 0 ? ` · ${totalBelowPlan} ниже плана` : ''}`}
+      />
+
+      <div style={{ position: 'relative', marginBottom: 10 }}>
+        <Search size={15} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--mc-muted)', pointerEvents: 'none' }} />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Поиск по названию, телефону..."
+          style={{ width: '100%', padding: '10px 36px', border: '1px solid var(--mc-border)', borderRadius: 10, fontSize: 16, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', boxSizing: 'border-box' }} />
+        {search && (
+          <button onClick={() => setSearch('')}
+            style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)' }}>
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+        <button onClick={() => setOnlyAttention(v => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: onlyAttention ? '#FEE2E2' : 'var(--mc-surface)', color: onlyAttention ? '#B91C1C' : 'var(--mc-muted)', border: `1px solid ${onlyAttention ? '#FCA5A5' : 'var(--mc-border)'}` }}>
+          {onlyAttention && <Check size={13} />} Не купившие в этом месяце ({totalNeedsAttention})
+        </button>
+        {totalBelowPlan > 0 && (
+          <button onClick={() => setOnlyBelowPlan(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: onlyBelowPlan ? '#FEF3C7' : 'var(--mc-surface)', color: onlyBelowPlan ? '#92400E' : 'var(--mc-muted)', border: `1px solid ${onlyBelowPlan ? '#FDE68A' : 'var(--mc-border)'}` }}>
+            {onlyBelowPlan && <Check size={13} />} Ниже плана ({totalBelowPlan})
+          </button>
+        )}
+      </div>
+
+      {needAttention.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#B91C1C', marginBottom: 8, textTransform: 'uppercase', letterSpacing: .5 }}>
+            ⚠ Не купили в этом месяце ({needAttention.length})
+          </div>
+          {needAttention.map(r => (
+            <ClientReportRow key={r.client.id} row={r} onClick={() => navigate({ name: 'client_detail', clientId: r.client.id })} />
+          ))}
+        </>
+      )}
+
+      {!onlyAttention && active.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mc-muted)', margin: needAttention.length > 0 ? '18px 0 8px' : '0 0 8px', textTransform: 'uppercase', letterSpacing: .5 }}>
+            Купили в этом месяце ({active.length})
+          </div>
+          {active.map(r => (
+            <ClientReportRow key={r.client.id} row={r} onClick={() => navigate({ name: 'client_detail', clientId: r.client.id })} />
+          ))}
+        </>
+      )}
+
+      {filtered.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--mc-muted)', fontSize: 13 }}>Ничего не найдено</div>
+      )}
+    </div>
+  );
+}
+
+function ClientReportRow({ row, onClick }) {
+  const { client: c, monthAmount, lastDate, needsAttention, hasIndividualPricing, belowPlan, planPct } = row;
+  return (
+    <button onClick={onClick}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', background: 'var(--mc-surface)', border: `1px solid ${needsAttention ? '#FECACA' : 'var(--mc-border)'}`, borderRadius: 12, padding: '11px 14px', marginBottom: 8, cursor: 'pointer' }}>
+      <div style={{ width: 36, height: 36, borderRadius: '50%', background: c.type === 'legal' ? '#EFF6FF' : '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {c.type === 'legal' ? <Building2 size={16} color="#1D4ED8" /> : <User size={16} color="#16a34a" />}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--mc-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+          {hasIndividualPricing && (
+            <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, borderRadius: 6, padding: '1px 6px', background: '#FEF3C7', color: '#92400E' }}>свой прайс</span>
+          )}
+          {belowPlan && (
+            <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, borderRadius: 6, padding: '1px 6px', background: '#FEE2E2', color: '#B91C1C' }}>план {planPct}%</span>
+          )}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--mc-muted)', marginTop: 2 }}>
+          Посл. закупка: {lastDate ? fmtDate(lastDate) : 'не было'}
+        </div>
+      </div>
+      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: monthAmount > 0 ? '#297b8a' : 'var(--mc-muted)' }}>
+          {monthAmount > 0 ? `${fmtNum(monthAmount)} ₸` : '—'}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--mc-muted)' }}>в этом месяце</div>
+      </div>
+    </button>
   );
 }

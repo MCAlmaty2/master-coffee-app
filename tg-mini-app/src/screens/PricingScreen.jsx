@@ -32,13 +32,17 @@ const inputStyle = { border: '1px solid var(--mc-border)', background: 'var(--mc
 //  Прайс-лист по объёму (Админ)
 // ═══════════════════════════════════════════════════════════
 
-export function VolumePriceTiersScreen({ ctx }) {
-  const { db, currentUser, showToast, currentOrgId, can } = ctx;
+export function VolumePriceTiersScreen({ ctx, clientId = null }) {
+  const { db, currentUser, showToast, currentOrgId, can, goBack } = ctx;
+  const client = clientId ? (db.clients || []).find(c => c.id === clientId) : null;
   const coffeeProducts = useMemo(
     () => (db.products || []).filter(p => p.cat === COFFEE_CAT && p.active && p.unit === 'кг'),
     [db.products],
   );
-  const tiers = db.volumePriceTiers || [];
+  const tiers = useMemo(
+    () => (db.volumePriceTiers || []).filter(t => (t.client_id || null) === (clientId || null)),
+    [db.volumePriceTiers, clientId],
+  );
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ min_kg: '', max_kg: '', price: '' });
@@ -77,6 +81,7 @@ export function VolumePriceTiersScreen({ ctx }) {
       min_kg: min,
       max_kg: max,
       price,
+      client_id: clientId || null,
       org_id: currentOrgId,
       updated_at: new Date().toISOString(),
     };
@@ -112,7 +117,7 @@ export function VolumePriceTiersScreen({ ctx }) {
     const base = currentValidUntil && currentValidUntil > today ? currentValidUntil : today;
     const [y, m, d] = base.split('-').map(Number);
     const newDate = new Date(Date.UTC(y + 1, m - 1, d)).toISOString().slice(0, 10);
-    const r = await ctx.extendVolumeTiers(productId, newDate);
+    const r = await ctx.extendVolumeTiers(productId, newDate, clientId);
     if (r?.error) showToast(r.error);
     else showToast(`Продлено до ${fmtDate(newDate)}`);
   };
@@ -121,8 +126,17 @@ export function VolumePriceTiersScreen({ ctx }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-lg font-bold" style={{ color: 'var(--mc-text)' }}>Прайс-лист по объёму</h2>
-          <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Цены на кофе зерно в зависимости от объёма закупа</div>
+          {client && (
+            <button onClick={goBack} className="flex items-center gap-1 text-xs font-semibold mb-1" style={{ color: '#3B82F6' }}>
+              ← Назад к клиенту
+            </button>
+          )}
+          <h2 className="text-lg font-bold" style={{ color: 'var(--mc-text)' }}>
+            {client ? `Индивидуальный прайс — ${client.name}` : 'Прайс-лист по объёму'}
+          </h2>
+          <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>
+            {client ? 'Действует только для этого клиента, отдельно от общего прайса' : 'Цены на кофе зерно в зависимости от объёма закупа'}
+          </div>
         </div>
       </div>
 
@@ -286,7 +300,7 @@ export function VolumePriceTiersScreen({ ctx }) {
               onClose={() => setShowBulkImport(false)}
               showToast={showToast}
               onConfirm={async (parsedTiers, validUntil) => {
-                const r = await ctx.bulkReplaceVolumeTiers(selectedProduct, parsedTiers, validUntil);
+                const r = await ctx.bulkReplaceVolumeTiers(selectedProduct, parsedTiers, validUntil, clientId);
                 if (r?.error) { showToast(r.error); return; }
                 showToast(`Прайс обновлён: ${parsedTiers.length} ${parsedTiers.length === 1 ? 'порог' : 'порогов'}`);
                 setShowBulkImport(false);
