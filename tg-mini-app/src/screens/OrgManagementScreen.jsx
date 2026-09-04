@@ -15,14 +15,15 @@ const DEFAULT_MODULES = ['sales', 'products'];
 
 // Дней до trial_ends_at по календарной дате Алматы (не по разнице timestamp'ов —
 // иначе "истекает сегодня" из-за времени суток то и дело считалось бы "уже истёк").
-function daysUntil(trialEndsAt) {
+// Экспортируется — используется и на карточке организации, и в сводке PlatformHomeScreen.
+export function daysUntil(trialEndsAt) {
   if (!trialEndsAt) return null;
   const todayISO = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Almaty' }).format(new Date());
   const endISO = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Almaty' }).format(new Date(trialEndsAt));
   return Math.round((new Date(endISO) - new Date(todayISO)) / 86400000);
 }
 
-function trialBadge(trialEndsAt) {
+export function trialBadge(trialEndsAt) {
   const days = daysUntil(trialEndsAt);
   if (days === null) return null;
   if (days < 0) return { label: `истёк ${Math.abs(days)} дн. назад`, bg: 'var(--mc-danger-bg)', color: '#EB5757' };

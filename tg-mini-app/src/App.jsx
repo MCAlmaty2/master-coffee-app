@@ -31,6 +31,7 @@ import { VolumePriceTiersScreen, ClientSpecialPricesScreen } from './screens/Pri
 import { RoundPointsScreen, RoundPointDetailScreen, RoundPointFormScreen } from './screens/RoundPointsScreen';
 import OrgManagementScreen from './screens/OrgManagementScreen';
 import PlatformUsersScreen from './screens/PlatformUsersScreen';
+import PlatformHomeScreen from './screens/PlatformHomeScreen';
 import {
   fetchAllUsers,
   findUserByTelegramId,
@@ -1324,7 +1325,7 @@ function App() {
         if (allOrgs.length > 0) setOrganizations(allOrgs);
         if (isSuperAdmin) {
           setPlatformMode(true);
-          setRoute({ name: 'platform_orgs' });
+          setRoute({ name: 'platform_home' });
         }
         setBootStatus({ phase: 'ready', error: null });
       } catch (e) {
@@ -1660,7 +1661,7 @@ function App() {
   const switchOrg = async (newOrgId) => {
     if (newOrgId === 'platform') {
       setPlatformMode(true);
-      setRoute({ name: 'platform_orgs' });
+      setRoute({ name: 'platform_home' });
       return;
     }
     setPlatformMode(false);
@@ -6276,6 +6277,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     // ── ПЛАТФОРМА (только супер-админ, только в режиме "Платформа" — не внутри каждой компании) ────
     if (currentUser.is_super_admin && platformMode) {
       const platform = [];
+      platform.push({ id: 'platform_home',    label: 'Обзор',             icon: Eye });
       platform.push({ id: 'platform_orgs',    label: 'Организации',       icon: Building2 });
       platform.push({ id: 'platform_users',   label: 'Все пользователи',  icon: Users });
       platform.push({ id: 'platform_errors',  label: 'Ошибки платформы',  icon: AlertTriangle });
@@ -6984,6 +6986,7 @@ function Screen({ ctx }) {
     case 'order_detail': return <OrderDetailScreen ctx={ctx} orderId={route.orderId} />;
     case 'archive': return <ArchiveScreen ctx={ctx} />;
     case 'export': return <ExportScreen ctx={ctx} />;
+    case 'platform_home': return <PlatformHomeScreen ctx={ctx} />;
     case 'platform_orgs': return <OrgManagementScreen ctx={ctx} />;
     case 'platform_users': return <PlatformUsersScreen ctx={ctx} />;
     case 'platform_errors': return <AdminErrorReportsScreen ctx={ctx} crossOrg />;
