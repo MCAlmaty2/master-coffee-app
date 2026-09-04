@@ -17743,6 +17743,8 @@ function AdminErrorReportsScreen({ ctx }) {
   const [loadError, setLoadError] = useState(null);
   const [filter, setFilter] = useState('unresolved'); // 'unresolved' | 'resolved' | 'all'
   const [expandedId, setExpandedId] = useState(null);
+  const [selected, setSelected] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -17816,12 +17818,49 @@ function AdminErrorReportsScreen({ ctx }) {
     all:        reports.length,
   };
 
+  const setFilterAndClearSelection = (f) => { setFilter(f); setSelected(new Set()); };
+
+  const toggleSelected = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  // Выбираются только неотмеченные — «выбрать все» на вкладке «Решённые»/«Все» не должно
+  // подсовывать в чекбоксы записи, которые и так уже решены (нечего с ними массово делать).
+  const selectableIds = filtered.filter(r => !r.resolved).map(r => r.id);
+  const allSelectableChecked = selectableIds.length > 0 && selectableIds.every(id => selected.has(id));
+  const toggleSelectAll = () => {
+    setSelected(prev => allSelectableChecked ? new Set() : new Set(selectableIds));
+  };
+
   const markResolved = async (id) => {
     try {
-      await supabase.from('error_reports').update({ resolved: true, resolved_at: new Date().toISOString() }).eq('id', id);
+      await supabase.from('error_reports').update({ resolved: true, resolved_at: new Date().toISOString(), resolved_by: currentUser?.id || null }).eq('id', id);
       load();
       showToast('Отмечено как решённое');
     } catch (e) { showToast('Ошибка: ' + e.message); }
+  };
+
+  const markResolvedBulk = async () => {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    try {
+      const { error } = await supabase.from('error_reports')
+        .update({ resolved: true, resolved_at: new Date().toISOString(), resolved_by: currentUser?.id || null })
+        .in('id', ids);
+      if (error) throw error;
+      setSelected(new Set());
+      load();
+      showToast(`Отмечено решёнными: ${ids.length}`);
+    } catch (e) {
+      showToast('Ошибка: ' + e.message);
+    } finally {
+      setBulkBusy(false);
+    }
   };
 
   const deleteOne = async (id) => {
@@ -17871,19 +17910,35 @@ function AdminErrorReportsScreen({ ctx }) {
       )}
 
       <div className="flex gap-1.5 mb-4">
-        <button onClick={() => setFilter('unresolved')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
+        <button onClick={() => setFilterAndClearSelection('unresolved')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
           style={{ background: filter === 'unresolved'  ? '#297b8a' : 'var(--mc-active-item)', color: filter === 'unresolved' ? 'white' : '#64748B' }}>
           Новые ({counts.unresolved})
         </button>
-        <button onClick={() => setFilter('resolved')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
+        <button onClick={() => setFilterAndClearSelection('resolved')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
           style={{ background: filter === 'resolved'  ? '#297b8a' : 'var(--mc-active-item)', color: filter === 'resolved' ? 'white' : '#64748B' }}>
           Решённые ({counts.resolved})
         </button>
-        <button onClick={() => setFilter('all')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
+        <button onClick={() => setFilterAndClearSelection('all')} className="rounded-full px-3.5 py-1.5 text-xs font-semibold"
           style={{ background: filter === 'all'  ? '#297b8a' : 'var(--mc-active-item)', color: filter === 'all' ? 'white' : '#64748B' }}>
           Все ({counts.all})
         </button>
       </div>
+
+      {selectableIds.length > 0 && (
+        <div className="flex items-center gap-3 mb-3 px-1">
+          <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer" style={{ color: 'var(--mc-muted)' }}>
+            <input type="checkbox" checked={allSelectableChecked} onChange={toggleSelectAll} />
+            Выбрать все ({selectableIds.length})
+          </label>
+          {selected.size > 0 && (
+            <button onClick={markResolvedBulk} disabled={bulkBusy}
+              className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white"
+              style={{ background: '#10B981', opacity: bulkBusy ? 0.6 : 1 }}>
+              {bulkBusy ? 'Отмечаю…' : `Отметить решёнными (${selected.size})`}
+            </button>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <Empty icon={Loader2} title="Загрузка…" subtitle="" />
@@ -17897,6 +17952,9 @@ function AdminErrorReportsScreen({ ctx }) {
             return (
               <div key={r.id} className="bg-white rounded-xl p-4" style={{ border: r.resolved ? '1px solid var(--mc-border)' : '1px solid #FCA5A5', opacity: r.resolved ? 0.6 : 1 }}>
                 <div className="flex items-start gap-3">
+                  {!r.resolved && (
+                    <input type="checkbox" className="mt-1 flex-shrink-0" checked={selected.has(r.id)} onChange={() => toggleSelected(r.id)} />
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: r.resolved ? '#D1FAE5' : '#FEE2E2', color: r.resolved ? '#065F46' : '#991B1B' }}>
