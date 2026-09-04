@@ -808,9 +808,10 @@ export function ClientPickerModal({ ctx, onSelect, onClose }) {
     const clients = db.clients || [];
     if (!search.trim()) return clients.slice(0, 20);
     const q = search.trim().toLowerCase();
+    const qDigits = q.replace(/\D/g, '');
     return clients.filter(c =>
       c.name.toLowerCase().includes(q) ||
-      (c.phone || '').replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
+      (qDigits && (c.phone || '').replace(/\D/g, '').includes(qDigits)) ||
       (c.bin || '').includes(q)
     ).slice(0, 20);
   }, [db.clients, search]);
