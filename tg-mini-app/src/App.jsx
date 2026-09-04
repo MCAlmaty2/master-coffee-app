@@ -1194,6 +1194,7 @@ function App() {
   const emptyQuickDraft = {
     client_type: 'individual',
     client_name: '',
+    client_id: '', // если привязан к существующему клиенту из "Клиенты" — заявка не заведёт дубль
     items: [],           // [{ local_id, product_id, name, unit, quantity, price, needs_grind, grind_type, grind_custom }]
     delivery_method: '',
     payment_method: '', // on_delivery | kaspi_remote | prepay_invoice
@@ -9668,7 +9669,55 @@ function CreateQuickScreen({ ctx }) {
   const [errors, setErrors] = useState({});
   const [detected, setDetected] = useState(new Set()); // ключи полей, распознанных из текста
   const [confirmModal, setConfirmModal] = useState(null); // { order, forwardText } после создания
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
   const textareaRef = React.useRef(null);
+
+  // Клиент уже привязан (form.client_id) — найдём его данные для бейджа.
+  const linkedClient = form.client_id ? (db.clients || []).find(c => c.id === form.client_id) : null;
+
+  // Похожие клиенты из базы по имени/телефону/БИН — предлагаем привязаться вместо
+  // создания дубля. Точное совпадение телефона/БИН — высокая уверенность, по имени —
+  // мягкое совпадение (одно содержит другое), т.к. текст из чата редко совпадает дословно.
+  const possibleMatches = React.useMemo(() => {
+    if (form.client_id) return [];
+    const name = (form.client_name || '').trim().toLowerCase();
+    const normPhone = normalizePhone(form.phone);
+    const bin = (form.bin || '').trim();
+    if (!name && !normPhone && !bin) return [];
+    const clients = db.clients || [];
+    const exact = clients.filter(c => {
+      if (bin && bin.length === 12 && c.bin === bin) return true;
+      if (normPhone && normalizePhone(c.phone) === normPhone) return true;
+      return false;
+    });
+    if (exact.length > 0) return exact.slice(0, 3);
+    if (name.length < 3) return [];
+    const fuzzy = clients.filter(c => {
+      const cn = (c.name || '').trim().toLowerCase();
+      if (!cn) return false;
+      return cn === name || cn.includes(name) || name.includes(cn);
+    });
+    return fuzzy.slice(0, 3);
+  }, [form.client_id, form.client_name, form.phone, form.bin, db.clients]);
+
+  // Привязать заявку к найденному клиенту — подставляем его реальные данные
+  // в форму, чтобы заявка не создавала новую запись в "Клиенты".
+  const linkToClient = (c) => {
+    // Как и ручное редактирование — блокируем авто-парс, иначе следующий вставленный
+    // текст может переписать имя/телефон и оставить client_id указывающим не на того клиента.
+    setParseLocked(true);
+    setForm(f => ({
+      ...f,
+      client_id: c.id,
+      client_type: c.type || f.client_type,
+      client_name: c.name || f.client_name,
+      phone: c.phone || f.phone,
+      address: c.address || f.address,
+      bin: c.bin || f.bin,
+    }));
+    setClientPickerOpen(false);
+  };
+  const unlinkClient = () => update({ client_id: '' });
   // parseLocked = true означает что менеджер вручную отредактировал товары →
   // авто-парс не перезаписывает. Сбрасывается кнопкой "Разобрать".
   // Хранится в ctx (App-level), чтобы переживать навигацию на product_picker.
@@ -10187,6 +10236,7 @@ function CreateQuickScreen({ ctx }) {
     });
     const payload = {
       client_type: form.client_type || 'individual',
+      ...(form.client_id ? { client_id: form.client_id } : {}),
       ...(isLegal
         ? { company_name: form.client_name.trim(), bin: form.bin || '000000000000', contact_person: form.contact_person || '—', email: form.email || '—' }
         : { full_name: form.client_name.trim() }),
@@ -10398,17 +10448,41 @@ function CreateQuickScreen({ ctx }) {
             <div className="space-y-2.5">
               {/* Имя клиента */}
               <div>
-                <label className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: 'var(--mc-muted)' }}>
-                  {form.client_type === 'legal' ? 'Компания' : 'Имя клиента'} <Dot field="client_name" />
+                <label className="text-xs font-semibold mb-1.5 flex items-center justify-between" style={{ color: 'var(--mc-muted)' }}>
+                  <span>{form.client_type === 'legal' ? 'Компания' : 'Имя клиента'} <Dot field="client_name" /></span>
+                  <button type="button" onClick={() => setClientPickerOpen(true)} className="text-xs font-semibold" style={{ color: '#297b8a' }}>
+                    🔍 Найти в базе
+                  </button>
                 </label>
                 <input
                   value={form.client_name || ''}
-                  onChange={e => update({ client_name: e.target.value })}
+                  onChange={e => update({ client_name: e.target.value, ...(form.client_id ? { client_id: '' } : {}) })}
                   maxLength={100}
                   className="w-full px-3 py-2 rounded-lg outline-none"
                   style={{ border: `1px solid ${errors.client_name ? '#EB5757' : 'var(--mc-border)'}`, fontSize: 15 }}
                 />
                 {errors.client_name && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.client_name}</div>}
+
+                {linkedClient ? (
+                  <div className="flex items-center justify-between gap-2 mt-1.5 px-2.5 py-1.5 rounded-lg" style={{ background: '#DCFCE7' }}>
+                    <span className="text-xs font-semibold" style={{ color: '#166534' }}>✓ Привязан к клиенту в базе: {linkedClient.name}</span>
+                    <button type="button" onClick={unlinkClient} className="text-xs font-semibold flex-shrink-0" style={{ color: '#166534' }}>Отвязать</button>
+                  </div>
+                ) : possibleMatches.length > 0 && (
+                  <div className="mt-1.5 space-y-1">
+                    <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>Похоже, уже есть в базе — привязать вместо нового клиента?</div>
+                    {possibleMatches.map(c => (
+                      <button key={c.id} type="button" onClick={() => linkToClient(c)}
+                        className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-left"
+                        style={{ background: '#FEF3C7' }}>
+                        <span className="text-xs font-semibold truncate" style={{ color: '#92400E' }}>
+                          {c.name}{c.phone ? ` · ${c.phone}` : ''}
+                        </span>
+                        <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#92400E' }}>Это он →</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* БИН для юр. лиц */}
@@ -10433,7 +10507,7 @@ function CreateQuickScreen({ ctx }) {
                 </label>
                 <input
                   value={form.phone || ''}
-                  onChange={e => update({ phone: e.target.value })}
+                  onChange={e => update({ phone: e.target.value, ...(form.client_id ? { client_id: '' } : {}) })}
                   className="w-full px-3 py-2 rounded-lg outline-none"
                   style={{ border: '1px solid var(--mc-border)', fontSize: 15 }}
                 />
@@ -10678,6 +10752,10 @@ function CreateQuickScreen({ ctx }) {
           </div>
         </div>
       </div>
+
+      {clientPickerOpen && (
+        <ClientPickerModal ctx={ctx} onClose={() => setClientPickerOpen(false)} onSelect={linkToClient} />
+      )}
 
       {confirmModal && (
         <QuickConfirmModal
