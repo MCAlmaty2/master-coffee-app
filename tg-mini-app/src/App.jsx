@@ -1477,7 +1477,7 @@ function App() {
   useEffect(() => {
     if (bootStatus.phase !== 'ready') return;
 
-    const SKIP_SYNC_DIFF = new Set(['writeOffs', 'orders', 'notifications', 'telegramLog']);
+    const SKIP_SYNC_DIFF = new Set(['writeOffs', 'orders', 'notifications', 'telegramLog', 'grindRequests']);
     for (const stateKey of Object.keys(SYNC_TABLES)) {
       if (SKIP_SYNC_DIFF.has(stateKey)) {
         if (syncSnapshotRef.current[stateKey] === undefined) syncSnapshotRef.current[stateKey] = db[stateKey] || [];
@@ -4992,59 +4992,69 @@ function App() {
   };
 
   // Склад берёт заявку в работу
-  const takeGrindRequest = (grindId) => {
+  // ВАЖНО: пишем в Supabase явно и ждём подтверждения (как orders.changeStatus), а не полагаемся
+  // на общий diff-sync эффект — тот пушит изменения асинхронно "по сравнению со своим снапшотом"
+  // и в редких случаях гонки успевал откатить статус обратно на «Мелют» сразу после клика «Готово»
+  // (воспроизвели живьём: клик → статус на миг меняется → откатывается, без ошибок в консоли).
+  const takeGrindRequest = async (grindId) => {
     if (!hasPermission(db, currentUser, 'grind_fulfill')) return { error: 'Нет прав молоть кофе (только склад)' };
     const g = (db.grindRequests || []).find(x => x.id === grindId);
     if (!g) return { error: 'Заявка не найдена' };
     if (g.status !== 'new') return { error: `Заявка уже в статусе «${GRIND_STATUS[g.status]?.label}»` };
-    setDb(d => ({
-      ...d,
-      grindRequests: d.grindRequests.map(x => x.id !== grindId ? x : {
-        ...x,
-        status: 'in_progress',
-        warehouse_user_id: currentUser.id,
-        log: [...x.log, { event: 'status', from: 'new', to: 'in_progress', actor: currentUser.id, at: new Date().toISOString() }],
-      }),
-    }));
+    const upd = {
+      status: 'in_progress',
+      warehouse_user_id: currentUser.id,
+      log: [...g.log, { event: 'status', from: 'new', to: 'in_progress', actor: currentUser.id, at: new Date().toISOString() }],
+    };
+    const { data, error } = await supabase.from('grind_requests').update(upd).eq('id', grindId).select();
+    if (error) return { error: error.message };
+    const dbRow = checkUpdated(data, 'grindRequests.take', { grindId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
+    setDb(d => {
+      const grindRequests = d.grindRequests.map(x => x.id === grindId ? dbRow : x);
+      syncSnapshotRef.current.grindRequests = grindRequests;
+      return { ...d, grindRequests };
+    });
     return { ok: true };
   };
 
   // Склад отметил, что помол готов
-  const markGrindReady = (grindId) => {
+  const markGrindReady = async (grindId) => {
     if (!hasPermission(db, currentUser, 'grind_fulfill')) return { error: 'Нет прав' };
     const g = (db.grindRequests || []).find(x => x.id === grindId);
     if (!g) return { error: 'Заявка не найдена' };
     if (g.status !== 'in_progress') return { error: `Сначала возьмите заявку в работу` };
+    const now = new Date().toISOString();
+    const upd = {
+      status: 'completed',
+      ready_at: now,
+      completed_at: now,
+      log: [...g.log, { event: 'status', from: 'in_progress', to: 'completed', actor: currentUser.id, at: now }],
+    };
+    const { data, error } = await supabase.from('grind_requests').update(upd).eq('id', grindId).select();
+    if (error) return { error: error.message };
+    const dbRow = checkUpdated(data, 'grindRequests.markReady', { grindId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
     setDb(d => {
-      let updated = null;
-      const list = d.grindRequests.map(x => {
-        if (x.id !== grindId) return x;
-        updated = {
-          ...x,
-          status: 'completed',
-          ready_at: new Date().toISOString(),
-          completed_at: new Date().toISOString(),
-          log: [...x.log, { event: 'status', from: 'in_progress', to: 'completed', actor: currentUser.id, at: new Date().toISOString() }],
-        };
-        return updated;
-      });
+      const grindRequests = d.grindRequests.map(x => x.id === grindId ? dbRow : x);
+      syncSnapshotRef.current.grindRequests = grindRequests;
       // Уведомить менеджера-автора
       const newNotifs = [makeNotif(d, {
-        recipient_id: updated.created_by,
-        link_kind: 'grind', link_id: updated.id,
+        recipient_id: dbRow.created_by,
+        link_kind: 'grind', link_id: dbRow.id,
         title: '☕ Помол готов',
-        body: `${updated.number}: ${updated.product_name} — помол завершён, ушёл в архив`,
+        body: `${dbRow.number}: ${dbRow.product_name} — помол завершён, ушёл в архив`,
       })];
       const tgEntry = makeTgLogEntry(d, 'grind_ready', {
-        gr_number: updated.number,
-        product: updated.product_name,
-        quantity: updated.quantity,
-        unit: updated.unit,
-        manager: getUserName(d, updated.created_by),
+        gr_number: dbRow.number,
+        product: dbRow.product_name,
+        quantity: dbRow.quantity,
+        unit: dbRow.unit,
+        manager: getUserName(d, dbRow.created_by),
       });
       return {
         ...d,
-        grindRequests: list,
+        grindRequests,
         notifications: [...newNotifs.filter(Boolean), ...d.notifications],
         telegramLog: [tgEntry, ...d.telegramLog].slice(0, 200),
       };
@@ -5052,22 +5062,27 @@ function App() {
     return { ok: true };
   };
 
-  const cancelGrindRequest = (grindId, reason) => {
+  const cancelGrindRequest = async (grindId, reason) => {
     const g = (db.grindRequests || []).find(x => x.id === grindId);
     if (!g) return { error: 'Заявка не найдена' };
     if (['completed', 'cancelled'].includes(g.status)) return { error: 'Уже завершена' };
     // Отменить может автор или тот, кто работает со складом
     const canCancel = g.created_by === currentUser.id || hasPermission(db, currentUser, 'grind_fulfill') || currentUser.role === 'admin';
     if (!canCancel) return { error: 'Нет прав отменить' };
-    setDb(d => ({
-      ...d,
-      grindRequests: d.grindRequests.map(x => x.id !== grindId ? x : {
-        ...x,
-        status: 'cancelled',
-        cancelled_at: new Date().toISOString(),
-        log: [...x.log, { event: 'status', from: x.status, to: 'cancelled', actor: currentUser.id, at: new Date().toISOString(), meta: { reason: (reason || '').trim() } }],
-      }),
-    }));
+    const upd = {
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      log: [...g.log, { event: 'status', from: g.status, to: 'cancelled', actor: currentUser.id, at: new Date().toISOString(), meta: { reason: (reason || '').trim() } }],
+    };
+    const { data, error } = await supabase.from('grind_requests').update(upd).eq('id', grindId).select();
+    if (error) return { error: error.message };
+    const dbRow = checkUpdated(data, 'grindRequests.cancel', { grindId });
+    if (!dbRow) return { error: 'Не удалось сохранить, попробуйте ещё раз' };
+    setDb(d => {
+      const grindRequests = d.grindRequests.map(x => x.id === grindId ? dbRow : x);
+      syncSnapshotRef.current.grindRequests = grindRequests;
+      return { ...d, grindRequests };
+    });
     return { ok: true };
   };
 
@@ -16292,18 +16307,25 @@ function GrindDetailScreen({ ctx, grindId }) {
   const isArchived = ['completed', 'cancelled', 'ready', 'awaiting_pickup'].includes(g.status);
   const canCancel  = (isAuthor || canFulfill || currentUser.role === 'admin') && !isArchived;
 
-  const handleTake = () => {
-    const r = takeGrindRequest(g.id);
+  const [busy, setBusy] = useState(false);
+  const handleTake = async () => {
+    setBusy(true);
+    const r = await takeGrindRequest(g.id);
+    setBusy(false);
     if (r.error) return showToast(r.error);
     showToast('Заявка в работе');
   };
-  const handleReady = () => {
-    const r = markGrindReady(g.id);
+  const handleReady = async () => {
+    setBusy(true);
+    const r = await markGrindReady(g.id);
+    setBusy(false);
     if (r.error) return showToast(r.error);
     showToast('☕ Готово! Помол ушёл в архив');
   };
-  const handleCancel = () => {
-    const r = cancelGrindRequest(g.id, cancelReason);
+  const handleCancel = async () => {
+    setBusy(true);
+    const r = await cancelGrindRequest(g.id, cancelReason);
+    setBusy(false);
     if (r.error) return showToast(r.error);
     showToast('Заявка отменена');
     setCancelModal(false);
@@ -16352,12 +16374,12 @@ function GrindDetailScreen({ ctx, grindId }) {
 
         <div className="space-y-2 pt-2">
           {canFulfill && g.status === 'new' && (
-            <button onClick={handleTake} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#F59E0B' }}>
+            <button onClick={handleTake} disabled={busy} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#F59E0B', opacity: busy ? 0.6 : 1 }}>
               Взять в работу (начать молоть)
             </button>
           )}
           {canFulfill && g.status === 'in_progress' && (
-            <button onClick={handleReady} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#10B981' }}>
+            <button onClick={handleReady} disabled={busy} className="w-full py-3 rounded-lg font-semibold text-white" style={{ background: '#10B981', opacity: busy ? 0.6 : 1 }}>
               ☕ Готово → в архив
             </button>
           )}
