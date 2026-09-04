@@ -36,8 +36,14 @@ export const SYNC_TABLES = {
   dailyRevenue:       { table: 'daily_revenue',       pk: 'date', dateFilter: { column: 'date', cutoff: CUTOFF_6M } },
   managerTasks:       { table: 'manager_tasks',       pk: 'id', base: 'tk' },
   releaseNotes:       { table: 'release_notes',       pk: 'id' },
-  scheduleTasks:      { table: 'schedule_tasks',      pk: 'id', base: 'coffeeshop' },
-  scheduleCompletions: { table: 'schedule_completions', pk: 'id', dateFilter: { column: 'completed_at', cutoff: CUTOFF_3M }, base: 'coffeeshop' },
+  // ВАЖНО: без base-ограничения — эта же таблица используется и общим "Расписанием"
+  // (ScheduleScreen.jsx, для admin/director/senior_manager, т.е. базы 'tk'), и задачами
+  // кофеен (CoffeeTasksScreen.jsx, база 'coffeeshop'). base:'coffeeshop' здесь раньше
+  // полностью прятал таблицу от senior_manager/director — их задачи создавались и
+  // хранились нормально, но клиент их просто никогда не загружал и не подписывался
+  // на них через realtime.
+  scheduleTasks:      { table: 'schedule_tasks',      pk: 'id' },
+  scheduleCompletions: { table: 'schedule_completions', pk: 'id', dateFilter: { column: 'completed_at', cutoff: CUTOFF_3M } },
   gifts:              { table: 'gifts',               pk: 'id', dateFilter: { column: 'created_at', cutoff: CUTOFF_3M } },
   coffeeShipments:    { table: 'coffee_shipments',    pk: 'id', base: 'coffeeshop' },
   coffeeTasks:        { table: 'coffee_tasks',        pk: 'id', base: 'coffeeshop' },
