@@ -539,6 +539,10 @@ export function ClientEditScreen({ ctx, clientId, route }) {
       account_number:  base.account_number  || '',
       notes:           base.notes           || '',
       plan_kg:         base.plan_kg ?? '',
+      // _k — стабильный ключ строки для несвязанного (uncontrolled) инпута ниже,
+      // не хранится в БД (см. handleSave). Без него React переиспользует DOM-узел
+      // не той строки при удалении адреса из середины списка и путает значения.
+      addresses:       (base.addresses || []).map(a => ({ ...a, _k: uid() })),
     };
   });
   const [errors, setErr]  = useState({});
@@ -576,7 +580,7 @@ export function ClientEditScreen({ ctx, clientId, route }) {
         account_number:  form.account_number.trim() || null,
         notes:           form.notes.trim()          || null,
         preferred_items: form.preferred_items || [],
-        addresses:       (form.addresses || []).filter(a => a.address?.trim()),
+        addresses:       (form.addresses || []).filter(a => a.address?.trim()).map(({ label, address }) => ({ label, address })),
         plan_kg:         form.plan_kg !== '' && form.plan_kg != null ? Number(form.plan_kg) || null : null,
         created_by:     existing ? existing.created_by : currentUser.id,
         updated_at:     now,
@@ -733,7 +737,7 @@ export function ClientEditScreen({ ctx, clientId, route }) {
       <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5 }}>Доп. адреса</div>
-          <button onClick={() => upd({ addresses: [...(form.addresses || []), { label: '', address: '' }] })}
+          <button onClick={() => upd({ addresses: [...(form.addresses || []), { label: '', address: '', _k: uid() }] })}
             style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#F0F9FA', color: '#297b8a', border: '1px solid #b0dce5', borderRadius: 7, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>
             <Plus size={11} /> Добавить
           </button>
@@ -744,26 +748,26 @@ export function ClientEditScreen({ ctx, clientId, route }) {
           </div>
         )}
         {(form.addresses || []).map((addr, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '110px 1fr auto', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+          <div key={addr._k || i} style={{ display: 'grid', gridTemplateColumns: '110px 1fr auto', gap: 6, marginBottom: 8, alignItems: 'center' }}>
             <input
-              value={addr.label || ''}
-              onChange={e => {
+              defaultValue={addr.label || ''}
+              onInput={e => {
                 const items = [...(form.addresses || [])];
                 items[i] = { ...items[i], label: e.target.value };
                 upd({ addresses: items });
               }}
               placeholder="Офис, Склад…"
-              style={{ padding: '7px 8px', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 12, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', fontFamily: 'inherit' }}
+              style={{ padding: '7px 8px', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 16, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', fontFamily: 'inherit' }}
             />
             <input
-              value={addr.address || ''}
-              onChange={e => {
+              defaultValue={addr.address || ''}
+              onInput={e => {
                 const items = [...(form.addresses || [])];
                 items[i] = { ...items[i], address: e.target.value };
                 upd({ addresses: items });
               }}
               placeholder="г. Алматы, ул. Абая 150"
-              style={{ padding: '7px 8px', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 12, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', fontFamily: 'inherit' }}
+              style={{ padding: '7px 8px', border: '1px solid var(--mc-border)', borderRadius: 7, fontSize: 16, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', fontFamily: 'inherit' }}
             />
             <button onClick={() => upd({ addresses: (form.addresses || []).filter((_, j) => j !== i) })}
               style={{ padding: 6, background: 'var(--mc-danger-bg)', border: 'none', borderRadius: 7, cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
