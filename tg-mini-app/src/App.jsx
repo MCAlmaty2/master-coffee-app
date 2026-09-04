@@ -3912,8 +3912,16 @@ function App() {
     };
   };
 
-  const reconcileShipmentToDeferred = (registryRowId) => {
-    const row = (db.shipmentRegistry || []).find(r => r.id === registryRowId);
+  // freshRow — опционально передать саму строку реестра напрямую, а не искать её в db.
+  // ВАЖНО: вызывающий код (ShipmentRegistryScreen) всегда зовёт это сразу вслед за своим
+  // setDb(...), в той же синхронной функции — а setDb асинхронный, так что db в замыкании
+  // этого ctx-метода на момент вызова ещё старый (без только что добавленной/изменённой
+  // строки). Без freshRow строка не находилась вообще (при вставке новой) или бралась в
+  // устаревшем виде (например, paid: false вместо только что проставленного true) — из-за
+  // этого автосвязка с Отсрочкой платежа либо не срабатывала, либо срабатывала с опозданием
+  // до следующего запуска "Проверить связи".
+  const reconcileShipmentToDeferred = (registryRowId, freshRow) => {
+    const row = freshRow || (db.shipmentRegistry || []).find(r => r.id === registryRowId);
     if (!row || !row.doc_no || !row.partner) return;
     const client = (db.deferredClients || []).find(c => c.active && normKey(c.name) === normKey(row.partner));
     if (!client) return;
@@ -6315,6 +6323,9 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     if (blockOn('shipment_registry') && (isViewer || hasPermission(db, currentUser, 'shipment_view') || hasPermission(db, currentUser, 'shipment_edit'))) {
       sales.push({ id: 'shipment_registry', label: 'Реестр отгрузок', icon: Package });
     }
+    if (blockOn('deferred_payments') && (isViewer || hasPermission(db, currentUser, 'deferred_manage') || hasPermission(db, currentUser, 'deferred_view_all') || hasPermission(db, currentUser, 'deferred_shipment'))) {
+      sales.push({ id: 'deferred_payments', label: 'Отсрочки платежей', icon: Calendar });
+    }
     if (blockOn('mpp_kanban') && (isViewer || hasPermission(db, currentUser, 'mpp_manage') || hasPermission(db, currentUser, 'mpp_view'))) {
       sales.push({ id: 'mpp_kanban', label: 'Воронка МПП', icon: Monitor });
     }
@@ -6410,9 +6421,6 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       }
       if (blockOn('budget') && (isViewer || hasPermission(db, currentUser, 'budget_view'))) {
         finItems.push({ id: 'budget', label: 'Бюджет', icon: Wallet });
-      }
-      if (blockOn('deferred_payments') && (isViewer || hasPermission(db, currentUser, 'deferred_manage') || hasPermission(db, currentUser, 'deferred_view_all') || hasPermission(db, currentUser, 'deferred_shipment'))) {
-        finItems.push({ id: 'deferred_payments', label: 'Отсрочки платежей', icon: Calendar });
       }
       if (blockOn('cash_queue') && (isViewer || currentUser.role === 'cashier' || currentUser.role === 'admin')) {
         finItems.push({ id: 'cash_queue', label: 'Наличные от доставок', icon: Banknote });

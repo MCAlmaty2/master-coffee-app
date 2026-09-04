@@ -218,7 +218,7 @@ export function ShipmentRegistryScreen({ ctx }) {
       if (syncSnapshotRef) syncSnapshotRef.current.shipmentRegistry = updated;
       return { ...d, shipmentRegistry: updated };
     });
-    newRows.forEach(r => { ctx.tryLinkRegistryToDelivery?.(r.id); ctx.reconcileShipmentToDeferred?.(r.id); });
+    newRows.forEach(r => { ctx.tryLinkRegistryToDelivery?.(r.id); ctx.reconcileShipmentToDeferred?.(r.id, r); });
     showToast(`Добавлено ${newRows.length} ${newRows.length === 1 ? 'строка' : 'строк'}`);
   };
 
@@ -250,7 +250,8 @@ export function ShipmentRegistryScreen({ ctx }) {
     // Оплата/накладная/номер/сумма могли поступить намного позже создания строки —
     // пересчитываем Отсрочку платежа при любой правке, а не только при первой связке.
     if (['paid', 'paid_amount', 'invoice_returned', 'doc_no', 'amount', 'partner'].includes(field)) {
-      ctx.reconcileShipmentToDeferred?.(id);
+      const existingRow = rows.find(r => r.id === id);
+      if (existingRow) ctx.reconcileShipmentToDeferred?.(id, { ...existingRow, ...patch });
     }
     if (['doc_no', 'amount'].includes(field)) ctx.tryLinkRegistryToDelivery?.(id);
   };
@@ -274,7 +275,8 @@ export function ShipmentRegistryScreen({ ctx }) {
       if (syncSnapshotRef) syncSnapshotRef.current.shipmentRegistry = updated;
       return { ...d, shipmentRegistry: updated };
     });
-    ctx.reconcileShipmentToDeferred?.(id);
+    const existingRow = rows.find(r => r.id === id);
+    if (existingRow) ctx.reconcileShipmentToDeferred?.(id, { ...existingRow, ...patch });
     showToast('Оплата подтверждена');
   };
 
