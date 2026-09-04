@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Edit3, Building2, Check, X, Loader2, Users, Package } from 'lucide-react';
+import { Plus, Edit3, Building2, Check, X, Loader2, Users, Package, CalendarClock } from 'lucide-react';
 import { supabase } from '../supabase/client';
 import { ALL_MODULES } from '../modules';
 
@@ -13,6 +13,24 @@ function slugify(str) {
 
 const DEFAULT_MODULES = ['sales', 'products'];
 
+// Дней до trial_ends_at по календарной дате Алматы (не по разнице timestamp'ов —
+// иначе "истекает сегодня" из-за времени суток то и дело считалось бы "уже истёк").
+function daysUntil(trialEndsAt) {
+  if (!trialEndsAt) return null;
+  const todayISO = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Almaty' }).format(new Date());
+  const endISO = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Almaty' }).format(new Date(trialEndsAt));
+  return Math.round((new Date(endISO) - new Date(todayISO)) / 86400000);
+}
+
+function trialBadge(trialEndsAt) {
+  const days = daysUntil(trialEndsAt);
+  if (days === null) return null;
+  if (days < 0) return { label: `истёк ${Math.abs(days)} дн. назад`, bg: 'var(--mc-danger-bg)', color: '#EB5757' };
+  if (days === 0) return { label: 'истекает сегодня', bg: 'var(--mc-danger-bg)', color: '#EB5757' };
+  if (days <= 7) return { label: `истекает через ${days} дн.`, bg: 'var(--mc-warning-bg, #FEF3C7)', color: 'var(--mc-warning-text, #92400E)' };
+  return { label: `до ${trialEndsAt.slice(0, 10)}`, bg: 'var(--mc-active-item)', color: 'var(--mc-muted)' };
+}
+
 export default function OrgManagementScreen({ ctx }) {
   const { organizations, currentUser, showToast, db } = ctx;
   const [editing, setEditing] = useState(null);
@@ -20,7 +38,7 @@ export default function OrgManagementScreen({ ctx }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: '', company_name: '', tagline: '', accent_color: '#297b8a',
-    logo_url: '', logo_hor_url: '', modules: [...DEFAULT_MODULES], disabledBlocks: [],
+    logo_url: '', logo_hor_url: '', modules: [...DEFAULT_MODULES], disabledBlocks: [], trialEndsAt: '',
   });
 
   if (!currentUser?.is_super_admin) {
@@ -45,7 +63,7 @@ export default function OrgManagementScreen({ ctx }) {
   const startCreate = () => {
     setForm({
       name: '', company_name: '', tagline: 'Operations Platform', accent_color: '#297b8a',
-      logo_url: '', logo_hor_url: '', modules: [...DEFAULT_MODULES], disabledBlocks: [],
+      logo_url: '', logo_hor_url: '', modules: [...DEFAULT_MODULES], disabledBlocks: [], trialEndsAt: '',
     });
     setCreating(true);
     setEditing(null);
@@ -62,6 +80,7 @@ export default function OrgManagementScreen({ ctx }) {
       logo_hor_url: b.logo_hor_url || '',
       modules: Array.isArray(org.enabled_modules) ? [...org.enabled_modules] : ALL_MODULES.map(m => m.key),
       disabledBlocks: Array.isArray(org.disabled_blocks) ? [...org.disabled_blocks] : [],
+      trialEndsAt: org.trial_ends_at ? org.trial_ends_at.slice(0, 10) : '',
     });
     setEditing(org.id);
     setCreating(false);
@@ -99,6 +118,8 @@ export default function OrgManagementScreen({ ctx }) {
         logo_hor_url: form.logo_hor_url.trim() || null,
       };
 
+      const trial_ends_at = form.trialEndsAt ? `${form.trialEndsAt}T23:59:59+05:00` : null;
+
       if (creating) {
         const newOrg = {
           id: uid(),
@@ -109,6 +130,7 @@ export default function OrgManagementScreen({ ctx }) {
           branding,
           enabled_modules: form.modules,
           disabled_blocks: form.disabledBlocks,
+          trial_ends_at,
           created_at: new Date().toISOString(),
         };
         const { error } = await supabase.from('organizations').insert(newOrg);
@@ -118,7 +140,7 @@ export default function OrgManagementScreen({ ctx }) {
         showToast(`Организация «${form.name.trim()}» создана`);
       } else if (editing) {
         const { error } = await supabase.from('organizations')
-          .update({ name: form.name.trim(), branding, enabled_modules: form.modules, disabled_blocks: form.disabledBlocks })
+          .update({ name: form.name.trim(), branding, enabled_modules: form.modules, disabled_blocks: form.disabledBlocks, trial_ends_at })
           .eq('id', editing);
         if (error) throw error;
         const { data: allOrgs } = await supabase.from('organizations').select('*').order('name');
@@ -186,6 +208,17 @@ export default function OrgManagementScreen({ ctx }) {
             <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>URL логотипа (горизонт.)</label>
             <input className="w-full rounded-lg border px-3 py-2 text-sm" style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', borderColor: 'var(--mc-border)' }}
               value={form.logo_hor_url} onChange={e => setForm(f => ({ ...f, logo_hor_url: e.target.value }))} placeholder="/logo-hor.png" />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-semibold mb-1 block" style={{ color: 'var(--mc-muted)' }}>
+            <CalendarClock size={12} className="inline mr-1" style={{ verticalAlign: 'middle' }} />
+            Пилот/подписка действует до
+          </label>
+          <input type="date" className="w-full rounded-lg border px-3 py-2 text-sm" style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', borderColor: 'var(--mc-border)' }}
+            value={form.trialEndsAt} onChange={e => setForm(f => ({ ...f, trialEndsAt: e.target.value }))} />
+          <div className="text-[10px] mt-1" style={{ color: 'var(--mc-muted)' }}>
+            За 7 и 3 дня и в день истечения админам организации (роль admin/director) придёт напоминание в Telegram и в приложении. Оставьте пустым, если срок не ограничен.
           </div>
         </div>
         {(form.logo_url || form.logo_hor_url) && (
@@ -292,6 +325,7 @@ export default function OrgManagementScreen({ ctx }) {
           const b = org.branding || {};
           const modCount = Array.isArray(org.enabled_modules) ? org.enabled_modules.length : ALL_MODULES.length;
           const uCount = userCounts[org.id] || 0;
+          const trial = trialBadge(org.trial_ends_at);
           if (editing === org.id) return <React.Fragment key={org.id}>{formUI}</React.Fragment>;
           return (
             <div key={org.id} className="rounded-xl p-4"
@@ -323,6 +357,12 @@ export default function OrgManagementScreen({ ctx }) {
                     <span className="text-[10px] mono-font" style={{ color: 'var(--mc-muted)', opacity: 0.7 }}>
                       {org.id.slice(0, 8)}…
                     </span>
+                    {trial && (
+                      <span className="text-[10px] font-semibold rounded-full px-1.5 py-0.5 flex items-center gap-1"
+                        style={{ background: trial.bg, color: trial.color }}>
+                        <CalendarClock size={9} /> {trial.label}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
