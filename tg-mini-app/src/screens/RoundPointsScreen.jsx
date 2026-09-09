@@ -7,7 +7,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, Search, X, MapPin, Phone, User,
-  Building2, CheckCircle2, Circle, Edit2, Footprints, Handshake, Link2, XCircle, RotateCcw,
+  Building2, CheckCircle2, Circle, Edit2, Footprints, Handshake, Link2, XCircle, RotateCcw, BellRing,
 } from 'lucide-react';
 import { ClientPickerModal } from './ClientsScreen';
 
@@ -100,24 +100,35 @@ function FieldRow({ label, value }) {
 // RoundPointsScreen — список точек
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function RoundPointsScreen({ ctx }) {
+export function RoundPointsScreen({ ctx, mode = 'partners' }) {
   const { db, navigate, currentUser } = ctx;
   const [search, setSearch] = useState('');
   const [statusTab, setStatusTab] = useState('all');
   const [mineOnly, setMineOnly] = useState(false);
+  const isLeads = mode === 'leads';
+  const today = todayISO();
 
-  const points = db.roundPoints || [];
+  // «Точки обхода» и «Лиды» — один и тот же список round_points, но показываются раздельно:
+  // прогулочный лид не должен выглядеть так, будто он уже наш партнёр. Признак, к какой
+  // из двух витрин относится ЗАКРЫТАЯ точка — client_id: если он так и не появился, это
+  // лид, который не выгорел, а не бывший партнёр (см. также RoundPointDetailScreen).
+  const allPoints = db.roundPoints || [];
+  const points = useMemo(() => allPoints.filter(p => isLeads
+    ? (p.status === 'prospect' || (INACTIVE_STATUSES.includes(p.status) && !p.client_id))
+    : (p.status === 'partner' || (INACTIVE_STATUSES.includes(p.status) && !!p.client_id))
+  ), [allPoints, isLeads]);
+
   const isField = FIELD_ROLES.includes(currentUser.role);
   const canManage = MANAGE_ROLES.includes(currentUser.role) || isField;
 
-  const partnerN = points.filter(p => p.status === 'partner').length;
-  const prospectN = points.filter(p => p.status === 'prospect').length;
+  const activeN = points.filter(p => !INACTIVE_STATUSES.includes(p.status)).length;
   const inactiveN = points.filter(p => INACTIVE_STATUSES.includes(p.status)).length;
+  const dueN = points.filter(p => !INACTIVE_STATUSES.includes(p.status) && p.next_followup_at && p.next_followup_at <= today).length;
 
   const filtered = useMemo(() => {
     let list = points;
     if (statusTab === 'inactive') list = list.filter(p => INACTIVE_STATUSES.includes(p.status));
-    else if (statusTab !== 'all') list = list.filter(p => p.status === statusTab);
+    else if (statusTab === 'due') list = list.filter(p => !INACTIVE_STATUSES.includes(p.status) && p.next_followup_at && p.next_followup_at <= today);
     else list = list.filter(p => !INACTIVE_STATUSES.includes(p.status));
     if (mineOnly) {
       list = list.filter(p => p.responsible_barista_id === currentUser.id || p.responsible_technician_id === currentUser.id || p.recruited_by === currentUser.id);
@@ -130,18 +141,33 @@ export function RoundPointsScreen({ ctx }) {
         (p.phone || '').toLowerCase().includes(q)
       );
     }
-    return [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
-  }, [points, statusTab, mineOnly, search, currentUser.id]);
+    const sorted = [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
+    if (isLeads && statusTab !== 'inactive') {
+      // Просроченные/сегодняшние напоминания — наверх списка.
+      sorted.sort((a, b) => {
+        const aDue = a.next_followup_at && a.next_followup_at <= today ? 0 : 1;
+        const bDue = b.next_followup_at && b.next_followup_at <= today ? 0 : 1;
+        return aDue - bDue;
+      });
+    }
+    return sorted;
+  }, [points, statusTab, mineOnly, search, currentUser.id, isLeads, today]);
+
+  const tabs = isLeads
+    ? [['all', `Все (${activeN})`], ['due', `Напомнить (${dueN})`], ['inactive', `Неактивные (${inactiveN})`]]
+    : [['all', `Все (${activeN})`], ['inactive', `Неактивные (${inactiveN})`]];
 
   return (
     <div>
       <SHeader
-        title="Точки обхода"
-        subtitle={`${points.length} точек · ${partnerN} партнёров · ${prospectN} новых${inactiveN ? ` · ${inactiveN} неактивных` : ''}`}
+        title={isLeads ? 'Лиды' : 'Точки обхода'}
+        subtitle={isLeads
+          ? `${activeN} в работе${dueN ? ` · ${dueN} пора напомнить о себе` : ''}${inactiveN ? ` · ${inactiveN} неактивных` : ''}`
+          : `${activeN} партнёров${inactiveN ? ` · ${inactiveN} неактивных` : ''}`}
         action={canManage && (
-          <button onClick={() => navigate({ name: 'round_point_form', pointId: null })}
+          <button onClick={() => navigate({ name: 'round_point_form', pointId: null, prefillStatus: isLeads ? 'prospect' : 'partner' })}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#297b8a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-            <Plus size={15} /> Точка
+            <Plus size={15} /> {isLeads ? 'Лид' : 'Точка'}
           </button>
         )}
       />
@@ -162,7 +188,7 @@ export function RoundPointsScreen({ ctx }) {
       </div>
 
       <div style={{ display: 'flex', border: '1px solid var(--mc-border)', borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
-        {[['all', `Все (${points.length - inactiveN})`], ['partner', `Партнёры (${partnerN})`], ['prospect', `Новые (${prospectN})`], ['inactive', `Неактивные (${inactiveN})`]].map(([k, l]) => (
+        {tabs.map(([k, l]) => (
           <button key={k} onClick={() => setStatusTab(k)}
             style={{ flex: 1, padding: '7px 4px', fontSize: 10.5, fontWeight: 600, cursor: 'pointer', background: statusTab === k ? '#297b8a' : 'var(--mc-surface)', color: statusTab === k ? '#fff' : 'var(--mc-muted)', border: 'none' }}>
             {l}
@@ -173,24 +199,24 @@ export function RoundPointsScreen({ ctx }) {
       {isField && (
         <button onClick={() => setMineOnly(m => !m)}
           style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: mineOnly ? '#EFF6FF' : 'var(--mc-surface)', color: mineOnly ? '#1D4ED8' : 'var(--mc-muted)', border: `1px solid ${mineOnly ? 'var(--mc-info-border)' : 'var(--mc-border)'}` }}>
-          {mineOnly ? <CheckCircle2 size={13} /> : null} Только мои точки
+          {mineOnly ? <CheckCircle2 size={13} /> : null} {isLeads ? 'Только мои лиды' : 'Только мои точки'}
         </button>
       )}
 
       {filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--mc-muted)' }}>
           <MapPin size={36} style={{ margin: '0 auto 12px', opacity: .3 }} />
-          <div style={{ fontSize: 14 }}>{search ? 'Ничего не найдено' : 'Точек обхода пока нет'}</div>
+          <div style={{ fontSize: 14 }}>{search ? 'Ничего не найдено' : isLeads ? 'Лидов пока нет' : 'Точек обхода пока нет'}</div>
         </div>
       ) : filtered.map(p => (
-        <RoundPointCard key={p.id} point={p} ctx={ctx}
+        <RoundPointCard key={p.id} point={p} ctx={ctx} showFollowup={isLeads} today={today}
           onClick={() => navigate({ name: 'round_point_detail', pointId: p.id })} />
       ))}
     </div>
   );
 }
 
-function RoundPointCard({ point: p, ctx, onClick }) {
+function RoundPointCard({ point: p, ctx, onClick, showFollowup, today }) {
   const { db, currentUser, startRoundVisit, logRoundVisitDone, showToast } = ctx;
   const meta = STATUS_META[p.status] || STATUS_META.prospect;
   const baristaName = userName(db, p.responsible_barista_id);
@@ -240,6 +266,11 @@ function RoundPointCard({ point: p, ctx, onClick }) {
           <div style={{ fontSize: 10, color: 'var(--mc-muted)', marginTop: 1 }}>
             {baristaName ? `☕ ${baristaName}` : '☕ не закреплён'}{' · '}{techName ? `🔧 ${techName}` : '🔧 не закреплён'}
           </div>
+          {showFollowup && p.next_followup_at && !INACTIVE_STATUSES.includes(p.status) && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 700, marginTop: 3, padding: '1px 6px', borderRadius: 6, background: p.next_followup_at <= today ? '#FEE2E2' : '#EFF6FF', color: p.next_followup_at <= today ? '#EB5757' : '#1D4ED8' }}>
+              <BellRing size={10} /> {p.next_followup_at === today ? 'Сегодня' : p.next_followup_at < today ? 'Просрочено' : 'Напомнить'} {fmtDate(p.next_followup_at)}
+            </div>
+          )}
         </div>
       </button>
       {isField && !INACTIVE_STATUSES.includes(p.status) && (
@@ -255,6 +286,56 @@ function RoundPointCard({ point: p, ctx, onClick }) {
       <button onClick={onClick} style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
         <ChevronRight size={15} color="var(--mc-muted)" />
       </button>
+    </div>
+  );
+}
+
+// Карточка «когда напомнить о себе» — для лидов, ещё не ставших партнёрами.
+function addDaysISO(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+function FollowupCard({ point, updateRoundPoint, showToast }) {
+  const [customDate, setCustomDate] = useState(point.next_followup_at || '');
+  const setFollowup = async (dateISO) => {
+    const r = await updateRoundPoint(point.id, { next_followup_at: dateISO || null });
+    if (r?.error) return showToast(r.error);
+    setCustomDate(dateISO || '');
+    showToast(dateISO ? `Напомним ${fmtDate(dateISO)}` : 'Напоминание снято');
+  };
+  const today = todayISO();
+  const isDue = point.next_followup_at && point.next_followup_at <= today;
+  return (
+    <div style={{ background: isDue ? '#FEE2E2' : 'var(--mc-surface)', border: `1px solid ${isDue ? '#FCA5A5' : 'var(--mc-border)'}`, borderRadius: 12, padding: '12px 14px', marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <BellRing size={14} color={isDue ? '#EB5757' : 'var(--mc-muted)'} />
+        <div style={{ fontSize: 12, fontWeight: 700, color: isDue ? '#EB5757' : 'var(--mc-text)' }}>
+          {point.next_followup_at ? `Напомнить: ${fmtDate(point.next_followup_at)}${isDue ? ' — пора' : ''}` : 'Напоминание не установлено'}
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+        {[[3, '+3 дня'], [7, '+7 дней'], [14, '+14 дней']].map(([d, l]) => (
+          <button key={d} onClick={() => setFollowup(addDaysISO(d))}
+            style={{ flex: 1, padding: '7px 4px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer', background: 'var(--mc-active-item)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }}>
+            {l}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input type="date" value={customDate} onChange={e => setCustomDate(e.target.value)}
+          style={{ flex: 1, padding: '7px 8px', border: '1px solid var(--mc-border)', borderRadius: 8, fontSize: 12, background: 'var(--mc-surface)', color: 'var(--mc-text)' }} />
+        <button onClick={() => setFollowup(customDate)} disabled={!customDate}
+          style={{ padding: '7px 12px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: customDate ? 'pointer' : 'default', background: '#297b8a', color: '#fff', border: 'none', opacity: customDate ? 1 : .5 }}>
+          Сохранить
+        </button>
+        {point.next_followup_at && (
+          <button onClick={() => setFollowup(null)}
+            style={{ padding: '7px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer', background: 'var(--mc-active-item)', color: 'var(--mc-muted)', border: '1px solid var(--mc-border)' }}>
+            Убрать
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -361,6 +442,10 @@ export function RoundPointDetailScreen({ ctx, pointId }) {
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--mc-text)' }}>{lastTech ? fmtDate(lastTech.visit_date) : '—'}</div>
         </div>
       </div>
+
+      {point.status === 'prospect' && !isInactive && (canEdit || isField) && (
+        <FollowupCard point={point} updateRoundPoint={updateRoundPoint} showToast={showToast} />
+      )}
 
       {isField && !isInactive && (
         <button onClick={() => setVisitModalOpen(true)}
@@ -488,10 +573,12 @@ function StartVisitModal({ onClose, onStart }) {
 
 const emptyPoint = { name: '', address: '', phone: '', status: 'prospect', city: 'almaty', notes: '', responsible_barista_id: '', responsible_technician_id: '' };
 
-export function RoundPointFormScreen({ ctx, pointId }) {
+export function RoundPointFormScreen({ ctx, pointId, route }) {
   const { db, navigate, goBack, currentUser, createRoundPoint, updateRoundPoint, showToast } = ctx;
   const existing = pointId ? (db.roundPoints || []).find(p => p.id === pointId) : null;
-  const [form, setForm] = useState(existing ? { ...emptyPoint, ...existing } : { ...emptyPoint });
+  const [form, setForm] = useState(existing
+    ? { ...emptyPoint, ...existing }
+    : { ...emptyPoint, status: route?.prefillStatus === 'partner' ? 'partner' : 'prospect' });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -520,13 +607,15 @@ export function RoundPointFormScreen({ ctx, pointId }) {
     const r = existing ? await updateRoundPoint(existing.id, data) : await createRoundPoint(data);
     setSaving(false);
     if (r?.error) return showToast(r.error);
-    showToast(existing ? 'Точка обновлена' : 'Точка добавлена');
-    navigate(existing ? { name: 'round_point_detail', pointId: existing.id } : { name: 'round_points' });
+    showToast(existing ? 'Точка обновлена' : (data.status === 'prospect' ? 'Лид добавлен' : 'Точка добавлена'));
+    navigate(existing
+      ? { name: 'round_point_detail', pointId: existing.id }
+      : { name: data.status === 'prospect' ? 'round_leads' : 'round_points' });
   };
 
   return (
     <div>
-      <SHeader title={existing ? 'Изменить точку' : 'Новая точка обхода'} onBack={goBack} />
+      <SHeader title={existing ? 'Изменить точку' : (form.status === 'prospect' ? 'Новый лид' : 'Новая точка обхода')} onBack={goBack} />
 
       <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
         <EditField label="Название точки *" value={form.name} onChange={v => upd({ name: v })} error={errors.name} placeholder="Название кофейни / заведения" />
@@ -549,7 +638,7 @@ export function RoundPointFormScreen({ ctx, pointId }) {
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--mc-muted)', marginBottom: 6 }}>Статус</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              {[['prospect', 'Новая точка'], ['partner', 'Партнёр']].map(([v, l]) => (
+              {[['prospect', 'Лид'], ['partner', 'Партнёр']].map(([v, l]) => (
                 <button key={v} onClick={() => upd({ status: v })}
                   style={{ flex: 1, padding: '8px 4px', background: form.status === v ? '#297b8a' : 'var(--mc-active-item)', color: form.status === v ? '#fff' : 'var(--mc-muted)', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                   {l}

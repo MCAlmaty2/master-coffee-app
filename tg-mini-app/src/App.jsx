@@ -5,7 +5,7 @@ import {
   ChevronRight, Trash2, Eye, Users, ArrowRight, Hash, ChevronDown,
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
-  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt, Wallet, Wrench, MapPin,
+  Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt, Wallet, Wrench, MapPin, Footprints,
 } from 'lucide-react';
 import { supabase, setOrgIdHeader } from './supabase/client';
 import { orgHasModule, orgBlockEnabled } from './modules';
@@ -6352,6 +6352,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
       field.push({ id: 'field_calendar', label: 'Календарь команды', icon: Eye });
     }
     if (blockOn('round_points') && (isViewer || FIELD_ROLES.includes(role) || role === 'admin' || role === 'director' || hasPermission(db, currentUser, 'rounds_manage_all'))) {
+      field.push({ id: 'round_leads', label: 'Лиды', icon: Footprints });
       field.push({ id: 'round_points', label: 'Точки обхода', icon: MapPin });
     }
     if (field.length > 0) groups.push({ title: 'Бариста и техники', items: field, collapsible: true, base: 'tk' });
@@ -7081,10 +7082,11 @@ function Screen({ ctx }) {
     case 'clients_report': return <ClientsReportScreen ctx={ctx} />;
     case 'client_detail': return <ClientDetailScreen ctx={ctx} clientId={route.clientId} />;
     case 'client_edit':   return <ClientEditScreen ctx={ctx} clientId={route.clientId ?? null} route={route} />;
-    // ─── Точки обхода ───
-    case 'round_points':       return <RoundPointsScreen ctx={ctx} />;
+    // ─── Точки обхода / Лиды ───
+    case 'round_points':       return <RoundPointsScreen ctx={ctx} mode="partners" />;
+    case 'round_leads':        return <RoundPointsScreen ctx={ctx} mode="leads" />;
     case 'round_point_detail': return <RoundPointDetailScreen ctx={ctx} pointId={route.pointId} />;
-    case 'round_point_form':   return <RoundPointFormScreen ctx={ctx} pointId={route.pointId ?? null} />;
+    case 'round_point_form':   return <RoundPointFormScreen ctx={ctx} pointId={route.pointId ?? null} route={route} />;
     default: return <div className="p-6">Не найдено</div>;
   }
 }
