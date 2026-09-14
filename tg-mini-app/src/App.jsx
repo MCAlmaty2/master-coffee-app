@@ -280,13 +280,26 @@ async function sendPrivateTelegram(user, text) {
 // Создать in-app уведомление + fire-and-forget личный Telegram получателю.
 // button_url / button_text — опционально: добавляет inline-кнопку под сообщением (web_app).
 const SUPER_ADMIN_NOTIF_ALLOWED = new Set(['access', 'feedback', 'general']);
+// Админ видит в "Уведомлениях" только то, что реально требует его решения (одобрить/отклонить) —
+// списания, подарки, договоры, чеки расходов. Остальное — статусные апдейты по заявкам, помолу
+// и т.п. — просто шум для роли admin, у неё и так есть полный обзор через разделы приложения.
+const ADMIN_NOTIF_ALLOWED = new Set(['writeoff', 'gift', 'contract', 'expense']);
 
 function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, button_url, button_text, scope }) {
   const recipient = db?.users?.find(u => u.id === recipient_id);
   const isCoffeeUser = COFFEESHOP_ROLES.includes(recipient?.role);
   if (scope === 'coffeeshop' && !isCoffeeUser) return null;
   if (scope !== 'coffeeshop' && isCoffeeUser) return null;
-  if (recipient?.is_super_admin && !SUPER_ADMIN_NOTIF_ALLOWED.has(link_kind || 'general')) return null;
+  // Супер-админ и обычный админ — разные, независимые сокращённые списки; если получатель
+  // подпадает под оба (как Ангелина — супер-админ, чья основная роль тоже admin), категория
+  // должна пройти хотя бы один из них, а не оба сразу (иначе списания/подарки/договоры/чеки,
+  // которые нужны admin'у, отсеклись бы более узким списком супер-админа).
+  if (recipient?.is_super_admin || recipient?.role === 'admin') {
+    const category = link_kind || 'general';
+    const allowed = (recipient.is_super_admin && SUPER_ADMIN_NOTIF_ALLOWED.has(category))
+      || (recipient.role === 'admin' && ADMIN_NOTIF_ALLOWED.has(category));
+    if (!allowed) return null;
+  }
   const notif = {
     id: uid(),
     recipient_id,
