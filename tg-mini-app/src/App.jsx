@@ -1977,6 +1977,13 @@ function App() {
     const lastNum = Math.max(localMax, dbMax);
     const nextNum = String(lastNum + 1).padStart(3, '0');
 
+    // Телефон нормализуем один раз здесь — центрально для всех способов создания
+    // заявки (стандартная форма уже нормализует сама, но "Быстрая B2B" парсит номер
+    // из вставленного текста мессенджера как есть, с пробелами — 1С заводит клиента
+    // по номеру без пробелов, так что и заявка, и авто-созданный клиент должны
+    // получить чистый формат, а не то, что было в исходном тексте).
+    const orderPhone = normalizePhone(formData.phone) || formData.phone || null;
+
     // Клиент не выбран из базы вручную — ищем по БИН/названию, иначе заводим нового
     // и сразу закрепляем за ним цены из этой (первой) заявки.
     let clientId = formData.client_id || null;
@@ -2011,7 +2018,7 @@ function App() {
             bin: (formData.bin && formData.bin !== '000000000000') ? formData.bin : null,
             address: formData.address || null,
             city: 'almaty',
-            phone: formData.phone || null,
+            phone: orderPhone,
             contact_person: formData.contact_person || null,
             tax_regime: formData.client_type === 'legal' ? (formData.tax_regime || null) : null,
             bank: formData.bank || null,
@@ -2056,6 +2063,7 @@ function App() {
       id: uid(),
       order_number: `${year}-${nextNum}`,
       ...formData,
+      phone: orderPhone,
       client_id: clientId,
       total_amount: (formData.items || []).reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0),
       status: 'new',
