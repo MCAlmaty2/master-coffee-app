@@ -67,6 +67,7 @@ export const SYNC_TABLES = {
   volumePriceTiers:   { table: 'volume_price_tiers',  pk: 'id', base: 'tk' },
   clientSpecialPrices: { table: 'client_special_prices', pk: 'id', base: 'tk' },
   roundPoints:        { table: 'round_points',        pk: 'id', base: 'tk' },
+  reconciliationActs: { table: 'reconciliation_acts', pk: 'id', base: 'tk' },
 };
 
 /**

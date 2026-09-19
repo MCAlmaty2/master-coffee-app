@@ -8,6 +8,7 @@ const ALL_MODULES = [
       { key: 'clients',           label: 'Клиенты' },
       { key: 'clients_report',    label: 'Отчёт по клиентам' },
       { key: 'shipment_registry', label: 'Реестр отгрузок' },
+      { key: 'reconciliation_acts', label: 'Акт сверки' },
       { key: 'mpp_kanban',        label: 'Воронка МПП' },
       { key: 'volume_prices',     label: 'Прайс по объёму' },
       { key: 'special_prices',    label: 'Спец. цены клиентов' },

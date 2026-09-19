@@ -6,6 +6,7 @@ import {
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
   Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt, Wallet, Wrench, MapPin, Footprints,
+  FileCheck2,
 } from 'lucide-react';
 import { supabase, setOrgIdHeader } from './supabase/client';
 import { orgHasModule, orgBlockEnabled } from './modules';
@@ -26,6 +27,7 @@ import ExpenseRequestsScreen from './screens/ExpenseRequestsScreen';
 import BudgetScreen from './screens/BudgetScreen';
 import MppKanbanScreen from './screens/MppKanbanScreen';
 import { DeferredPaymentScreen, DeferredPaymentHomeBanner } from './screens/DeferredPaymentScreen';
+import { ReconciliationActsScreen } from './screens/ReconciliationActsScreen';
 import { RentalEquipmentScreen, RentalHomeBanner } from './screens/RentalEquipmentScreen';
 import { VolumePriceTiersScreen, ClientSpecialPricesScreen } from './screens/PricingScreen';
 import { RoundPointsScreen, RoundPointDetailScreen, RoundPointFormScreen } from './screens/RoundPointsScreen';
@@ -563,6 +565,8 @@ const PERMISSIONS = {
   shipment_view:        { group: 'Отчёты', label: 'Видеть реестр отгрузок' },
   shipment_edit:        { group: 'Отчёты', label: 'Вносить накладные в реестр отгрузок' },
   shipment_pay:         { group: 'Отчёты', label: 'Отмечать оплату в реестре отгрузок (кассир)' },
+  recon_acts_view:      { group: 'Отчёты', label: 'Видеть акты сверки' },
+  recon_acts_edit:      { group: 'Отчёты', label: 'Создавать и редактировать акты сверки' },
   // Товары / прайс
   products_edit:        { group: 'Товары', label: 'Редактировать и добавлять товары / прайс' },
   // Ценообразование
@@ -1574,7 +1578,7 @@ function App() {
       syncSnapshotRef.current[stateKey] = currArr;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts, db.coffeeShipments, db.coffeeTasks, db.vacations, db.cashOperations, db.expenseCategories, db.budgetEntries, db.expenseRequests, db.mppDeals, db.mppActivities, db.mppTasks, db.mppDealProducts, db.mppComments, db.deferredClients, db.deferredShipments, db.rentalEquipment, db.rentalClients, db.rentalPurchases, db.rentalMovements, db.rentalRevisions]);
+  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts, db.coffeeShipments, db.coffeeTasks, db.vacations, db.cashOperations, db.expenseCategories, db.budgetEntries, db.expenseRequests, db.mppDeals, db.mppActivities, db.mppTasks, db.mppDealProducts, db.mppComments, db.deferredClients, db.deferredShipments, db.rentalEquipment, db.rentalClients, db.rentalPurchases, db.rentalMovements, db.rentalRevisions, db.reconciliationActs]);
 
   // ─── Напоминания по расписанию (personal TG) — за 15 мин до начала, только себе ───
   useEffect(() => {
@@ -4070,6 +4074,64 @@ function App() {
     return { amount: rows.reduce((s, r) => s + (Number(r.amount) || 0), 0), count: rows.length, rows };
   };
 
+  /* ═══════════ Акты сверки ═══════════ */
+
+  const createReconciliationAct = (data) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'recon_acts_edit')) return { error: 'Нет прав' };
+    if (!data.org_entity || !TAX_REGIME[data.org_entity]) return { error: 'Выберите организацию' };
+    if (!(data.counterparty || '').trim()) return { error: 'Укажите контрагента' };
+    if (!Number(data.year)) return { error: 'Укажите год' };
+    if (![1, 2, 3, 4].includes(Number(data.quarter))) return { error: 'Укажите квартал' };
+    const id = uid();
+    const now = todayISO();
+    const row = {
+      id,
+      org_entity: data.org_entity,
+      number: (data.number || '').trim() || null,
+      act_date: data.act_date || null,
+      counterparty: data.counterparty.trim(),
+      client_id: data.client_id || null,
+      signed: !!data.signed,
+      year: Number(data.year),
+      quarter: Number(data.quarter),
+      comment: (data.comment || '').trim() || null,
+      created_by: currentUser.id,
+      created_at: now,
+      updated_at: now,
+      org_id: _currentOrgId,
+    };
+    setDb(d => ({ ...d, reconciliationActs: [row, ...(d.reconciliationActs || [])] }));
+    return { ok: true, id };
+  };
+
+  const updateReconciliationAct = (actId, data) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'recon_acts_edit')) return { error: 'Нет прав' };
+    const existing = (db.reconciliationActs || []).find(a => a.id === actId);
+    if (!existing) return { error: 'Акт не найден' };
+    setDb(d => {
+      const fresh = (d.reconciliationActs || []).find(a => a.id === actId) || existing;
+      const updated = { ...fresh, ...data, updated_at: todayISO() };
+      return { ...d, reconciliationActs: (d.reconciliationActs || []).map(a => a.id === actId ? updated : a) };
+    });
+    return { ok: true };
+  };
+
+  const deleteReconciliationAct = async (actId) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'recon_acts_edit')) return { error: 'Нет прав' };
+    try {
+      await deleteRow('reconciliationActs', actId);
+      setDb(d => ({ ...d, reconciliationActs: (d.reconciliationActs || []).filter(a => a.id !== actId) }));
+      if (syncSnapshotRef) syncSnapshotRef.current.reconciliationActs = (syncSnapshotRef.current.reconciliationActs || []).filter(a => a.id !== actId);
+      return { ok: true };
+    } catch (e) {
+      reportError({ kind: 'manual', source: 'reconciliation_acts', message: `Ошибка удаления акта сверки: ${e.message}` });
+      return { error: e.message };
+    }
+  };
+
   /* ═══════════ Арендное оборудование ═══════════ */
 
   const createRentalEquipment = (data) => {
@@ -5497,6 +5559,7 @@ function App() {
     createRentalClient, updateRentalClient,
     createRentalPurchase, updateRentalPurchase,
     createRentalMovement, createRentalRevision,
+    createReconciliationAct, updateReconciliationAct, deleteReconciliationAct,
     createVolumeTier, updateVolumeTier, deleteVolumeTier, bulkReplaceVolumeTiers, extendVolumeTiers, createSpecialPrice, approveSpecialPrice, rejectSpecialPrice,
     createRoundPoint, updateRoundPoint, markRoundPointReadyForPartner, startRoundVisit, canEditRoundPoint,
     logRoundVisitDone, closeRoundPoint, linkRoundPointToClient,
@@ -6369,6 +6432,9 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     if (blockOn('shipment_registry') && (isViewer || hasPermission(db, currentUser, 'shipment_view') || hasPermission(db, currentUser, 'shipment_edit'))) {
       sales.push({ id: 'shipment_registry', label: 'Реестр отгрузок', icon: Package });
     }
+    if (blockOn('reconciliation_acts') && (isViewer || role === 'admin' || role === 'director' || hasPermission(db, currentUser, 'recon_acts_view') || hasPermission(db, currentUser, 'recon_acts_edit'))) {
+      sales.push({ id: 'reconciliation_acts', label: 'Акт сверки', icon: FileCheck2 });
+    }
     if (blockOn('deferred_payments') && (isViewer || hasPermission(db, currentUser, 'deferred_manage') || hasPermission(db, currentUser, 'deferred_view_all') || hasPermission(db, currentUser, 'deferred_shipment'))) {
       sales.push({ id: 'deferred_payments', label: 'Отсрочки платежей', icon: Calendar });
     }
@@ -7036,6 +7102,9 @@ function Screen({ ctx }) {
     case 'home_customize': return <HomeCustomizeScreen ctx={ctx} />;
     case 'manager_tasks': return <ManagerTasksScreen ctx={ctx} />;
     case 'shipment_registry': return <ShipmentRegistryScreen ctx={ctx} />;
+    case 'reconciliation_acts':
+    case 'reconciliation_act_create':
+    case 'reconciliation_act_edit': return <ReconciliationActsScreen ctx={ctx} />;
     case 'create_order': return <CreateOrderScreen ctx={ctx} />;
     case 'create_quick': return <CreateQuickScreen ctx={ctx} />;
     case 'orders_list': return <OrdersListScreen ctx={ctx} />;
