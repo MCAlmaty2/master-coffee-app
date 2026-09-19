@@ -1993,6 +1993,15 @@ function App() {
         });
         if (existingClient) {
           clientId = existingClient.id;
+          // Клиент заведён до этой фичи и налоговый режим ещё не запомнен — раз уж форма
+          // заявки его всё равно спросила, сохраняем на клиенте, чтобы больше не спрашивать.
+          if (formData.client_type === 'legal' && formData.tax_regime && !existingClient.tax_regime) {
+            const patch = { tax_regime: formData.tax_regime };
+            supabase.from('clients').update(patch).eq('id', existingClient.id).then(({ error }) => {
+              if (error) return;
+              setDb(d => ({ ...d, clients: (d.clients || []).map(c => c.id === existingClient.id ? { ...c, ...patch } : c) }));
+            });
+          }
         } else {
           const now = new Date().toISOString();
           newClientRow = {
@@ -2004,6 +2013,7 @@ function App() {
             city: 'almaty',
             phone: formData.phone || null,
             contact_person: formData.contact_person || null,
+            tax_regime: formData.client_type === 'legal' ? (formData.tax_regime || null) : null,
             bank: formData.bank || null,
             bik: formData.bik || null,
             account_number: formData.account_number || null,
@@ -9327,6 +9337,7 @@ function CreateOrderScreen({ ctx }) {
       bin:            client.bin            || '',
       contact_person: client.contact_person || '',
       phone:          client.phone          || '',
+      tax_regime:     client.tax_regime     || '',
       bank:           client.bank           || '',
       bik:            client.bik            || '',
       account_number: client.account_number || '',
@@ -9487,20 +9498,30 @@ function CreateOrderScreen({ ctx }) {
                   <div className="pt-1" style={{ borderTop: '1px solid #F1F5F9' }}>
                     <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--mc-muted)' }}>Налоговый режим клиента</div>
                   </div>
-                  <div className="flex gap-2">
-                    {Object.entries(TAX_REGIME).map(([k, v]) => (
-                      <button key={k} onClick={() => update({ tax_regime: k })}
-                        className="flex-1 py-2.5 rounded-lg text-sm font-semibold"
-                        style={{
-                          background: form.tax_regime === k ? '#297b8a' : 'var(--mc-active-item)',
-                          color: form.tax_regime === k ? 'white' : 'var(--mc-text)',
-                          border: `1px solid ${errors.tax_regime && !form.tax_regime ? '#EB5757' : form.tax_regime === k ? '#297b8a' : 'var(--mc-border)'}`,
-                        }}>
-                        {v.label} — {v.desc}
-                      </button>
-                    ))}
-                  </div>
-                  {errors.tax_regime && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.tax_regime}</div>}
+                  {/* Клиент выбран из базы и режим уже известен — спрашивали один раз при
+                      заведении клиента, повторно не спрашиваем (поправить — в карточке клиента). */}
+                  {form.client_id && form.tax_regime ? (
+                    <div className="text-sm px-3 py-2.5 rounded-lg" style={{ background: 'var(--mc-active-item)', color: 'var(--mc-text)' }}>
+                      {TAX_REGIME[form.tax_regime]?.label} — {TAX_REGIME[form.tax_regime]?.desc}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2">
+                        {Object.entries(TAX_REGIME).map(([k, v]) => (
+                          <button key={k} onClick={() => update({ tax_regime: k })}
+                            className="flex-1 py-2.5 rounded-lg text-sm font-semibold"
+                            style={{
+                              background: form.tax_regime === k ? '#297b8a' : 'var(--mc-active-item)',
+                              color: form.tax_regime === k ? 'white' : 'var(--mc-text)',
+                              border: `1px solid ${errors.tax_regime && !form.tax_regime ? '#EB5757' : form.tax_regime === k ? '#297b8a' : 'var(--mc-border)'}`,
+                            }}>
+                            {v.label} — {v.desc}
+                          </button>
+                        ))}
+                      </div>
+                      {errors.tax_regime && <div className="text-xs mt-1" style={{ color: '#EB5757' }}>{errors.tax_regime}</div>}
+                    </>
+                  )}
 
                   <div className="pt-1 mt-2" style={{ borderTop: '1px solid #F1F5F9' }}>
                     <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--mc-muted)' }}>Банковские реквизиты</div>

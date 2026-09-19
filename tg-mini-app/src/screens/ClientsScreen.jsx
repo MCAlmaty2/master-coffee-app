@@ -25,6 +25,13 @@ const uid = () =>
 const MANAGE_ROLES = ['admin', 'director', 'b2b', 'sales', 'senior_manager'];
 const canManage = (user) => MANAGE_ROLES.includes(user?.role);
 
+// Налоговый режим спрашивается один раз при заведении юр. лица и хранится на клиенте
+// (clients.tax_regime) — держим тот же список ключей/лейблов, что и в форме заявки в App.jsx.
+const TAX_REGIME = {
+  OUR: { label: 'ОУР', desc: 'Общеустановленный режим' },
+  SNR: { label: 'СНР', desc: 'Специальный налоговый режим' },
+};
+
 // ─── Shared UI ───────────────────────────────────────────────────────────
 
 function SHeader({ title, subtitle, onBack, action }) {
@@ -544,7 +551,7 @@ function OrderHistoryRow({ order: o, onClick }) {
 const emptyClient = {
   type: 'legal', name: '', bin: '', address: '', phone: '', city: 'almaty',
   contact_person: '', bank: '', kbe: '', bik: '',
-  account_number: '', notes: '', preferred_items: [], addresses: [], plan_kg: '',
+  account_number: '', notes: '', preferred_items: [], addresses: [], plan_kg: '', tax_regime: '',
 };
 
 export function ClientEditScreen({ ctx, clientId, route }) {
@@ -569,6 +576,7 @@ export function ClientEditScreen({ ctx, clientId, route }) {
       account_number:  base.account_number  || '',
       notes:           base.notes           || '',
       plan_kg:         base.plan_kg ?? '',
+      tax_regime:      base.tax_regime      || '',
       // _k — стабильный ключ строки для несвязанного (uncontrolled) инпута ниже,
       // не хранится в БД (см. handleSave). Без него React переиспользует DOM-узел
       // не той строки при удалении адреса из середины списка и путает значения.
@@ -585,6 +593,10 @@ export function ClientEditScreen({ ctx, clientId, route }) {
     if (!form.name.trim()) e.name = 'Укажите название';
     if (form.type === 'legal' && form.bin && !/^\d{12}$/.test(form.bin.trim())) e.bin = 'БИН/ИИН — 12 цифр';
     if (form.kbe && !/^\d{1,2}$/.test(form.kbe.trim())) e.kbe = 'КБе — 1–2 цифры';
+    // Спрашиваем налоговый режим один раз — при заведении нового юр. лица. При
+    // редактировании уже существующего клиента поле необязательно (чтобы не мешать
+    // правкам других полей у старых клиентов, заведённых до этой фичи).
+    if (form.type === 'legal' && !existing && !TAX_REGIME[form.tax_regime]) e.tax_regime = 'Выберите налоговый режим';
     return e;
   };
 
@@ -612,6 +624,7 @@ export function ClientEditScreen({ ctx, clientId, route }) {
         preferred_items: form.preferred_items || [],
         addresses:       (form.addresses || []).filter(a => a.address?.trim()).map(({ label, address }) => ({ label, address })),
         plan_kg:         form.plan_kg !== '' && form.plan_kg != null ? Number(form.plan_kg) || null : null,
+        tax_regime:      form.type === 'legal' ? (form.tax_regime || null) : null,
         created_by:     existing ? existing.created_by : currentUser.id,
         updated_at:     now,
         ...(!existing && { created_at: now }),
@@ -691,6 +704,22 @@ export function ClientEditScreen({ ctx, clientId, route }) {
           ))}
         </div>
       </div>
+
+      {isLegal && (
+        <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 10 }}>Налоговый режим</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {Object.entries(TAX_REGIME).map(([k, v]) => (
+              <button key={k} onClick={() => upd({ tax_regime: k })}
+                style={{ flex: 1, padding: '9px 4px', background: form.tax_regime === k ? '#297b8a' : 'var(--mc-active-item)', color: form.tax_regime === k ? '#fff' : 'var(--mc-muted)', border: `1px solid ${errors.tax_regime ? '#EB5757' : 'transparent'}`, borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                {v.label} — {v.desc}
+              </button>
+            ))}
+          </div>
+          {errors.tax_regime && <div style={{ fontSize: 11, color: '#EB5757', marginTop: 6 }}>{errors.tax_regime}</div>}
+          {existing && <div style={{ fontSize: 11, color: 'var(--mc-muted)', marginTop: 6 }}>Спрашивается один раз при заведении клиента и подставляется автоматически во все его заявки — здесь можно поправить, если ошиблись.</div>}
+        </div>
+      )}
 
       {/* Основные поля */}
       <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
