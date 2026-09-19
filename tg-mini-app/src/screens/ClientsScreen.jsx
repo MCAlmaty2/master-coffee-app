@@ -25,6 +25,11 @@ const uid = () =>
 const MANAGE_ROLES = ['admin', 'director', 'b2b', 'sales', 'senior_manager'];
 const canManage = (user) => MANAGE_ROLES.includes(user?.role);
 
+// Для сверки заявки с фактической накладной в Реестре отгрузок по номеру 00ЦТ —
+// у заявки это чистое значение orders.realization_doc_no (проставляется при переводе
+// в статус "Отгружено"), а не строка вида document в Реестре доставок.
+const normKey = (s) => (s || '').toString().trim().replace(/\s+/g, '').toLowerCase();
+
 // Налоговый режим спрашивается один раз при заведении юр. лица и хранится на клиенте
 // (clients.tax_regime) — держим тот же список ключей/лейблов, что и в форме заявки в App.jsx.
 const TAX_REGIME = {
@@ -934,11 +939,18 @@ export function ClientsReportScreen({ ctx }) {
 
   const ym = new Date().toISOString().slice(0, 7);
 
+  // Номера накладных (00ЦТ), реально заведённые в Реестре отгрузок — для сверки заявок
+  // с фактической отгрузкой (набор, а не массив: сверка идёт по каждой заявке этого месяца).
+  const registryDocNos = useMemo(
+    () => new Set((db.shipmentRegistry || []).map(r => normKey(r.doc_no)).filter(Boolean)),
+    [db.shipmentRegistry]
+  );
+
   const rows = useMemo(() => {
     const byClient = {};
     (db.orders || []).forEach(o => {
       if (!o.client_id || o.status === 'cancelled') return;
-      const cur = byClient[o.client_id] || { monthAmount: 0, monthKg: 0, lastDate: null };
+      const cur = byClient[o.client_id] || { monthAmount: 0, monthKg: 0, lastDate: null, shippedAmount: 0, shippedCount: 0, unmatchedCount: 0 };
       const d = o.created_at || '';
       if (!cur.lastDate || d > cur.lastDate) cur.lastDate = d;
       if (d.slice(0, 7) === ym) {
@@ -946,6 +958,18 @@ export function ClientsReportScreen({ ctx }) {
         (o.items || []).forEach(it => {
           if ((it.unit || '').toLowerCase() === 'кг') cur.monthKg += Number(it.quantity) || 0;
         });
+        // Отгружено по факту — заявка, у которой номер накладной (00ЦТ) на 100% совпал
+        // со строкой в Реестре отгрузок. Есть номер, но совпадения нет — не в счёт и
+        // помечаем как несверенную (могли не успеть занести накладную в реестр, опечатка и т.п.).
+        const docNo = o.realization_doc_no;
+        if (docNo) {
+          if (registryDocNos.has(normKey(docNo))) {
+            cur.shippedAmount += Number(o.total_amount) || 0;
+            cur.shippedCount += 1;
+          } else {
+            cur.unmatchedCount += 1;
+          }
+        }
       }
       byClient[o.client_id] = cur;
     });
@@ -966,9 +990,12 @@ export function ClientsReportScreen({ ctx }) {
         belowPlan: planPct !== null && planPct < 100,
         planPct,
         hasIndividualPricing: withTiers.has(c.id),
+        shippedAmount: agg?.shippedAmount || 0,
+        shippedCount: agg?.shippedCount || 0,
+        unmatchedCount: agg?.unmatchedCount || 0,
       };
     });
-  }, [db.clients, db.orders, db.volumePriceTiers, ym]);
+  }, [db.clients, db.orders, db.volumePriceTiers, registryDocNos, ym]);
 
   const filtered = useMemo(() => {
     let list = rows;
@@ -1060,7 +1087,7 @@ export function ClientsReportScreen({ ctx }) {
 }
 
 function ClientReportRow({ row, onClick }) {
-  const { client: c, monthAmount, lastDate, needsAttention, hasIndividualPricing, belowPlan, planPct } = row;
+  const { client: c, monthAmount, lastDate, needsAttention, hasIndividualPricing, belowPlan, planPct, shippedAmount, shippedCount, unmatchedCount } = row;
   return (
     <button onClick={onClick}
       style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', background: 'var(--mc-surface)', border: `1px solid ${needsAttention ? '#FECACA' : 'var(--mc-border)'}`, borderRadius: 12, padding: '11px 14px', marginBottom: 8, cursor: 'pointer' }}>
@@ -1076,10 +1103,20 @@ function ClientReportRow({ row, onClick }) {
           {belowPlan && (
             <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, borderRadius: 6, padding: '1px 6px', background: '#FEE2E2', color: '#B91C1C' }}>план {planPct}%</span>
           )}
+          {unmatchedCount > 0 && (
+            <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, borderRadius: 6, padding: '1px 6px', background: '#FEF3C7', color: '#92400E' }}>
+              {unmatchedCount} без накладной
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 11, color: 'var(--mc-muted)', marginTop: 2 }}>
           Посл. закупка: {lastDate ? fmtDate(lastDate) : 'не было'}
         </div>
+        {shippedCount > 0 && (
+          <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2 }}>
+            Отгружено по 00ЦТ: {fmtNum(shippedAmount)} ₸ ({shippedCount})
+          </div>
+        )}
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: monthAmount > 0 ? '#297b8a' : 'var(--mc-muted)' }}>
