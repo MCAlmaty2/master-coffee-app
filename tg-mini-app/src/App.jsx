@@ -281,7 +281,11 @@ async function sendPrivateTelegram(user, text) {
 
 // Создать in-app уведомление + fire-and-forget личный Telegram получателю.
 // button_url / button_text — опционально: добавляет inline-кнопку под сообщением (web_app).
-const SUPER_ADMIN_NOTIF_ALLOWED = new Set(['access', 'feedback', 'general']);
+// Супер-админу (платформенная роль, поверх её обычной "admin" в своей организации) —
+// только ошибки приложения и сообщения от сотрудников (обратная связь), с указанием
+// организации, откуда запрос. Всё остальное (заявки на доступ, общие уведомления и т.п.)
+// для неё — шум: у неё и так полный обзор по всем организациям через разделы приложения.
+const SUPER_ADMIN_NOTIF_ALLOWED = new Set(['error', 'feedback']);
 // Админ видит в "Уведомлениях" только то, что реально требует его решения (одобрить/отклонить) —
 // списания, подарки, договоры, чеки расходов. Остальное — статусные апдейты по заявкам, помолу
 // и т.п. — просто шум для роли admin, у неё и так есть полный обзор через разделы приложения.
@@ -1799,15 +1803,28 @@ function App() {
         org_id: _currentOrgId,
       }).then(({ error }) => {
         if (!error) {
-          const superAdmin = db.users.find(u => u.is_super_admin);
-          if (superAdmin) {
+          const superAdmins = db.users.filter(u => u.is_super_admin);
+          if (superAdmins.length > 0) {
             const reporter = currentUser
               ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim()
               : 'Гость';
-            sendPrivateTelegram(
+            const orgName = organizations.find(o => o.id === _currentOrgId)?.name || '—';
+            setDb(d => ({
+              ...d,
+              notifications: [
+                ...superAdmins.map(sa => makeNotif(d, {
+                  recipient_id: sa.id,
+                  title: '🚨 Ошибка в приложении',
+                  body: `${orgName} · ${reporter}${reportEntry.route ? ` · ${reportEntry.route}` : ''}\n${reportEntry.message}`,
+                  link_kind: 'error', link_id: reportEntry.id,
+                })).filter(Boolean),
+                ...(d.notifications || []),
+              ],
+            }));
+            superAdmins.forEach(superAdmin => sendPrivateTelegram(
               superAdmin,
-              `🚨 <b>Ошибка в приложении</b>\nПользователь: ${reporter}\nМаршрут: ${reportEntry.route || '—'}\n\n${reportEntry.message}`,
-            );
+              `🚨 <b>Ошибка в приложении</b>\nОрганизация: ${orgName}\nПользователь: ${reporter}\nМаршрут: ${reportEntry.route || '—'}\n\n${reportEntry.message}`,
+            ));
           }
           return;
         }
@@ -5439,24 +5456,29 @@ function App() {
       // Сохраняем в Supabase, чтобы Admin видел в любом сеансе
       const { error: dbErr } = await supabase.from('feedback_messages').insert(feedback);
       if (dbErr) throw dbErr;
-      const superAdmin = db.users.find(u => u.is_super_admin);
-      if (superAdmin) {
+      const superAdmins = db.users.filter(u => u.is_super_admin);
+      if (superAdmins.length > 0) {
+        const orgName = organizations.find(o => o.id === _currentOrgId)?.name || '—';
         setDb(d => ({
           ...d,
-          notifications: [...(d.notifications || []), {
-            id: uid(),
-            recipient_id: superAdmin.id,
-            title: 'Новая обратная связь',
-            body: `От ${currentUser.first_name}: ${message.slice(0, 80)}${message.length > 80 ? '…' : ''}`,
-            at: new Date().toISOString(),
-            read: false,
-            org_id: _currentOrgId,
-          }],
+          notifications: [
+            ...superAdmins.map(sa => ({
+              id: uid(),
+              recipient_id: sa.id,
+              title: 'Новая обратная связь',
+              body: `${orgName} · От ${currentUser.first_name}: ${message.slice(0, 80)}${message.length > 80 ? '…' : ''}`,
+              at: new Date().toISOString(),
+              read: false,
+              org_id: _currentOrgId,
+              link_kind: 'feedback',
+            })),
+            ...(d.notifications || []),
+          ],
         }));
-        sendPrivateTelegram(
+        superAdmins.forEach(superAdmin => sendPrivateTelegram(
           superAdmin,
-          `💬 <b>Обратная связь</b>\nОт: ${currentUser.first_name} ${currentUser.last_name || ''}\n\n${message}`,
-        );
+          `💬 <b>Обратная связь</b>\nОрганизация: ${orgName}\nОт: ${currentUser.first_name} ${currentUser.last_name || ''}\n\n${message}`,
+        ));
       }
       return { ok: true };
     } catch (e) {
