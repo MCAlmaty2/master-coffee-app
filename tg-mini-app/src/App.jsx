@@ -282,10 +282,12 @@ async function sendPrivateTelegram(user, text) {
 // Создать in-app уведомление + fire-and-forget личный Telegram получателю.
 // button_url / button_text — опционально: добавляет inline-кнопку под сообщением (web_app).
 // Супер-админу (платформенная роль, поверх её обычной "admin" в своей организации) —
-// только ошибки приложения и сообщения от сотрудников (обратная связь), с указанием
-// организации, откуда запрос. Всё остальное (заявки на доступ, общие уведомления и т.п.)
-// для неё — шум: у неё и так полный обзор по всем организациям через разделы приложения.
-const SUPER_ADMIN_NOTIF_ALLOWED = new Set(['error', 'feedback']);
+// ошибки приложения, сообщения от сотрудников (обратная связь) и всё, что касается
+// платформы в целом (запросы на доступ — их видит только супер-админ, по всем
+// организациям сразу), с указанием организации, откуда запрос. Остальное (статусные
+// апдейты по заявкам и т.п. отдельных организаций) для неё — шум: у неё и так полный
+// обзор по всем организациям через разделы приложения.
+const SUPER_ADMIN_NOTIF_ALLOWED = new Set(['error', 'feedback', 'access']);
 // Админ видит в "Уведомлениях" только то, что реально требует его решения (одобрить/отклонить) —
 // списания, подарки, договоры, чеки расходов. Остальное — статусные апдейты по заявкам, помолу
 // и т.п. — просто шум для роли admin, у неё и так есть полный обзор через разделы приложения.
@@ -1894,6 +1896,7 @@ function App() {
   const notifyAdminsOfAccessRequest = (user, tgUser) => {
     const admins = db.users.filter(u => u.role === 'admin' && u.active);
     if (admins.length === 0) return;
+    const orgName = organizations.find(o => o.id === user.org_id)?.name || '—';
     setDb(d => ({
       ...d,
       notifications: [
@@ -1901,7 +1904,7 @@ function App() {
           recipient_id: a.id,
           link_kind: 'access', link_id: '',
           title: 'Новый запрос на доступ',
-          body: `${user.first_name} ${user.last_name || ''} (Telegram @${tgUser.username || tgUser.id}) запросил доступ`,
+          body: `${orgName} · ${user.first_name} ${user.last_name || ''} (Telegram @${tgUser.username || tgUser.id}) запросил доступ`,
         })).filter(Boolean),
         ...d.notifications,
       ],
