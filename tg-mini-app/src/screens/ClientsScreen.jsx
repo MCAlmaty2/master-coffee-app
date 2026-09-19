@@ -6,9 +6,10 @@
 import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, Search, X,
-  User, Building2, Edit2, RotateCcw, Check,
+  User, Building2, Edit2, RotateCcw, Check, Package,
 } from 'lucide-react';
 import { supabase } from '../supabase/client';
+import { orgBlockEnabled } from '../modules';
 
 // ─── Константы и хелперы ─────────────────────────────────────────────────
 
@@ -201,6 +202,17 @@ export function ClientDetailScreen({ ctx, clientId }) {
   const orders = useMemo(() => client ? getClientOrders(client, db.orders) : [], [client, db.orders]);
   const [addrPickerOpen, setAddrPickerOpen] = useState(false);
 
+  // Из Реестра отгрузок — по совпадению «Партнёр» = имя клиента (та же логика, что уже
+  // используется для авто-связки с Отсрочкой платежа). Отдельный блок от «Объём закупа»
+  // (тот — из заявок, по товарам/кг): в реестре нет построчных товаров, только сумма
+  // накладной, так что это не замена, а дополнительный, ранее не подтягивавшийся источник.
+  const shipmentsEnabled = orgBlockEnabled(ctx.currentOrg, 'shipment_registry');
+  const shipMonthKey = new Date().toISOString().slice(0, 7);
+  const shipPurchases = useMemo(
+    () => (client && shipmentsEnabled) ? ctx.getShipmentPurchasesForPartner(client.name, shipMonthKey) : { amount: 0, count: 0, rows: [] },
+    [client, shipmentsEnabled, shipMonthKey, db.shipmentRegistry]
+  );
+
   const monthVolume = useMemo(() => {
     if (!client) return null;
     const ym = new Date().toISOString().slice(0, 7);
@@ -384,6 +396,24 @@ export function ClientDetailScreen({ ctx, clientId }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {shipmentsEnabled && shipPurchases.count > 0 && (
+        <div style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Package size={12} />Отгружено по накладным в этом месяце
+          </div>
+          {shipPurchases.rows.map(r => (
+            <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 12 }}>
+              <span style={{ color: 'var(--mc-text)' }}>{r.doc_no || '—'} · {r.doc_date || '—'}</span>
+              <span style={{ color: r.paid ? '#16a34a' : 'var(--mc-muted)', fontWeight: 600 }}>{fmtNum(r.amount)} ₸{r.paid ? ' ✓' : ''}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6, marginTop: 4, borderTop: '1px solid var(--mc-border-light)', fontSize: 13 }}>
+            <span style={{ color: 'var(--mc-muted)' }}>{shipPurchases.count} {shipPurchases.count === 1 ? 'накладная' : 'накладных'}</span>
+            <span style={{ color: '#297b8a', fontWeight: 700 }}>{fmtNum(shipPurchases.amount)} ₸</span>
+          </div>
         </div>
       )}
 

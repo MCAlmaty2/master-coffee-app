@@ -4037,6 +4037,21 @@ function App() {
     }
   };
 
+  // Данные о закупках клиента (в карточке Клиента и в Аренде) не хранятся отдельно —
+  // Реестр отгрузок уже загружен в db.shipmentRegistry, так что просто считаем на лету
+  // по совпадению партнёра (без записи куда-либо — никакой рассинхронизации не будет,
+  // изменения в реестре видны сразу). Сумма (amount) — единственное, что есть в реестре;
+  // кг там не фиксируются (накладная не построчная), поэтому в Аренде это только
+  // дополнение к ручному кг-факту, а не замена.
+  const getShipmentPurchasesForPartner = (partnerName, monthKey) => {
+    if (!partnerName || !monthKey) return { amount: 0, count: 0, rows: [] };
+    const key = normKey(partnerName);
+    const rows = (db.shipmentRegistry || [])
+      .filter(r => r.month === monthKey && normKey(r.partner) === key)
+      .sort((a, b) => (a.doc_date || '').split('.').reverse().join('').localeCompare((b.doc_date || '').split('.').reverse().join('')));
+    return { amount: rows.reduce((s, r) => s + (Number(r.amount) || 0), 0), count: rows.length, rows };
+  };
+
   /* ═══════════ Арендное оборудование ═══════════ */
 
   const createRentalEquipment = (data) => {
@@ -5459,7 +5474,7 @@ function App() {
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createExpenseRequest, approveExpense, rejectExpense, updateExpenseCategory, updateExpense, payExpense, updateCashOperation, updateBudgetPlan, createBudgetCategory,
     createDeferredClient, updateDeferredClient, createDeferredShipment, markDeferredShipmentPaid, deleteDeferredShipment,
-    tryLinkDeliveryToRegistry, tryLinkRegistryToDelivery, reconcileShipmentToDeferred, reconcileAllShipmentRegistry,
+    tryLinkDeliveryToRegistry, tryLinkRegistryToDelivery, reconcileShipmentToDeferred, reconcileAllShipmentRegistry, getShipmentPurchasesForPartner,
     createRentalEquipment, updateRentalEquipment, deleteRentalEquipment,
     createRentalClient, updateRentalClient,
     createRentalPurchase, updateRentalPurchase,

@@ -7,7 +7,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   ChevronLeft, Plus, Upload, CheckCircle2, XCircle,
-  Truck, Package, ChevronRight, Phone,
+  Truck, Package, ChevronRight, Phone, Search, X,
 } from 'lucide-react';
 import { supabase } from '../supabase/client';
 
@@ -577,6 +577,7 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
   const [archiving,       setArchiving]       = useState(false);
   const [showAddModal,    setShowAddModal]    = useState(false);
   const [detailOrder,     setDetailOrder]     = useState(null); // заявка в модале деталей
+  const [courierSearch,   setCourierSearch]   = useState('');
 
   const isAdmin    = currentUser?.role === 'admin';
   const isManager  = ['director', 'senior_manager', 'b2b', 'sales'].includes(currentUser?.role);
@@ -657,6 +658,19 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
   const totalCash    = delivered.filter(o => o.cash_received).reduce((s, o) => s + (Number(o.cash_amount) || 0), 0);
   const totalExpected = orders.reduce((s, o) => s + (Number(o.amount) || 0), 0);
 
+  // Поиск по курьеру (плюс клиент/адрес заодно — удобно искать заявку, зная любое из трёх).
+  const courierNameOf = (o) => {
+    const u = db.users?.find(x => x.id === o.courier_id);
+    return u ? `${u.first_name || ''} ${u.last_name || ''}`.trim() : '';
+  };
+  const q = courierSearch.trim().toLowerCase();
+  const visibleOrders = q
+    ? orders.filter(o =>
+        courierNameOf(o).toLowerCase().includes(q) ||
+        (o.client || '').toLowerCase().includes(q) ||
+        (o.address || '').toLowerCase().includes(q))
+    : orders;
+
   return (
     <div style={{ background: 'var(--mc-bg)' }}>
       <ScreenHeader
@@ -734,7 +748,24 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
           />
         )}
 
-        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Все заказы ({orders.length})</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mc-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>
+          Все заказы ({q ? `${visibleOrders.length} из ${orders.length}` : orders.length})
+        </div>
+
+        <div style={{ position: 'relative', marginBottom: 10 }}>
+          <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--mc-muted)', pointerEvents: 'none' }} />
+          <input
+            value={courierSearch}
+            onChange={e => setCourierSearch(e.target.value)}
+            placeholder="Поиск по курьеру, клиенту, адресу..."
+            style={{ width: '100%', padding: '9px 32px', border: '1px solid var(--mc-border)', borderRadius: 10, fontSize: 13, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', boxSizing: 'border-box' }} />
+          {courierSearch && (
+            <button onClick={() => setCourierSearch('')}
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)', padding: 4 }}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
 
         {/* ── Архивировать реестр (admin / director, только активный) ── */}
         {canArchive && reg.status === 'active' && (
@@ -802,7 +833,10 @@ export function DeliveryRegistryDetailScreen({ ctx, registryId }) {
           </div>
         )}
 
-        {orders.sort((a, b) => (a.seq_number || 0) - (b.seq_number || 0)).map(order => {
+        {visibleOrders.length === 0 && q && (
+          <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--mc-muted)', fontSize: 12 }}>Ничего не найдено</div>
+        )}
+        {[...visibleOrders].sort((a, b) => (a.seq_number || 0) - (b.seq_number || 0)).map(order => {
           const courier      = db.users?.find(u => u.id === order.courier_id);
           const isAdminClosed = order.manager_decision === 'admin_closed';
           const canClose      = isAdmin && ['pending', 'assigned'].includes(order.status) && !isAdminClosed;
@@ -1395,6 +1429,7 @@ export function CourierRegistryScreen({ ctx }) {
   const [tab, setTab]               = useState('free');
   const [selectedRegId, setSelectedRegId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [otherSearch, setOtherSearch] = useState('');
 
   const mergeDeliveryData = (regs, orders) => {
     setDb(d => {
@@ -1478,6 +1513,14 @@ export function CourierRegistryScreen({ ctx }) {
   const freeOrders   = allOrders.filter(o => o.status === 'pending' && !o.courier_id);
   const myOrders     = allOrders.filter(o => o.courier_id === currentUser.id);
   const othersOrders = allOrders.filter(o => o.courier_id && o.courier_id !== currentUser.id && o.status !== 'delivered');
+  const otherSearchQ = otherSearch.trim().toLowerCase();
+  const visibleOthersOrders = otherSearchQ
+    ? othersOrders.filter(o => {
+        const u = db.users?.find(x => x.id === o.courier_id);
+        const courierName = u ? `${u.first_name || ''} ${u.last_name || ''}`.trim() : '';
+        return courierName.toLowerCase().includes(otherSearchQ) || (o.client || '').toLowerCase().includes(otherSearchQ);
+      })
+    : othersOrders;
 
   const takeOrder = async (orderId) => {
     const { error } = await supabase.from('delivery_orders')
@@ -1593,10 +1636,35 @@ export function CourierRegistryScreen({ ctx }) {
             ))}
           </>
         )}
-        {tab === 'others' && othersOrders.map(o => {
-          const u = db.users?.find(u => u.id === o.courier_id);
-          return <OrderRow key={o.id} order={o} dim courierName={u ? u.first_name : '—'} />;
-        })}
+        {tab === 'others' && (
+          <>
+            {othersOrders.length > 0 && (
+              <div style={{ position: 'relative', marginBottom: 10 }}>
+                <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--mc-muted)', pointerEvents: 'none' }} />
+                <input
+                  value={otherSearch}
+                  onChange={e => setOtherSearch(e.target.value)}
+                  placeholder="Поиск по курьеру, клиенту..."
+                  style={{ width: '100%', padding: '9px 32px', border: '1px solid var(--mc-border)', borderRadius: 10, fontSize: 13, outline: 'none', background: 'var(--mc-surface)', color: 'var(--mc-text)', boxSizing: 'border-box' }} />
+                {otherSearch && (
+                  <button onClick={() => setOtherSearch('')}
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mc-muted)', padding: 4 }}>
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            )}
+            {visibleOthersOrders.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--mc-muted)', fontSize: 12 }}>
+                {otherSearchQ ? 'Ничего не найдено' : 'Нет заказов у других курьеров'}
+              </div>
+            )}
+            {visibleOthersOrders.map(o => {
+              const u = db.users?.find(u => u.id === o.courier_id);
+              return <OrderRow key={o.id} order={o} dim courierName={u ? u.first_name : '—'} />;
+            })}
+          </>
+        )}
       </div>
     </div>
   );

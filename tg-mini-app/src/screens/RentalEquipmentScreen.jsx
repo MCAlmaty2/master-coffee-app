@@ -427,6 +427,9 @@ function RentalClientDetailScreen({ ctx, clientId }) {
   if (!client) return <div className="p-4 text-sm" style={{ color: 'var(--mc-muted)' }}>Клиент не найден</div>;
   const userName = (id) => { const u = users.find(x => x.id === id); return u ? (u.first_name || u.username || '—') : '—'; };
   const linkedClient = client.client_id ? (ctx.db.clients || []).find(c => c.id === client.client_id) : null;
+  // Партнёр в реестре сверяется по названию — если клиент связан с базой Клиентов,
+  // берём каноничное имя оттуда, иначе имя из карточки аренды.
+  const shipPurchases = ctx.getShipmentPurchasesForPartner?.(linkedClient?.name || client.name, monthNow()) || { amount: 0, count: 0, rows: [] };
 
   return (
     <div className="p-4">
@@ -492,6 +495,12 @@ function RentalClientDetailScreen({ ctx, clientId }) {
           </div>
         );
       })}
+      {shipPurchases.count > 0 && (
+        <div className="rounded-xl p-2.5 mb-1.5 text-xs" style={{ background: 'var(--mc-info-bg)', border: '1px solid var(--mc-info-border)' }}>
+          <div className="flex justify-between"><span className="font-semibold"><Package size={11} className="inline mr-1" />Отгружено по накладным ({monthNow()})</span></div>
+          <div>{shipPurchases.count} {shipPurchases.count === 1 ? 'накладная' : 'накладных'} · {fmtNum(shipPurchases.amount)} тг</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -510,6 +519,15 @@ function PurchasesTab({ ctx }) {
     return map;
   }, [purchases, month]);
 
+  // Партнёр в реестре сверяется по названию — если клиент связан с базой Клиентов,
+  // берём каноничное имя оттуда, иначе имя из карточки аренды.
+  const partnerNameFor = (c) => (c.client_id ? (ctx.db.clients || []).find(x => x.id === c.client_id)?.name : null) || c.name;
+  const shipByClient = useMemo(() => {
+    const map = {};
+    clients.forEach(c => { map[c.id] = ctx.getShipmentPurchasesForPartner?.(partnerNameFor(c), month) || { amount: 0, count: 0, rows: [] }; });
+    return map;
+  }, [clients, month, ctx.db.shipmentRegistry, ctx.db.clients]);
+
   const prevMonth = () => { const d = new Date(month + '-01'); d.setMonth(d.getMonth() - 1); setMonth(d.toISOString().slice(0, 7)); };
   const nextMonth = () => { const d = new Date(month + '-01'); d.setMonth(d.getMonth() + 1); setMonth(d.toISOString().slice(0, 7)); };
   const monthLabel = new Date(month + '-01').toLocaleString('ru-RU', { month: 'long', year: 'numeric', timeZone: TZ });
@@ -518,7 +536,9 @@ function PurchasesTab({ ctx }) {
     const p = monthPurchases[cid];
     setEditing(cid);
     setKg(p ? String(p.kg_fact || '') : '');
-    setAmt(p ? String(p.amount_fact || '') : '');
+    // Если суммы ещё нет — подставляем то, что уже отгружено по накладным за месяц,
+    // чтобы менеджеру не приходилось искать/пересчитывать вручную (можно поправить).
+    setAmt(p ? String(p.amount_fact || '') : (shipByClient[cid]?.amount ? String(shipByClient[cid].amount) : ''));
   };
 
   const saveEdit = (cid) => {
@@ -559,6 +579,11 @@ function PurchasesTab({ ctx }) {
               </div>
             )}
             {p && !isEd && <div className="text-xs">Сумма: {fmtNum(p.amount_fact)} тг</div>}
+            {!isEd && shipByClient[c.id]?.count > 0 && (
+              <div className="text-xs mt-0.5" style={{ color: 'var(--mc-info-text)' }}>
+                <Package size={10} className="inline mr-0.5" />По накладным: {fmtNum(shipByClient[c.id].amount)} тг ({shipByClient[c.id].count})
+              </div>
+            )}
             {isEd && (
               <div className="mt-2">
                 <div className="grid grid-cols-2 gap-2 mb-2">
