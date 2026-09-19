@@ -6,7 +6,7 @@ import {
   Banknote, Loader2, CircleDot, Inbox, Sparkles, Lock, ArrowLeftRight,
   LogOut, Menu, Coffee, ClipboardList, Send, Settings, KeyRound, MessageSquare, Mail, AlertTriangle, Tag, Edit3,
   Calendar, CalendarDays, Monitor, Gift, GraduationCap, Users2, ListTodo, Receipt, Wallet, Wrench, MapPin, Footprints,
-  FileCheck2,
+  FileCheck2, RefreshCw,
 } from 'lucide-react';
 import { supabase, setOrgIdHeader } from './supabase/client';
 import { orgHasModule, orgBlockEnabled } from './modules';
@@ -6723,6 +6723,7 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
 
         <div className="p-3 border-t" style={{ borderColor: 'var(--mc-border-light)' }}>
           <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+          <RefreshButton />
           <UserChip user={currentUser} onLogout={logout} db={db} onClick={() => navigate({ name: 'home' })} />
         </div>
       </aside>
@@ -6964,6 +6965,24 @@ function ThemeToggle({ theme, toggleTheme }) {
           boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
         }} />
       </div>
+    </button>
+  );
+}
+
+// Полная перезагрузка страницы (а не просто ре-фетч данных) — чтобы гарантированно
+// подтянуть и свежие данные, и свежую версию самого приложения (JS-бандл), без
+// необходимости закрывать и заново открывать Mini App в Telegram.
+function RefreshButton() {
+  const [spinning, setSpinning] = useState(false);
+  return (
+    <button
+      onClick={() => { setSpinning(true); window.location.reload(); }}
+      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 text-left transition"
+      style={{ background: 'transparent', color: 'var(--mc-muted)' }}
+      title="Обновить страницу полностью"
+    >
+      <RefreshCw size={15} className={spinning ? 'animate-spin' : ''} />
+      <span style={{ fontSize: 13, fontWeight: 500 }}>Обновить</span>
     </button>
   );
 }
