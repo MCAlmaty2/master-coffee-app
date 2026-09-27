@@ -553,6 +553,17 @@ export function FieldCalendarScreen({ ctx }) {
     return deptFilter.filter(t => t.assignee_id === filter);
   })();
 
+  // Занятость другого профиля (бариста ↔ техники) — показываем всегда поверх выбранного
+  // фильтра, независимо от того, кого сейчас выбрал сотрудник в чипах, иначе расписание
+  // другого отдела просто невидимо и легко создать задачу поверх уже занятого времени.
+  const otherDeptTasks = isFieldUser
+    ? db.tasks.filter(t => {
+        const r = db.users.find(u => u.id === t.assignee_id)?.role;
+        return r && FIELD_ROLES.includes(r) && r !== currentUser.role;
+      })
+    : [];
+  const visibleTasks = [...filteredTasks, ...otherDeptTasks];
+
   const prev = () => {
     if (view === 'week')  setWeekStart(s => shiftDate(s, -7));
     if (view === 'month') setMonthISO(m => shiftMonth(m, -1));
@@ -626,14 +637,14 @@ export function FieldCalendarScreen({ ctx }) {
       </div>
 
       {view === 'week' && (
-        <WeekCalendarView tasks={filteredTasks} weekStart={weekStart} ctx={ctx} mode="team" onSlotClick={handleSlotClick} />
+        <WeekCalendarView tasks={visibleTasks} weekStart={weekStart} ctx={ctx} mode="team" onSlotClick={handleSlotClick} />
       )}
       {view === 'month' && (
-        <MonthCalendarView tasks={filteredTasks} monthISO={monthISO} ctx={ctx}
+        <MonthCalendarView tasks={visibleTasks} monthISO={monthISO} ctx={ctx}
           onDayClick={d => { setSelectedDay(d); setView('day'); }} />
       )}
       {view === 'day' && (
-        <DayCalendarView tasks={filteredTasks} date={selectedDay} ctx={ctx} mode="team" onSlotClick={handleSlotClick} />
+        <DayCalendarView tasks={visibleTasks} date={selectedDay} ctx={ctx} mode="team" onSlotClick={handleSlotClick} />
       )}
     </div>
   );

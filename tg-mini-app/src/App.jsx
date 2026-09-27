@@ -293,6 +293,14 @@ const SUPER_ADMIN_NOTIF_ALLOWED = new Set(['error', 'feedback', 'access']);
 // и т.п. — просто шум для роли admin, у неё и так есть полный обзор через разделы приложения.
 const ADMIN_NOTIF_ALLOWED = new Set(['writeoff', 'gift', 'contract', 'expense']);
 
+// Уведомление создано для получателя как для обычного org-admin (списания/подарки/
+// договоры/чеки — категории из ADMIN_NOTIF_ALLOWED), а не как для платформенного
+// супер-админа. Пока супер-админ смотрит в контексте своей организации, оно уместно —
+// но в режиме "Платформа" (без привязки к организации) это шум с чужой шляпы.
+function isOrgAdminOnlyNotif(n) {
+  return ADMIN_NOTIF_ALLOWED.has(n.link_kind || 'general') && !SUPER_ADMIN_NOTIF_ALLOWED.has(n.link_kind || 'general');
+}
+
 function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, button_url, button_text, scope }) {
   const recipient = db?.users?.find(u => u.id === recipient_id);
   const isCoffeeUser = COFFEESHOP_ROLES.includes(recipient?.role);
@@ -644,7 +652,7 @@ function defaultPermissionsFor(roleKey) {
     case 'warehouse':
       return ['orders_view_all', 'orders_change_status', 'warehouse_pickup', 'grind_fulfill', 'grind_view_all'];
     case 'cashier':
-      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay', 'gift_create', 'expense_pay', 'expense_view_all', 'coffee_shipments_view'];
+      return ['writeoff_create', 'writeoff_finalize', 'writeoff_view_all', 'shipment_view', 'shipment_pay', 'gift_create', 'expense_pay', 'expense_view_all', 'coffee_shipments_view', 'recon_acts_view', 'recon_acts_edit'];
     case 'barista':
     case 'technician':
       return ['tasks_view_own', 'tasks_self_assign', 'tasks_calendar_all', 'writeoff_create', 'gift_create', 'expense_create'];
@@ -6608,7 +6616,10 @@ function AppShell({ ctx, mobileMenuOpen, setMobileMenuOpen }) {
     });
   }, [role, currentUser, isManager, db, activeBase, currentOrg, platformMode]);
 
-  const myUnreadNotifs = db.notifications.filter(n => n.recipient_id === currentUser.id && !n.read).length;
+  const myUnreadNotifs = db.notifications.filter(n =>
+    n.recipient_id === currentUser.id && !n.read
+    && !(platformMode && currentUser.is_super_admin && isOrgAdminOnlyNotif(n))
+  ).length;
   const pendingRequests = currentUser.role === 'admin' ? db.users.filter(u => u.role === 'pending').length : 0;
 
   return (
@@ -12524,7 +12535,11 @@ function TaskDetailScreen({ ctx, taskId }) {
   const canView = currentUser.role === 'admin'
     || task.created_by === currentUser.id
     || task.assignee_id === currentUser.id
-    || ['director', 'manager', 'senior_manager', 'b2b'].includes(currentUser.role);
+    || ['director', 'manager', 'senior_manager', 'b2b'].includes(currentUser.role)
+    // Бариста и техники видят детали задач друг друга (в т.ч. другого профиля) —
+    // календарь команды и так показывает занятое время, а открыть его и посмотреть,
+    // что это за задача, раньше упиралось в этот же гейт.
+    || ['barista', 'technician'].includes(currentUser.role);
 
   if (!canView) {
     return (
@@ -17142,12 +17157,16 @@ function ProductEditModal({ product, existingCats, onSave, onClose }) {
    ═════════════════════════════════════════════════════════════════════════ */
 
 function NotificationsScreen({ ctx }) {
-  const { db, currentUser, navigate, markNotificationRead, markAllNotificationsRead, clearReadNotifications } = ctx;
+  const { db, currentUser, navigate, markNotificationRead, markAllNotificationsRead, clearReadNotifications, platformMode } = ctx;
   const [showRead, setShowRead] = useState(false);
 
   const userBase = getUserBase(currentUser);
   const all = db.notifications.filter(n => {
     if (n.recipient_id !== currentUser.id) return false;
+    // В режиме "Платформа" супер-админ смотрит на всё без привязки к организации —
+    // её обычные org-admin уведомления (списания/подарки/договоры/чеки по ТК Алматы)
+    // тут неуместны, это дела другой её "шляпы". В контексте своей организации они видны как обычно.
+    if (platformMode && currentUser.is_super_admin && isOrgAdminOnlyNotif(n)) return false;
     if (userBase === 'all') return true;
     if (userBase === 'coffeeshop') return n.scope === 'coffeeshop';
     return n.scope !== 'coffeeshop';
