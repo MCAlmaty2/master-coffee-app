@@ -335,7 +335,12 @@ function makeNotif(db, { recipient_id, title, body = '', link_kind, link_id, but
   const TG_DM_ALLOWED = new Set(['writeoff', 'gift', 'task', 'manager_task', 'hr', 'access', 'general', 'coffee_task', 'expense', 'release']);
   const category = link_kind || 'general';
   const prefs = recipient?.tg_notif_prefs || {};
-  const categoryAllowed = prefs[category] !== false && TG_DM_ALLOWED.has(category);
+  // Супер-админу личный Telegram шлём только по её платформенным категориям — она может
+  // параллельно получать уведомление и как обычный org-admin (например, списание по ТК
+  // Алматы), это нормально видеть в приложении, но пинговать её телефон этим не нужно:
+  // телеграм супер-админа — канал только для платформы (ошибки/обратная связь/доступы).
+  const superAdminTgBlocked = recipient?.is_super_admin && !SUPER_ADMIN_NOTIF_ALLOWED.has(category);
+  const categoryAllowed = !superAdminTgBlocked && prefs[category] !== false && TG_DM_ALLOWED.has(category);
   // Отправляем личный TG: нужен telegram_id получателя и настроенный бот.
   // bot_token НЕ передаём в теле — edge function читает TELEGRAM_BOT_TOKEN из Supabase Secrets.
   if (recipient?.telegram_id && recipient.tg_notif_enabled !== false && tgs?.bot_token && categoryAllowed) {
@@ -4371,7 +4376,9 @@ function App() {
     setDb(d => ({ ...d, clientSpecialPrices: [...(d.clientSpecialPrices || []), row] }));
     upsertRow('clientSpecialPrices', row).catch(() => {});
     const admin = db.users.find(u => u.role === 'admin' && u.org_id === _currentOrgId);
-    if (admin) {
+    // Телеграм супер-админа — только платформенные категории (см. makeNotif); это дело
+    // её обычной org-admin роли, пинговать личный телеграм им не нужно.
+    if (admin && !admin.is_super_admin) {
       const mgr = db.users.find(u => u.id === currentUser.id);
       const product = db.products.find(p => p.id === data.product_id);
       sendPrivateTelegram(admin, `📋 <b>Запрос на спец. цену</b>\nКлиент: ${data.client_name}\nТовар: ${product?.name || '—'}\nЦена: ${data.special_price} ₸\nСрок: ${data.valid_months} мес\nОт: ${mgr ? `${mgr.first_name} ${mgr.last_name || ''}`.trim() : '—'}`);
@@ -4466,7 +4473,8 @@ function App() {
       }));
       return { ...d, notifications: [...notifs.filter(Boolean), ...(d.notifications || [])] };
     });
-    managers.forEach(m => sendPrivateTelegram(m, `🤝 Точка «${point.name}» готова стать партнёром.\n${point.address || ''}\nОформите клиента вручную в CRM.`));
+    // Телеграм супер-админа — только платформенные категории (см. makeNotif).
+    managers.filter(m => !m.is_super_admin).forEach(m => sendPrivateTelegram(m, `🤝 Точка «${point.name}» готова стать партнёром.\n${point.address || ''}\nОформите клиента вручную в CRM.`));
     return { ok: true };
   };
 
