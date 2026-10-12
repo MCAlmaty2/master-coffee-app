@@ -149,7 +149,6 @@ function normalizePhone(input) {
   if (!n || n.length !== 11 || !n.startsWith('7')) return null;
   return '+' + n;
 }
-const prettyPhone = (e) => !e || e.length !== 12 ? (e || '') : `${e.slice(0,2)} ${e.slice(2,5)} ${e.slice(5,8)} ${e.slice(8,10)} ${e.slice(10,12)}`;
 
 function gen4DigitCode(existing = []) {
   for (let i = 0; i < 200; i++) {
@@ -8791,7 +8790,7 @@ function OrderDetailScreen({ ctx, orderId }) {
             ) : (
               <FieldRow label="ФИО" value={<strong style={{ color: 'var(--mc-text)' }}>{order.full_name}</strong>} />
             )}
-            <FieldRow label="Телефон" value={prettyPhone(order.phone)} />
+            <FieldRow label="Телефон" value={order.phone} />
             <FieldRow label={isLegal ? 'Юр. адрес' : 'Адрес'} value={order.address} />
             {order.delivery_address && <FieldRow label="📍 Адрес доставки" value={order.delivery_address} />}
             {isLegal && order.tax_regime && (
@@ -10413,7 +10412,7 @@ function CreateQuickScreen({ ctx }) {
     lines.push(`Получение: ${formSnapshot.delivery_method === 'pickup' ? '🏪 Самовывоз' : '🚚 Доставка'}`);
     if (formSnapshot.payment_method === 'paid_kaspi_card') lines.push('💳 Оплачено Каспи/Карта');
     if (formSnapshot.address && formSnapshot.address !== '—') lines.push(`Адрес: ${formSnapshot.address}`);
-    if (formSnapshot.phone && formSnapshot.phone !== '+70000000000') lines.push(`Тел.: ${prettyPhone(formSnapshot.phone)}`);
+    if (formSnapshot.phone && formSnapshot.phone !== '+70000000000') lines.push(`Тел.: ${formSnapshot.phone}`);
     if (formSnapshot.delivery_method === 'pickup' && order.pickup_code) {
       lines.push(`Код самовывоза: ${order.pickup_code}`);
     }
@@ -11244,7 +11243,7 @@ function ExportScreen({ ctx }) {
           fmtDateTime(o.created_at),
           o.client_type === 'individual' ? 'Физ.' : 'Юр.',
           o.client_type === 'individual' ? (o.full_name || '') : (o.company_name || ''),
-          o.bin || '', o.contact_person || '', prettyPhone(o.phone), o.address || '',
+          o.bin || '', o.contact_person || '', o.phone || '', o.address || '',
           it.name, it.quantity, it.unit, it.price, it.quantity * it.price,
           o.delivery_method === 'delivery' ? 'Доставка' : 'Самовывоз',
           STATUS[o.status]?.label || o.status,
