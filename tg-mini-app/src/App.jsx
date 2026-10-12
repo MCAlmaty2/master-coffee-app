@@ -4107,6 +4107,29 @@ function App() {
     return { amount: rows.reduce((s, r) => s + (Number(r.amount) || 0), 0), count: rows.length, rows };
   };
 
+  // Объём закупа клиента (кг/сумма/кол-во заявок) за месяц — из заявок (db.orders), та же
+  // логика, что и "Объём закупа в этом месяце" на карточке клиента. Нужен для Аренды: в
+  // Реестре отгрузок нет построчных товаров (только сумма накладной), кг оттуда не достать —
+  // а в заявках есть количество по каждой позиции, и по ним можно посчитать именно кг кофе.
+  const getClientPurchaseVolume = (clientId, monthKey) => {
+    if (!clientId || !monthKey) return { amount: 0, kg: 0, ordersCount: 0 };
+    const client = (db.clients || []).find(c => c.id === clientId);
+    if (!client) return { amount: 0, kg: 0, ordersCount: 0 };
+    const monthOrders = (db.orders || []).filter(o =>
+      (o.client_id === clientId || (client.type === 'legal' ? o.company_name === client.name : o.full_name === client.name))
+      && o.status !== 'cancelled'
+      && (o.created_at || '').slice(0, 7) === monthKey
+    );
+    let amount = 0, kg = 0;
+    monthOrders.forEach(o => {
+      amount += Number(o.total_amount) || 0;
+      (o.items || []).forEach(it => {
+        if ((it.unit || '').toLowerCase() === 'кг') kg += Number(it.quantity) || 0;
+      });
+    });
+    return { amount, kg, ordersCount: monthOrders.length };
+  };
+
   /* ═══════════ Акты сверки ═══════════ */
 
   const createReconciliationAct = (data) => {
@@ -5595,7 +5618,7 @@ function App() {
     createContractRequest, takeContractRequest, addContractRevision, signContractRequest, rejectContractRequest, cancelContractRequest,
     createExpenseRequest, approveExpense, rejectExpense, updateExpenseCategory, updateExpense, payExpense, updateCashOperation, updateBudgetPlan, createBudgetCategory,
     createDeferredClient, updateDeferredClient, createDeferredShipment, markDeferredShipmentPaid, deleteDeferredShipment,
-    tryLinkDeliveryToRegistry, tryLinkRegistryToDelivery, reconcileShipmentToDeferred, reconcileAllShipmentRegistry, getShipmentPurchasesForPartner,
+    tryLinkDeliveryToRegistry, tryLinkRegistryToDelivery, reconcileShipmentToDeferred, reconcileAllShipmentRegistry, getShipmentPurchasesForPartner, getClientPurchaseVolume,
     createRentalEquipment, updateRentalEquipment, deleteRentalEquipment,
     createRentalClient, updateRentalClient,
     createRentalPurchase, updateRentalPurchase,

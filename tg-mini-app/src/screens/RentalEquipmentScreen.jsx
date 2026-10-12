@@ -430,6 +430,9 @@ function RentalClientDetailScreen({ ctx, clientId }) {
   // Партнёр в реестре сверяется по названию — если клиент связан с базой Клиентов,
   // берём каноничное имя оттуда, иначе имя из карточки аренды.
   const shipPurchases = ctx.getShipmentPurchasesForPartner?.(linkedClient?.name || client.name, monthNow()) || { amount: 0, count: 0, rows: [] };
+  // Кг — только из заявок, и только если клиент привязан к реальной карточке из базы
+  // (в Реестре отгрузок построчных товаров нет, посчитать кг оттуда нельзя).
+  const orderVolume = linkedClient ? (ctx.getClientPurchaseVolume?.(linkedClient.id, monthNow()) || { amount: 0, kg: 0, ordersCount: 0 }) : null;
 
   return (
     <div className="p-4">
@@ -495,10 +498,21 @@ function RentalClientDetailScreen({ ctx, clientId }) {
           </div>
         );
       })}
+      {orderVolume?.ordersCount > 0 && (
+        <div className="rounded-xl p-2.5 mb-1.5 text-xs" style={{ background: 'var(--mc-info-bg)', border: '1px solid var(--mc-info-border)' }}>
+          <div className="flex justify-between"><span className="font-semibold"><Coffee size={11} className="inline mr-1" />Закуп из заявок ({monthNow()})</span></div>
+          <div>{orderVolume.kg} кг · {fmtNum(orderVolume.amount)} тг · {orderVolume.ordersCount} {orderVolume.ordersCount === 1 ? 'заявка' : 'заявок'}</div>
+        </div>
+      )}
       {shipPurchases.count > 0 && (
         <div className="rounded-xl p-2.5 mb-1.5 text-xs" style={{ background: 'var(--mc-info-bg)', border: '1px solid var(--mc-info-border)' }}>
           <div className="flex justify-between"><span className="font-semibold"><Package size={11} className="inline mr-1" />Отгружено по накладным ({monthNow()})</span></div>
           <div>{shipPurchases.count} {shipPurchases.count === 1 ? 'накладная' : 'накладных'} · {fmtNum(shipPurchases.amount)} тг</div>
+        </div>
+      )}
+      {!linkedClient && (
+        <div className="text-xs py-2" style={{ color: 'var(--mc-muted)' }}>
+          Свяжите с клиентом из базы (кнопка выше), чтобы объём в кг подтягивался из заявок автоматически.
         </div>
       )}
     </div>
@@ -527,6 +541,13 @@ function PurchasesTab({ ctx }) {
     clients.forEach(c => { map[c.id] = ctx.getShipmentPurchasesForPartner?.(partnerNameFor(c), month) || { amount: 0, count: 0, rows: [] }; });
     return map;
   }, [clients, month, ctx.db.shipmentRegistry, ctx.db.clients]);
+  // Кг можно взять только из заявок (в Реестре отгрузок нет построчных товаров) — работает
+  // только когда клиент аренды привязан к реальному клиенту из базы (client_id).
+  const orderVolByClient = useMemo(() => {
+    const map = {};
+    clients.forEach(c => { map[c.id] = c.client_id ? (ctx.getClientPurchaseVolume?.(c.client_id, month) || { amount: 0, kg: 0, ordersCount: 0 }) : { amount: 0, kg: 0, ordersCount: 0 }; });
+    return map;
+  }, [clients, month, ctx.db.orders, ctx.db.clients]);
 
   const prevMonth = () => { const d = new Date(month + '-01'); d.setMonth(d.getMonth() - 1); setMonth(d.toISOString().slice(0, 7)); };
   const nextMonth = () => { const d = new Date(month + '-01'); d.setMonth(d.getMonth() + 1); setMonth(d.toISOString().slice(0, 7)); };
@@ -535,10 +556,11 @@ function PurchasesTab({ ctx }) {
   const startEdit = (cid) => {
     const p = monthPurchases[cid];
     setEditing(cid);
-    setKg(p ? String(p.kg_fact || '') : '');
-    // Если суммы ещё нет — подставляем то, что уже отгружено по накладным за месяц,
-    // чтобы менеджеру не приходилось искать/пересчитывать вручную (можно поправить).
-    setAmt(p ? String(p.amount_fact || '') : (shipByClient[cid]?.amount ? String(shipByClient[cid].amount) : ''));
+    // Кг берём из заявок (накладные их не содержат); сумму — из накладных (сверенная с 1С
+    // цифра), а если их ещё нет — из заявок. Менеджер всё равно может поправить вручную.
+    setKg(p ? String(p.kg_fact || '') : (orderVolByClient[cid]?.kg ? String(orderVolByClient[cid].kg) : ''));
+    const fallbackAmt = shipByClient[cid]?.amount || orderVolByClient[cid]?.amount || '';
+    setAmt(p ? String(p.amount_fact || '') : (fallbackAmt ? String(fallbackAmt) : ''));
   };
 
   const saveEdit = (cid) => {
@@ -579,9 +601,19 @@ function PurchasesTab({ ctx }) {
               </div>
             )}
             {p && !isEd && <div className="text-xs">Сумма: {fmtNum(p.amount_fact)} тг</div>}
+            {!isEd && orderVolByClient[c.id]?.ordersCount > 0 && (
+              <div className="text-xs mt-0.5" style={{ color: 'var(--mc-info-text)' }}>
+                <Coffee size={10} className="inline mr-0.5" />Из заявок: {orderVolByClient[c.id].kg} кг · {fmtNum(orderVolByClient[c.id].amount)} тг ({orderVolByClient[c.id].ordersCount})
+              </div>
+            )}
             {!isEd && shipByClient[c.id]?.count > 0 && (
               <div className="text-xs mt-0.5" style={{ color: 'var(--mc-info-text)' }}>
                 <Package size={10} className="inline mr-0.5" />По накладным: {fmtNum(shipByClient[c.id].amount)} тг ({shipByClient[c.id].count})
+              </div>
+            )}
+            {!isEd && !c.client_id && (
+              <div className="text-xs mt-0.5" style={{ color: 'var(--mc-muted)' }}>
+                Свяжите с клиентом из базы, чтобы подтягивались кг из заявок
               </div>
             )}
             {isEd && (
