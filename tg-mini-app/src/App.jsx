@@ -4060,7 +4060,27 @@ function App() {
       return r;
     });
 
-    if (toUpdateRegistry.length === 0 && toUpsertDeferred.length === 0) return;
+    // Чистим "осиротевшие" авто-созданные отсрочки: номер накладной с тех пор стал
+    // принадлежать другому партнёру в реестре (типичная причина — исправили опечатку
+    // в партнёре/сумме уже после того, как по старому значению успела создаться
+    // отсрочка). Раз обязательство ещё не оплачено — запись ни о чём не говорит и
+    // только путает (просрочка по чужой накладной). Оплаченные не трогаем — это история.
+    const registryByDocNo = new Map();
+    (db.shipmentRegistry || []).forEach(r => { if (r.doc_no) registryByDocNo.set(normKey(r.doc_no), r); });
+    const toDeleteDeferred = [];
+    deferredAcc = deferredAcc.filter(s => {
+      if (s.comment !== 'Авто из реестра отгрузок') return true;
+      if (s.paid_at || (Number(s.paid_amount) || 0) > 0) return true;
+      const reg = registryByDocNo.get(normKey(s.invoice_no));
+      const client = (db.deferredClients || []).find(c => c.id === s.client_id);
+      if (!reg || !client || normKey(reg.partner) !== normKey(client.name)) {
+        toDeleteDeferred.push(s.id);
+        return false;
+      }
+      return true;
+    });
+
+    if (toUpdateRegistry.length === 0 && toUpsertDeferred.length === 0 && toDeleteDeferred.length === 0) return;
 
     setDb(d => {
       if (syncSnapshotRef) {
@@ -4086,6 +4106,13 @@ function App() {
       chunk(toUpsertDeferred, 500).forEach(batch => {
         supabase.from('deferred_shipments').upsert(batch, { onConflict: 'id' }).then(({ error }) => {
           if (error) console.warn('[reconcileAll] deferred_shipments upsert:', error.message);
+        });
+      });
+    }
+    if (toDeleteDeferred.length) {
+      chunk(toDeleteDeferred, 500).forEach(batch => {
+        supabase.from('deferred_shipments').delete().in('id', batch).then(({ error }) => {
+          if (error) console.warn('[reconcileAll] deferred_shipments delete:', error.message);
         });
       });
     }
