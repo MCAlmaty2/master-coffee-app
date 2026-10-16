@@ -221,8 +221,10 @@ export function ClientDetailScreen({ ctx, clientId }) {
   const shipmentsEnabled = orgBlockEnabled(ctx.currentOrg, 'shipment_registry');
   const shipMonthKey = new Date().toISOString().slice(0, 7);
   const shipPurchases = useMemo(
-    () => (client && shipmentsEnabled) ? ctx.getShipmentPurchasesForPartner(client.name, shipMonthKey) : { amount: 0, count: 0, rows: [] },
-    [client, shipmentsEnabled, shipMonthKey, db.shipmentRegistry]
+    () => (client && shipmentsEnabled)
+      ? ctx.getShipmentPurchasesForPartner([client.name, ...(db.rentalClients || []).filter(rc => rc.client_id === client.id).map(rc => rc.name)], shipMonthKey)
+      : { amount: 0, count: 0, rows: [] },
+    [client, shipmentsEnabled, shipMonthKey, db.shipmentRegistry, db.rentalClients]
   );
 
   const monthVolume = useMemo(() => {

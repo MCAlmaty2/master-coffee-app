@@ -429,7 +429,7 @@ function RentalClientDetailScreen({ ctx, clientId }) {
   const linkedClient = client.client_id ? (ctx.db.clients || []).find(c => c.id === client.client_id) : null;
   // Партнёр в реестре сверяется по названию — если клиент связан с базой Клиентов,
   // берём каноничное имя оттуда, иначе имя из карточки аренды.
-  const shipPurchases = ctx.getShipmentPurchasesForPartner?.(linkedClient?.name || client.name, monthNow()) || { amount: 0, count: 0, rows: [] };
+  const shipPurchases = ctx.getShipmentPurchasesForPartner?.([client.name, linkedClient?.name], monthNow()) || { amount: 0, count: 0, rows: [] };
   // Кг — только из заявок, и только если клиент привязан к реальной карточке из базы
   // (в Реестре отгрузок построчных товаров нет, посчитать кг оттуда нельзя).
   const orderVolume = linkedClient ? (ctx.getClientPurchaseVolume?.(linkedClient.id, monthNow()) || { amount: 0, kg: 0, ordersCount: 0 }) : null;
@@ -535,7 +535,7 @@ function PurchasesTab({ ctx }) {
 
   // Партнёр в реестре сверяется по названию — если клиент связан с базой Клиентов,
   // берём каноничное имя оттуда, иначе имя из карточки аренды.
-  const partnerNameFor = (c) => (c.client_id ? (ctx.db.clients || []).find(x => x.id === c.client_id)?.name : null) || c.name;
+  const partnerNameFor = (c) => [c.name, c.client_id ? (ctx.db.clients || []).find(x => x.id === c.client_id)?.name : null];
   const shipByClient = useMemo(() => {
     const map = {};
     clients.forEach(c => { map[c.id] = ctx.getShipmentPurchasesForPartner?.(partnerNameFor(c), month) || { amount: 0, count: 0, rows: [] }; });

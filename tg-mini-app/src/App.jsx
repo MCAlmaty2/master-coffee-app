@@ -4124,11 +4124,13 @@ function App() {
   // изменения в реестре видны сразу). Сумма (amount) — единственное, что есть в реестре;
   // кг там не фиксируются (накладная не построчная), поэтому в Аренде это только
   // дополнение к ручному кг-факту, а не замена.
+  // partnerName — строка или массив названий: у одной компании в реестре (юрлицо из 1С),
+  // в клиентах (торговое название) и в аренде название может отличаться.
   const getShipmentPurchasesForPartner = (partnerName, monthKey) => {
-    if (!partnerName || !monthKey) return { amount: 0, count: 0, rows: [] };
-    const key = normKey(partnerName);
+    const keys = new Set((Array.isArray(partnerName) ? partnerName : [partnerName]).filter(Boolean).map(normKey));
+    if (!keys.size || !monthKey) return { amount: 0, count: 0, rows: [] };
     const rows = (db.shipmentRegistry || [])
-      .filter(r => r.month === monthKey && normKey(r.partner) === key)
+      .filter(r => r.month === monthKey && keys.has(normKey(r.partner)))
       .sort((a, b) => (a.doc_date || '').split('.').reverse().join('').localeCompare((b.doc_date || '').split('.').reverse().join('')));
     return { amount: rows.reduce((s, r) => s + (Number(r.amount) || 0), 0), count: rows.length, rows };
   };
