@@ -89,6 +89,7 @@ function RentalHomeScreen({ ctx }) {
   if (canEquip) tabs.push({ id: 'equipment', label: 'Оборудование' });
   if (canClients) tabs.push({ id: 'clients', label: 'Клиенты' });
   if (canPurchases) tabs.push({ id: 'purchases', label: 'Закуп' });
+  if (canEquip) tabs.push({ id: 'acts', label: 'Акты' });
   if (canRevisions) tabs.push({ id: 'revisions', label: 'Ревизии' });
   if (canReport) tabs.push({ id: 'report', label: 'Отчёт' });
 
@@ -101,6 +102,7 @@ function RentalHomeScreen({ ctx }) {
       {tab === 'equipment' && <EquipmentListTab ctx={ctx} />}
       {tab === 'clients' && <ClientsListTab ctx={ctx} />}
       {tab === 'purchases' && <PurchasesTab ctx={ctx} />}
+      {tab === 'acts' && <ActsTab ctx={ctx} />}
       {tab === 'revisions' && <RevisionsTab ctx={ctx} />}
       {tab === 'report' && <ReportTab ctx={ctx} />}
     </div>
@@ -642,6 +644,103 @@ function PurchasesTab({ ctx }) {
           </div>
         );
       })}
+    </>
+  );
+}
+
+function ActsTab({ ctx }) {
+  const clients = (ctx.db.rentalClients || []).filter(c => c.status === 'active');
+  const equipment = ctx.db.rentalEquipment || [];
+  const acts = ctx.db.rentalActs || [];
+  const [filter, setFilter] = useState('all'); // all | unsigned | noorig
+  const [form, setForm] = useState(null); // null | { id?, rental_client_id, equipment_id, number, act_date, signed, has_original, comment }
+  const clientName = (id) => clients.find(c => c.id === id)?.name || (ctx.db.rentalClients || []).find(c => c.id === id)?.name || '—';
+  const eqLabel = (id) => { const e = equipment.find(x => x.id === id); return e ? `${e.type}${e.model ? ' · ' + e.model : ''}${e.serial_number ? ` (${e.serial_number})` : ''}` : ''; };
+
+  const shown = acts
+    .filter(a => filter === 'all' || (filter === 'unsigned' && !a.signed) || (filter === 'noorig' && !a.has_original))
+    .sort((a, b) => (b.act_date || b.created_at || '').localeCompare(a.act_date || a.created_at || ''));
+
+  const save = () => {
+    const data = { rental_client_id: form.rental_client_id, equipment_id: form.equipment_id || null, number: form.number, act_date: form.act_date || null, signed: form.signed, has_original: form.has_original, comment: form.comment };
+    const r = form.id ? ctx.updateRentalAct(form.id, data) : ctx.createRentalAct(data);
+    if (r?.error) return ctx.showToast(r.error);
+    setForm(null);
+  };
+  const del = async (id) => {
+    if (!confirm('Удалить акт приёма-передачи?')) return;
+    const r = await ctx.deleteRentalAct(id);
+    if (r?.error) ctx.showToast(r.error);
+  };
+  const badge = (on, yes, no) => (
+    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: on ? '#DCFCE7' : '#FEE2E2', color: on ? '#16a34a' : '#B91C1C' }}>{on ? yes : no}</span>
+  );
+
+  if (form) {
+    const clientEq = equipment.filter(e => e.current_client_id === form.rental_client_id || e.id === form.equipment_id);
+    return (
+      <div>
+        <h3 className="font-semibold text-sm mb-3">{form.id ? 'Редактировать акт' : 'Новый акт приёма-передачи'}</h3>
+        <label className="block text-xs font-medium mb-1">Арендатор</label>
+        <select className={inputCls} style={inputBorder()} value={form.rental_client_id} onChange={e => setForm(f => ({ ...f, rental_client_id: e.target.value, equipment_id: '' }))}>
+          <option value="">Выберите арендатора</option>
+          {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <label className="block text-xs font-medium mb-1 mt-3">Оборудование</label>
+        <select className={inputCls} style={inputBorder()} value={form.equipment_id || ''} onChange={e => setForm(f => ({ ...f, equipment_id: e.target.value }))}>
+          <option value="">— не указано —</option>
+          {clientEq.map(e => <option key={e.id} value={e.id}>{eqLabel(e.id)}</option>)}
+        </select>
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <div><label className="block text-xs font-medium mb-1">Номер акта</label><input className={inputCls} style={inputBorder()} value={form.number} onChange={e => setForm(f => ({ ...f, number: e.target.value }))} /></div>
+          <div><label className="block text-xs font-medium mb-1">Дата</label><input className={inputCls} style={inputBorder()} type="date" value={form.act_date || ''} onChange={e => setForm(f => ({ ...f, act_date: e.target.value }))} /></div>
+        </div>
+        <div className="flex gap-2 mt-3">
+          {[['signed', 'Подписан'], ['has_original', 'Есть оригинал']].map(([k, label]) => (
+            <button key={k} onClick={() => setForm(f => ({ ...f, [k]: !f[k] }))} className="flex-1 py-2.5 rounded-xl text-xs font-semibold"
+              style={{ background: form[k] ? '#22C55E' : 'var(--mc-surface)', color: form[k] ? '#fff' : 'var(--mc-muted)', border: '1px solid var(--mc-border)' }}>
+              {form[k] ? '✓ ' : ''}{label}
+            </button>
+          ))}
+        </div>
+        <label className="block text-xs font-medium mb-1 mt-3">Комментарий</label>
+        <textarea className={inputCls} style={inputBorder()} rows={2} value={form.comment || ''} onChange={e => setForm(f => ({ ...f, comment: e.target.value }))} />
+        <div className="flex gap-2 mt-4">
+          <button onClick={() => setForm(null)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={btnCancel}>Отмена</button>
+          <button onClick={save} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: '#3B82F6' }}>Сохранить</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <button onClick={() => setForm({ rental_client_id: '', equipment_id: '', number: '', act_date: todayStr(), signed: false, has_original: false, comment: '' })}
+        className="w-full py-2.5 rounded-xl text-sm font-semibold text-white mb-3" style={{ background: '#3B82F6' }}><Plus size={14} className="inline mr-1" />Добавить акт</button>
+      <div className="flex gap-1.5 mb-3">
+        {[['all', `Все (${acts.length})`], ['unsigned', `Не подписаны (${acts.filter(a => !a.signed).length})`], ['noorig', `Нет оригинала (${acts.filter(a => !a.has_original).length})`]].map(([id, label]) => (
+          <button key={id} onClick={() => setFilter(id)} className="rounded-full px-3 py-1.5 text-xs font-semibold"
+            style={{ background: filter === id ? '#3B82F6' : 'var(--mc-surface)', color: filter === id ? '#fff' : '#64748B', border: `1px solid ${filter === id ? '#3B82F6' : 'var(--mc-border)'}` }}>{label}</button>
+        ))}
+      </div>
+      {!shown.length && <div className="text-center py-8 text-sm" style={{ color: 'var(--mc-muted)' }}>Актов приёма-передачи пока нет</div>}
+      {shown.map(a => (
+        <div key={a.id} className="rounded-xl p-3 mb-2" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
+          <div className="flex justify-between items-start gap-2">
+            <div className="min-w-0">
+              <div className="font-semibold text-sm truncate">{clientName(a.rental_client_id)}</div>
+              <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>{a.number ? `№ ${a.number} · ` : ''}{fmtDate(a.act_date)}</div>
+              {a.equipment_id && <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>{eqLabel(a.equipment_id)}</div>}
+            </div>
+            <div className="flex flex-col gap-1 items-end flex-shrink-0">{badge(a.signed, 'Подписан', 'Не подписан')}{badge(a.has_original, 'Есть оригинал', 'Нет оригинала')}</div>
+          </div>
+          {a.comment && <div className="text-xs mt-1">{a.comment}</div>}
+          <div className="flex gap-3 mt-2 text-xs font-semibold">
+            <button onClick={() => setForm({ ...a, act_date: a.act_date || '', comment: a.comment || '', number: a.number || '' })} style={{ color: '#3B82F6' }}><Edit3 size={11} className="inline mr-0.5" />Изменить</button>
+            <button onClick={() => del(a.id)} style={{ color: '#EB5757' }}><Trash2 size={11} className="inline mr-0.5" />Удалить</button>
+          </div>
+        </div>
+      ))}
     </>
   );
 }

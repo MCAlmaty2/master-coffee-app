@@ -801,12 +801,18 @@ function buildLawyerMessage(cr) {
     return `${it.name} ---------- ${price} тг ---- ${it.volume} ${it.unit}`;
   }).join('\n');
   const deliveryLine = cr.delivery_note ? `\n\n${cr.delivery_note}` : '';
+  const ri = cr.rental_info;
+  const rentalLines = ri ? '\n\n' + [
+    `Ежемесячный выкуп зерна: ${ri.monthly_kg} кг`,
+    ri.equipment_labels?.length ? `Оборудование:\n${ri.equipment_labels.map(l => `  · ${l}`).join('\n')}` : '',
+    ri.address ? `Адрес места нахождения оборудования: ${ri.address}` : '',
+  ].filter(Boolean).join('\n') : '';
 
   const authorityLink = cr.authority_doc?.value || cr.authority_doc?.name || '';
 
   return [
     `Вид договора:\n${contractLabel}`,
-    `1. Спецификация\n\n${specLines}${deliveryLine}`,
+    `1. Спецификация\n\n${specLines}${deliveryLine}${rentalLines}`,
     `2. Реквизиты партнёра\n\n${cr.client_details || '—'}`,
     [
       '3. Наши реквизиты',
@@ -1596,7 +1602,7 @@ function App() {
       syncSnapshotRef.current[stateKey] = currArr;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts, db.coffeeShipments, db.coffeeTasks, db.vacations, db.cashOperations, db.expenseCategories, db.budgetEntries, db.expenseRequests, db.mppDeals, db.mppActivities, db.mppTasks, db.mppDealProducts, db.mppComments, db.deferredClients, db.deferredShipments, db.rentalEquipment, db.rentalClients, db.rentalPurchases, db.rentalMovements, db.rentalRevisions, db.reconciliationActs]);
+  }, [bootStatus.phase, db.orders, db.grindRequests, db.tasks, db.writeOffs, db.contractRequests, db.notifications, db.roleDefinitions, db.clients, db.shipmentRegistry, db.managerTasks, db.deliveryRegistries, db.deliveryOrders, db.dailyRevenue, db.salesReports, db.releaseNotes, db.scheduleTasks, db.scheduleCompletions, db.gifts, db.coffeeShipments, db.coffeeTasks, db.vacations, db.cashOperations, db.expenseCategories, db.budgetEntries, db.expenseRequests, db.mppDeals, db.mppActivities, db.mppTasks, db.mppDealProducts, db.mppComments, db.deferredClients, db.deferredShipments, db.rentalEquipment, db.rentalClients, db.rentalPurchases, db.rentalMovements, db.rentalRevisions, db.reconciliationActs, db.rentalActs]);
 
   // ─── Напоминания по расписанию (personal TG) — за 15 мин до начала, только себе ───
   useEffect(() => {
@@ -4216,6 +4222,58 @@ function App() {
     }
   };
 
+  /* ═══════════ Акты приёма-передачи (Аренда) ═══════════ */
+
+  const createRentalAct = (data) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'rental_equipment')) return { error: 'Нет прав' };
+    if (!data.rental_client_id) return { error: 'Выберите арендатора' };
+    const now = todayISO();
+    const row = {
+      id: uid(),
+      rental_client_id: data.rental_client_id,
+      equipment_id: data.equipment_id || null,
+      number: (data.number || '').trim() || null,
+      act_date: data.act_date || null,
+      signed: !!data.signed,
+      has_original: !!data.has_original,
+      comment: (data.comment || '').trim() || null,
+      created_by: currentUser.id,
+      created_at: now,
+      updated_at: now,
+      org_id: _currentOrgId,
+    };
+    setDb(d => ({ ...d, rentalActs: [row, ...(d.rentalActs || [])] }));
+    return { ok: true, id: row.id };
+  };
+
+  const updateRentalAct = (actId, data) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'rental_equipment')) return { error: 'Нет прав' };
+    const existing = (db.rentalActs || []).find(a => a.id === actId);
+    if (!existing) return { error: 'Акт не найден' };
+    setDb(d => {
+      const fresh = (d.rentalActs || []).find(a => a.id === actId) || existing;
+      const updated = { ...fresh, ...data, updated_at: todayISO() };
+      return { ...d, rentalActs: (d.rentalActs || []).map(a => a.id === actId ? updated : a) };
+    });
+    return { ok: true };
+  };
+
+  const deleteRentalAct = async (actId) => {
+    const isAdm = currentUser.role === 'admin' || currentUser.role === 'director';
+    if (!isAdm && !hasPermission(db, currentUser, 'rental_equipment')) return { error: 'Нет прав' };
+    try {
+      await deleteRow('rentalActs', actId);
+      setDb(d => ({ ...d, rentalActs: (d.rentalActs || []).filter(a => a.id !== actId) }));
+      if (syncSnapshotRef) syncSnapshotRef.current.rentalActs = (syncSnapshotRef.current.rentalActs || []).filter(a => a.id !== actId);
+      return { ok: true };
+    } catch (e) {
+      reportError({ kind: 'manual', source: 'rental_acts', message: `Ошибка удаления акта приёма-передачи: ${e.message}` });
+      return { error: e.message };
+    }
+  };
+
   /* ═══════════ Арендное оборудование ═══════════ */
 
   const createRentalEquipment = (data) => {
@@ -4798,6 +4856,16 @@ function App() {
     if (spec.length === 0) return { error: 'Добавьте хотя бы одну позицию в спецификацию' };
     if (!data.authority_doc) return { error: 'Прикрепите основание полномочий' };
     if (!data.authority_doc) return { error: 'Прикрепите основание полномочий (устав / доверенность / приказ)' };
+    const rentalInfo = data.contract_type === 'rental' ? {
+      monthly_kg: Number(data.rental_monthly_kg) || 0,
+      equipment_ids: Array.isArray(data.rental_equipment_ids) ? data.rental_equipment_ids : [],
+      address: (data.rental_address || '').trim() || null,
+      equipment_labels: (Array.isArray(data.rental_equipment_ids) ? data.rental_equipment_ids : []).map(id => {
+        const eq = (db.rentalEquipment || []).find(e => e.id === id);
+        return eq ? `${eq.type}${eq.model ? ' · ' + eq.model : ''}${eq.serial_number ? ' (' + eq.serial_number + ')' : ''}` : null;
+      }).filter(Boolean),
+    } : null;
+    if (rentalInfo && !(rentalInfo.monthly_kg > 0)) return { error: 'Укажите ежемесячный выкуп зерна (кг)' };
 
     const year = new Date().getFullYear();
     const localMax = db.contractRequests
@@ -4833,6 +4901,7 @@ function App() {
       signatory_name:  (data.signatory_name  || '').trim() || null,
       signatory_title: (data.signatory_title || '').trim() || null,
       delivery_note:   (data.delivery_note   || '').trim() || null,
+      rental_info: rentalInfo,
       contract_no: null,
       revisions: [],
       taken_by: null,
@@ -5652,6 +5721,7 @@ function App() {
     createRentalPurchase, updateRentalPurchase,
     createRentalMovement, createRentalRevision,
     createReconciliationAct, updateReconciliationAct, deleteReconciliationAct,
+    createRentalAct, updateRentalAct, deleteRentalAct,
     createVolumeTier, updateVolumeTier, deleteVolumeTier, bulkReplaceVolumeTiers, extendVolumeTiers, createSpecialPrice, approveSpecialPrice, rejectSpecialPrice,
     createRoundPoint, updateRoundPoint, markRoundPointReadyForPartner, startRoundVisit, canEditRoundPoint,
     logRoundVisitDone, closeRoundPoint, linkRoundPointToClient,
@@ -14901,12 +14971,17 @@ function CreateContractScreen({ ctx }) {
     signatory_name: '',
     signatory_title: '',
     delivery_note: '',
+    rental_monthly_kg: '',
+    rental_equipment_ids: [],
+    rental_address: '',
     specification: [{ tempId: uid(), product_id: '', name: '', unit: 'кг', volume: '', price_per_unit: '' }],
     identity_doc: null,
     authority_doc: null,
   });
   const [errors, setErrors] = useState({});
   const [pickerOpen, setPickerOpen] = useState(null); // index of item being picked
+  // Свободное оборудование из справочника аренды (категория «Аренда оборудования», в офисе)
+  const officeEquipment = (db.rentalEquipment || []).filter(e => e.status === 'in_office');
 
   const update = patch => setForm(f => ({ ...f, ...patch }));
   const updateItem = (idx, patch) => setForm(f => ({ ...f, specification: f.specification.map((it, i) => i === idx ? { ...it, ...patch } : it) }));
@@ -14924,6 +14999,7 @@ function CreateContractScreen({ ctx }) {
     });
     if (!form.client_details || form.client_details.trim().length < 10) e.client_details = 'Реквизиты — минимум 10 символов';
     if (!form.authority_doc) e.authority_doc = 'Прикрепите основание полномочий';
+    if (form.contract_type === 'rental' && !(Number(form.rental_monthly_kg) > 0)) e.rental_monthly_kg = 'Укажите ежемесячный выкуп зерна';
     setErrors(e);
     if (Object.keys(e).length > 0) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -14961,6 +15037,50 @@ function CreateContractScreen({ ctx }) {
               ))}
             </div>
           </Card>
+
+          {form.contract_type === 'rental' && (
+            <Card title="Аренда оборудования">
+              <div className="text-xs font-semibold mb-1.5" style={{ color: 'var(--mc-muted)' }}>Ежемесячный выкуп зерна, кг</div>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {[15, 30, 50, 100].map(kg => (
+                  <button key={kg} onClick={() => update({ rental_monthly_kg: String(kg) })}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold"
+                    style={{ background: String(form.rental_monthly_kg) === String(kg) ? '#297b8a' : 'var(--mc-active-item)', color: String(form.rental_monthly_kg) === String(kg) ? 'white' : 'var(--mc-text)' }}>
+                    {kg} кг
+                  </button>
+                ))}
+                <input value={form.rental_monthly_kg} onChange={e => update({ rental_monthly_kg: e.target.value.replace(/[^0-9.]/g, '') })}
+                  placeholder="свой, кг" className="w-28 px-3 py-2 rounded-lg outline-none text-sm bg-white"
+                  style={{ border: `1px solid ${errors.rental_monthly_kg ? '#EB5757' : 'var(--mc-border)'}` }} />
+              </div>
+              {errors.rental_monthly_kg && <div className="text-xs mb-2" style={{ color: '#EB5757' }}>{errors.rental_monthly_kg}</div>}
+
+              <div className="text-xs font-semibold mt-3 mb-1.5" style={{ color: 'var(--mc-muted)' }}>Оборудование (свободное, в офисе)</div>
+              {officeEquipment.length === 0 ? (
+                <div className="text-xs" style={{ color: 'var(--mc-muted)' }}>В офисе нет свободного оборудования в справочнике аренды.</div>
+              ) : (
+                <div className="space-y-1.5" style={{ maxHeight: 220, overflowY: 'auto' }}>
+                  {officeEquipment.map(eq => {
+                    const on = form.rental_equipment_ids.includes(eq.id);
+                    return (
+                      <button key={eq.id}
+                        onClick={() => update({ rental_equipment_ids: on ? form.rental_equipment_ids.filter(x => x !== eq.id) : [...form.rental_equipment_ids, eq.id] })}
+                        className="w-full rounded-lg px-3 py-2 text-left text-sm flex items-center gap-2"
+                        style={{ background: on ? '#297b8a15' : 'var(--mc-active-item)', border: `2px solid ${on ? '#297b8a' : 'transparent'}`, color: 'var(--mc-text)' }}>
+                        <span>{on ? '☑' : '☐'}</span>
+                        <span className="flex-1">{eq.type}{eq.model ? ` · ${eq.model}` : ''}{eq.serial_number ? ` (${eq.serial_number})` : ''}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="text-xs font-semibold mt-3 mb-1.5" style={{ color: 'var(--mc-muted)' }}>Адрес места нахождения оборудования</div>
+              <textarea value={form.rental_address} onChange={e => update({ rental_address: e.target.value })} rows={2}
+                placeholder="г. Алматы, ул. Достык 132, кофейня"
+                className="w-full px-3 py-2.5 rounded-lg outline-none" style={{ border: '1px solid var(--mc-border)', fontSize: 13 }} />
+            </Card>
+          )}
 
           <Card title="2. Спецификация">
             <div className="space-y-3">
