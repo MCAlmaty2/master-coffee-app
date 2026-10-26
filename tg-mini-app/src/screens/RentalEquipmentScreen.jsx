@@ -16,6 +16,15 @@ const fmtNum = (n) => (Number(n) || 0).toLocaleString('ru-RU').replace(/\s/g, ' 
 const todayStr = () => { const d = new Date(); d.setMinutes(d.getMinutes() + 300); return d.toISOString().slice(0, 10); };
 const monthNow = () => todayStr().slice(0, 7);
 
+// Факт закупа арендатора за месяц, пока менеджер не внёс его руками: кг — из заявок
+// привязанного клиента, сумма — из накладных реестра (а если их нет — из заявок).
+function autoFact(ctx, c, month) {
+  const linked = c.client_id ? (ctx.db.clients || []).find(x => x.id === c.client_id) : null;
+  const ship = ctx.getShipmentPurchasesForPartner?.([c.name, linked?.name], month) || { amount: 0, count: 0 };
+  const ord = c.client_id ? (ctx.getClientPurchaseVolume?.(c.client_id, month) || { kg: 0, amount: 0 }) : { kg: 0, amount: 0 };
+  return { kg: ord.kg || 0, amount: ship.amount || ord.amount || 0 };
+}
+
 const EQ_STATUS = {
   in_office:   { label: 'В офисе',    color: '#3B82F6', bg: 'var(--mc-info-bg)' },
   rented:      { label: 'В аренде',   color: '#22C55E', bg: 'var(--mc-success-bg)' },
@@ -584,7 +593,8 @@ function PurchasesTab({ ctx }) {
       {clients.map(c => {
         const p = monthPurchases[c.id];
         const planKg = Number(c.plan_kg) || 0;
-        const fact = Number(p?.kg_fact) || 0;
+        const auto = p ? null : autoFact(ctx, c, month);
+        const fact = p ? (Number(p.kg_fact) || 0) : auto.kg;
         const pct = planKg > 0 ? Math.round(fact / planKg * 100) : 0;
         const ok = pct >= 100;
         const isEd = editing === c.id;
@@ -594,13 +604,14 @@ function PurchasesTab({ ctx }) {
               <span className="font-semibold text-sm">{c.name}</span>
               {!isEd && <button onClick={() => startEdit(c.id)} className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ background: 'var(--mc-info-bg)', color: 'var(--mc-info-text)' }}><Edit3 size={12} className="inline mr-0.5" />{p ? 'Изменить' : 'Внести'}</button>}
             </div>
-            {planKg > 0 && <div className="text-xs mb-1" style={{ color: 'var(--mc-muted)' }}>План: {planKg} кг · Факт: {fact} кг ({pct}%)</div>}
+            {planKg > 0 && <div className="text-xs mb-1" style={{ color: 'var(--mc-muted)' }}>План: {planKg} кг · Факт{auto ? ' (авто)' : ''}: {fact} кг ({pct}%)</div>}
             {planKg > 0 && (
               <div className="w-full h-1.5 rounded-full mb-1" style={{ background: 'var(--mc-progress-track)' }}>
                 <div className="h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%`, background: ok ? '#22C55E' : '#F59E0B' }} />
               </div>
             )}
             {p && !isEd && <div className="text-xs">Сумма: {fmtNum(p.amount_fact)} тг</div>}
+            {auto && !isEd && auto.amount > 0 && <div className="text-xs">Сумма (авто): {fmtNum(auto.amount)} тг</div>}
             {!isEd && orderVolByClient[c.id]?.ordersCount > 0 && (
               <div className="text-xs mt-0.5" style={{ color: 'var(--mc-info-text)' }}>
                 <Coffee size={10} className="inline mr-0.5" />Из заявок: {orderVolByClient[c.id].kg} кг · {fmtNum(orderVolByClient[c.id].amount)} тг ({orderVolByClient[c.id].ordersCount})
@@ -771,27 +782,23 @@ function ReportTab({ ctx }) {
     let totalKg = 0, totalAmt = 0, planKg = 0;
     clients.forEach(c => {
       const p = mp.find(x => x.client_id === c.id);
-      totalKg += Number(p?.kg_fact) || 0;
-      totalAmt += Number(p?.amount_fact) || 0;
+      const a = p ? null : autoFact(ctx, c, month);
+      totalKg += p ? (Number(p.kg_fact) || 0) : a.kg;
+      totalAmt += p ? (Number(p.amount_fact) || 0) : a.amount;
       planKg += Number(c.plan_kg) || 0;
     });
     const fulfillPct = planKg > 0 ? Math.round(totalKg / planKg * 100) : 0;
     return { totalEq, rented, repair, totalKg, totalAmt, planKg, fulfillPct, clientCount: clients.length };
-  }, [equipment, clients, purchases, month]);
+  }, [equipment, clients, purchases, month, ctx.db.orders, ctx.db.shipmentRegistry]);
 
   const underperformers = useMemo(() => {
-    const mp = purchases.filter(p => p.month === month);
-    return clients.filter(c => {
-      const p = mp.find(x => x.client_id === c.id);
-      const fact = Number(p?.kg_fact) || 0;
-      const plan = Number(c.plan_kg) || 0;
-      return plan > 0 && fact < plan;
-    }).map(c => {
+    const factOf = (c) => {
       const p = purchases.find(x => x.client_id === c.id && x.month === month);
-      const fact = Number(p?.kg_fact) || 0;
-      return { ...c, fact, pct: Math.round(fact / (Number(c.plan_kg) || 1) * 100) };
-    });
-  }, [clients, purchases, month]);
+      return p ? (Number(p.kg_fact) || 0) : autoFact(ctx, c, month).kg;
+    };
+    return clients.filter(c => (Number(c.plan_kg) || 0) > 0 && factOf(c) < Number(c.plan_kg))
+      .map(c => { const fact = factOf(c); return { ...c, fact, pct: Math.round(fact / (Number(c.plan_kg) || 1) * 100) }; });
+  }, [clients, purchases, month, ctx.db.orders, ctx.db.shipmentRegistry]);
 
   return (
     <>
