@@ -549,6 +549,13 @@ function ExpenseDetailScreen({ ctx, expenseId }) {
                 <Banknote size={18} /> Выдать деньги из кассы
               </button>
             )}
+            {canPay && (
+              <button onClick={() => { if (confirm('Выдать с Каспи-счёта (Далида)? Сумма спишется с Каспи, не из сейфа.')) handlePay({ method: 'kaspi', total: req.amount, bills: {} }); }} disabled={submitting}
+                className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                style={{ background: '#E11D48', color: '#fff', opacity: submitting ? 0.6 : 1 }}>
+                Выдать с Каспи (подотчёт Далиды)
+              </button>
+            )}
           </>
         )}
 

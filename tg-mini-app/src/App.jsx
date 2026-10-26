@@ -3704,7 +3704,9 @@ function App() {
       person_name: cashOpData?.person_name || req.requester_name,
       category: cashOpData?.category || req.category,
       description: cashOpData?.description || `Чек ${req.request_number}: ${req.description}`,
-      bills: cashOpData?.bills || {},
+      bills: cashOpData?.method === 'kaspi' ? {} : (cashOpData?.bills || {}),
+      // 'kaspi' — выдача с Каспи-счёта (держатель Далида), в сейф/купюры не попадает
+      method: cashOpData?.method === 'kaspi' ? 'kaspi' : 'cash',
       created_by: currentUser.id,
       created_by_name: payerName,
       created_at: now,

@@ -87,8 +87,31 @@ export default function CashScreen({ ctx }) {
     showToast('Операция обновлена');
   };
 
-  const filtered = filterType ? ops.filter(o => o.type === filterType) : ops;
-  const safeBalance = useMemo(() => calcSafeBalance(ops), [ops]);
+  // Каспи-счёт (держатель — Далида) ведётся отдельно от наличных в сейфе: у его операций
+  // нет купюр, и в баланс сейфа/статистику наличных они не попадают.
+  const cashOps = useMemo(() => ops.filter(o => o.method !== 'kaspi'), [ops]);
+  const kaspiOps = useMemo(() => ops.filter(o => o.method === 'kaspi'), [ops]);
+  const kaspiBalance = kaspiOps.reduce((s, o) => s + (o.type === 'expense' ? -o.total : o.total), 0);
+  const [kaspiAmt, setKaspiAmt] = useState('');
+  const [kaspiDesc, setKaspiDesc] = useState('');
+  const [showKaspiForm, setShowKaspiForm] = useState(false);
+  const [showKaspiLog, setShowKaspiLog] = useState(false);
+  const addKaspiIncome = () => {
+    const total = Number(kaspiAmt);
+    if (!(total > 0)) { showToast('Укажите сумму', 'error'); return; }
+    const userName = currentUser ? `${(currentUser.first_name || '')} ${(currentUser.last_name || '').charAt(0)}.`.trim() : '';
+    const op = {
+      id: crypto.randomUUID(), type: 'income', method: 'kaspi', bills: {}, total,
+      description: kaspiDesc.trim() || 'Пополнение Каспи', category: '', person_name: '',
+      created_by: currentUser?.id || null, created_by_name: userName || 'Пользователь', created_at: new Date().toISOString(),
+    };
+    setDb(d => ({ ...d, cashOperations: [op, ...(d.cashOperations || [])] }));
+    setKaspiAmt(''); setKaspiDesc(''); setShowKaspiForm(false);
+    showToast('Пополнение Каспи записано');
+  };
+
+  const filtered = filterType ? cashOps.filter(o => o.type === filterType) : cashOps;
+  const safeBalance = useMemo(() => calcSafeBalance(cashOps), [cashOps]);
   const safeTotal = DENOMINATIONS.reduce((s, d) => s + d * safeBalance[d], 0);
 
   const startEditBalance = () => {
@@ -237,11 +260,55 @@ export default function CashScreen({ ctx }) {
           )}
         </div>
 
+        {/* Каспи-счёт (подотчёт Далиды) */}
+        <div className="rounded-2xl p-4" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-semibold flex-1" style={{ color: 'var(--mc-muted)' }}>Каспи-счёт · Далида</span>
+            {canEditOps && (
+              <button onClick={() => setShowKaspiForm(v => !v)}
+                className="text-[11px] font-semibold px-2.5 py-1 rounded-lg" style={{ background: '#E11D4815', color: '#E11D48' }}>
+                {showKaspiForm ? 'Отмена' : '+ Пополнение'}
+              </button>
+            )}
+          </div>
+          <div className="text-2xl font-bold" style={{ color: kaspiBalance < 0 ? '#EF4444' : 'var(--mc-text)' }}>{fmtMoney(kaspiBalance)}</div>
+          <div className="text-[11px] mt-0.5" style={{ color: 'var(--mc-muted)' }}>Расходы с Каспи — кнопка «Выдать с Каспи» в чеке расхода</div>
+          {showKaspiForm && (
+            <div className="mt-3 space-y-2">
+              <input type="number" inputMode="numeric" value={kaspiAmt} onChange={e => setKaspiAmt(e.target.value)} placeholder="Сумма, ₸"
+                className="w-full px-3 py-2 rounded-lg outline-none text-sm" style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }} />
+              <input value={kaspiDesc} onChange={e => setKaspiDesc(e.target.value)} placeholder="Откуда (необязательно)"
+                className="w-full px-3 py-2 rounded-lg outline-none text-sm" style={{ background: 'var(--mc-bg)', color: 'var(--mc-text)', border: '1px solid var(--mc-border)' }} />
+              <button onClick={addKaspiIncome} className="w-full py-2 rounded-xl text-sm font-bold text-white" style={{ background: '#E11D48' }}>Записать</button>
+            </div>
+          )}
+          {kaspiOps.length > 0 && (
+            <>
+              <button onClick={() => setShowKaspiLog(v => !v)} className="mt-3 text-[11px] font-semibold" style={{ color: '#3390EC' }}>
+                {showKaspiLog ? 'Скрыть операции' : `Операции Каспи (${kaspiOps.length})`}
+              </button>
+              {showKaspiLog && (
+                <div className="mt-2 space-y-1.5">
+                  {kaspiOps.slice(0, 30).map(op => (
+                    <div key={op.id} className="flex items-center gap-2 text-xs">
+                      <div className="flex-1 min-w-0">
+                        <div className="truncate" style={{ color: 'var(--mc-text)' }}>{op.description}</div>
+                        <div style={{ color: 'var(--mc-muted)' }}>{fmtDateTime(op.created_at)}{op.person_name ? ` · ${op.person_name}` : ''}</div>
+                      </div>
+                      <span className="font-bold" style={{ color: op.type === 'expense' ? '#EF4444' : '#22C55E' }}>{op.type === 'expense' ? '−' : '+'}{fmtMoney(op.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
         {/* Quick Stats */}
         <div className="grid grid-cols-3 gap-2">
           {['income', 'expense', 'return'].map(t => {
             const meta = TYPE_META[t];
-            const sum = ops.filter(o => o.type === t).reduce((s, o) => s + o.total, 0);
+            const sum = cashOps.filter(o => o.type === t).reduce((s, o) => s + o.total, 0);
             return (
               <div key={t} className="rounded-xl p-3 text-center" style={{ background: 'var(--mc-surface)', border: '1px solid var(--mc-border)' }}>
                 <div className="text-[11px] font-semibold mb-1" style={{ color: meta.color }}>{meta.label}</div>
